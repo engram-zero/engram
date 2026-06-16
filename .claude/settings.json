@@ -14,7 +14,16 @@
       "Bash(sed -i \"54s/We'll/We\\\\&apos;ll/\" src/components/common/FileDropzone.tsx)",
       "Bash(sed -i \"154s/you're/you\\\\&apos;re/\" src/components/download/DownloadCard.tsx)",
       "Bash(sed -i \"78s/isn't/isn\\\\&apos;t/\" src/components/NetworkToggle.tsx)",
-      "PowerShell(Get-Process node -ErrorAction SilentlyContinue)"
+      "PowerShell(Get-Process node -ErrorAction SilentlyContinue)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3010/)",
+      "Bash(rm -rf /d/projects/hackathon/engram/.next)",
+      "Bash(rm -rf /d/projects/hackathon/0g-storage-web-starter-kit)",
+      "PowerShell(npx tsc --noEmit 2>&1)",
+      "PowerShell(Receive-Job -Name engdev)",
+      "PowerShell(Stop-Process -Force -ErrorAction SilentlyContinue)",
+      "PowerShell(\"cleaned\")",
+      "Bash(curl -s -o /dev/null -w \"page /: %{http_code}\\\\n\" http://localhost:3000/)",
+      "Bash(git commit -m ' *)"
     ],
     "additionalDirectories": [
       "d:\\projects\\hackathon\\0g-storage-web-starter-kit\\src\\lib",

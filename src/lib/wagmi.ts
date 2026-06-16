@@ -27,7 +27,10 @@ export const config = createConfig({
   ]
 });
 
-if (typeof window !== 'undefined') {
+// Only spin up the WalletConnect modal if a projectId is configured; without it
+// createWeb3Modal throws and blanks the whole app. Injected wallets (MetaMask)
+// still work via the `injected()` connector above.
+if (typeof window !== 'undefined' && projectId) {
   createWeb3Modal({
     wagmiConfig: config,
     projectId,

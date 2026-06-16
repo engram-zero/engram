@@ -14,7 +14,11 @@ import { useWallet } from '@/hooks/useWallet';
 import { NPC_LIST } from '@/lib/npcs';
 import type { NPCName, NPCMemory } from '@/lib/types';
 import { readAllMemories, writeMemory, getBundleRoot } from '@/lib/memory';
-import { Village, Portrait } from '@/components/engram/Art';
+import { Portrait } from '@/components/engram/Art';
+import dynamic from 'next/dynamic';
+
+// Three.js is client-only and heavy — load it without SSR.
+const Scene3D = dynamic(() => import('@/components/engram/Scene3D'), { ssr: false });
 
 const short = (s?: string | null) => (s ? `${s.slice(0, 6)}…${s.slice(-4)}` : '');
 
@@ -137,16 +141,14 @@ function Game() {
   if (!isConnected || !address) {
     return (
       <div className="relative w-screen h-screen overflow-hidden engram-serif">
-        <Village />
-        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center text-center gap-4 bg-black/40">
-          <h1 className="text-6xl md:text-8xl tracking-[0.25em] text-[#d6b84a]" style={{ textShadow: '0 0 24px rgba(214,184,74,0.4), 0 4px 0 #5a4310' }}>
-            ENGRAM
-          </h1>
-          <p className="text-lg italic text-[#f4e8d0]/90">The village of Aldenmoor remembers you.</p>
-          <div className="mt-2">
+        <Scene3D interactive={false} showTitle />
+        {/* Title + tagline now float in 3D; keep the connect prompt as an overlay,
+            anchored low so it doesn't cover the 3D lettering. */}
+        <div className="absolute inset-x-0 bottom-0 z-10 flex flex-col items-center text-center gap-4 pb-[12vh] bg-gradient-to-t from-black/60 via-black/20 to-transparent pointer-events-none">
+          <div className="pointer-events-auto">
             <ConnectButton />
           </div>
-          <p className="text-sm text-[#f4e8d0]/60 max-w-md mt-6">
+          <p className="text-sm text-[#f4e8d0]/70 max-w-md px-6">
             Your wallet is your name. Three souls keep their own memory of you — stored on 0G, where no one can make them forget.
           </p>
         </div>
@@ -158,7 +160,15 @@ function Game() {
 
   return (
     <div className="relative w-screen h-screen overflow-hidden engram-serif text-[#f4e8d0]">
-      <Village />
+      {/* 3D Aldenmoor. Clicking a villager opens their dialogue; the camera
+          eases toward whoever is active. All memory/dialogue logic is unchanged. */}
+      <Scene3D
+        memories={memories}
+        active={active}
+        talking={scene.loading}
+        onSelect={openDialogue}
+        interactive={!!memories}
+      />
 
       {/* Top bar */}
       <header className="absolute top-0 inset-x-0 z-20 flex justify-between items-center px-4 py-3 bg-gradient-to-b from-black/55 to-transparent">
@@ -199,40 +209,13 @@ function Game() {
         </div>
       )}
 
-      {/* NPC stage */}
-      {memories && (
-        <div
-          className="absolute inset-0 z-10 flex items-center justify-center gap-8 md:gap-20 transition-all"
-          style={active ? { alignItems: 'flex-start', paddingTop: '14vh' } : undefined}
-        >
-          {NPC_LIST.map((npc) => {
-            const mem = memories[npc.id];
-            const isActive = npc.id === active;
-            const dim = active && !isActive;
-            return (
-              <button
-                key={npc.id}
-                onClick={() => openDialogue(npc.id)}
-                disabled={!!active}
-                className="flex flex-col items-center gap-2 p-1.5 transition-all disabled:cursor-default"
-                style={{
-                  ['--accent' as string]: npc.accent,
-                  transform: isActive ? 'scale(1.08)' : undefined,
-                  opacity: dim ? 0.25 : 1,
-                  filter: dim ? 'grayscale(0.6)' : undefined,
-                }}
-              >
-                <div className="rounded-full p-1.5" style={{ filter: 'drop-shadow(0 8px 14px rgba(0,0,0,0.6))' }}>
-                  <Portrait npc={npc.id} size={isActive ? 132 : 108} talking={isActive && scene.loading} />
-                </div>
-                <span className="font-bold text-lg" style={{ textShadow: '0 2px 4px #000' }}>{npc.name}</span>
-                <span className="text-xs italic opacity-75 -mt-1">{npc.role}</span>
-                <span className="block w-[70px] h-[5px] bg-black/50 rounded overflow-hidden mt-0.5" title={`trust ${mem.trust_level}`}>
-                  <span className="block h-full" style={{ width: `${mem.trust_level}%`, background: trustColor(mem.trust_level) }} />
-                </span>
-              </button>
-            );
-          })}
+      {/* Villagers are rendered inside the 3D Scene above; the dialogue box and
+          memory panel below stay as 2D overlays. */}
+
+      {/* Hint to click a villager when idle */}
+      {memories && !active && (
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 text-sm italic text-[#f4e8d0]/70 bg-black/40 px-4 py-2 rounded-full pointer-events-none">
+          Click a villager to speak with them.
         </div>
       )}
 
