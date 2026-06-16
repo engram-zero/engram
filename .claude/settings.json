@@ -1,7 +1,24 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git --version)"
+      "Bash(git --version)",
+      "Bash(cat .env.local)",
+      "Bash(ls node_modules/@anthropic-ai)",
+      "Bash(cd \"/d/projects/hackathon/0g-storage-web-starter-kit\" && head -40 \"C:\\\\Users\\\\aribe\\\\AppData\\\\Local\\\\npm-cache\\\\_logs\\\\2026-06-16T02_38_52_685Z-eresolve-report.txt\" 2>/dev/null | grep -A20 \"While resolving\\\\|Found:\\\\|Could not\\\\|peer\")",
+      "Read(//c/Users/aribe/AppData/Local/npm-cache/_logs/**)",
+      "Bash(node -e \"console.log\\(require\\('@anthropic-ai/sdk/package.json'\\).version\\)\")",
+      "Bash(node -e \"const fs=require\\('fs'\\);console.log\\('installed ethers:', JSON.parse\\(fs.readFileSync\\('node_modules/ethers/package.json'\\)\\).version\\)\")",
+      "Bash(node -e \"const fs=require\\('fs'\\);const p=JSON.parse\\(fs.readFileSync\\('node_modules/@0glabs/0g-ts-sdk/package.json'\\)\\);console.log\\(JSON.stringify\\(p.peerDependencies||p.dependencies,null,0\\)\\)\")",
+      "Bash(node -e \"const fs=require\\('fs'\\);console.log\\('ethers:', JSON.parse\\(fs.readFileSync\\('node_modules/ethers/package.json'\\)\\).version\\)\")",
+      "Bash(echo \"=== total: $\\(npx tsc --noEmit -p tsconfig.json 2>&1)",
+      "Bash(sed -i \"54s/We'll/We\\\\&apos;ll/\" src/components/common/FileDropzone.tsx)",
+      "Bash(sed -i \"154s/you're/you\\\\&apos;re/\" src/components/download/DownloadCard.tsx)",
+      "Bash(sed -i \"78s/isn't/isn\\\\&apos;t/\" src/components/NetworkToggle.tsx)",
+      "PowerShell(Get-Process node -ErrorAction SilentlyContinue)"
+    ],
+    "additionalDirectories": [
+      "d:\\projects\\hackathon\\0g-storage-web-starter-kit\\src\\lib",
+      "d:\\projects\\hackathon\\0g-storage-web-starter-kit"
     ]
   }
 }

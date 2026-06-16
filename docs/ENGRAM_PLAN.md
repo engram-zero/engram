@@ -1,228 +1,251 @@
-# ENGRAM
-### Persistent AI Characters on 0G
-*Zero Cup — Submission & Action Plan — June 2026*
+ENGRAM
 
-> "The first game where NPCs truly remember you — and no one can make them forget."
+Persistent AI Characters on 0G
 
-| | |
-|---|---|
-| Deadline de submission | 23 de junio, 2026 |
-| Prize pool | $17,000 USD |
-| Premio máximo | $8,500 USD (campeón) |
-| Plataforma | 0G Studio — app.0g.ai |
-| Repo | GitHub público — crear desde el día 1 |
+Zero Cup — Submission & Action Plan — June 2026 — v2
 
----
 
-## 1. Submission
+"The first game where NPCs truly remember you — and no one can make them forget."
 
-### Project Name
+
+
+Deadline de submission23 de junio, 2026Prize pool$17,000 USDPremio máximo$8,500 USD (campeón)Repogithub.com/engram-zero/engramBase de código0g-storage-web-starter-kit (adaptado)Stack confirmadoNext.js 15 + TypeScript + wagmi + 0G Storage SDK
+
+
+1. Submission
+
+Project Name
+
 Engram
 
-### Tagline
+Tagline
+
 The first game where NPCs truly remember you — and no one can make them forget.
 
-### Category
+Category
+
 AI-native game on 0G — onchain gaming with AI components.
 
-### The Problem
+The Problem
+
 En todos los videojuegos actuales, los NPCs reinician. Las relaciones, rencores y alianzas desaparecen cuando termina la sesión o el desarrollador actualiza el servidor. Los jugadores construyen vínculos emocionales con personajes que, en el fondo, son amnésicos. El mundo no recuerda que estuviste ahí.
 
 Además, esa memoria — cuando existe — vive en una base de datos centralizada que el desarrollador puede borrar, alterar o perder. El jugador no posee nada.
 
-### The Solution
+The Solution
+
 Engram es un demo RPG interactivo en el browser donde cada NPC tiene memoria persistente almacenada en la red 0G. Las decisiones del jugador se acumulan en una reputación viva que ningún desarrollador, ningún reset y ningún patch puede borrar.
 
-- Tu wallet es tu identidad — conecta una vez y el mundo recuerda tu historial
-- Cada conversación se procesa con IA y se escribe en 0G Storage
-- La memoria incluye: nivel de confianza, historial de interacciones, estado emocional, deudas
-- Los datos en 0G son auditables — el jugador puede verificar qué sabe el NPC de él
-- Portable — futuros juegos podrán leer la misma capa de memoria
 
-### Demo: La Aldea de Aldenmoor
+Tu wallet es tu identidad — conecta una vez y el mundo recuerda tu historial
+Cada conversación se procesa con IA y se escribe en 0G Storage
+La memoria incluye: nivel de confianza, historial de interacciones, estado emocional, deudas
+Los datos en 0G son auditables — el jugador puede verificar qué sabe el NPC de él
+Portable — futuros juegos podrán leer la misma capa de memoria
+
+
+Demo: La Aldea de Aldenmoor
+
 Una pequeña aldea medieval. Tres NPCs con personalidades distintas, cada uno con su propio objeto de memoria en 0G Storage:
 
-| NPC | Rol | Comportamiento de memoria |
-|---|---|---|
-| Aldric | Mercader | Recuerda si pagaste bien o regateaste. Leal → descuentos. Tramposo → precios altos. |
-| Maren | Capitana de la guardia | Rastrea tu historial de combate. Puede advertirte o dejarte caminar a una trampa. |
-| Sable | Broker de información | Agrega lo que los otros NPCs saben de ti. Se puede sobornar — o ya te vendió. |
+NPCRolComportamiento de memoriaAldricMercaderRecuerda si pagaste bien o regateaste. Leal → descuentos. Tramposo → precios altos.MarenCapitana de la guardiaRastrea tu historial de combate. Puede advertirte o dejarte caminar a una trampa.SableBroker de informaciónAgrega lo que los otros NPCs saben de ti. Se puede sobornar — o ya te vendió.
 
-### Por qué 0G es el núcleo
+Por qué 0G es el núcleo
+
 Las reglas del torneo exigen que 0G haga trabajo real en la app. En Engram, 0G Storage es la única fuente de verdad sobre la memoria de los NPCs. Si se quita 0G, la app no funciona. Si el desarrollador apaga su servidor, los recuerdos sobreviven. El jugador puede auditar en la blockchain exactamente qué sabe el NPC de él.
 
-> Diferenciador clave para los jueces: la memoria no puede ser alterada ni por el propio desarrollador del juego.
 
-### Tech Stack
+Diferenciador clave para los jueces: la memoria no puede ser alterada ni por el propio desarrollador del juego.
 
-| Tecnología | Rol |
-|---|---|
-| 0G Storage Network | Núcleo del proyecto — guarda y lee la memoria de cada NPC por wallet address |
-| 0G Studio | Entorno de vibe coding en el browser — prompts → app → deploy en 1 click |
-| Claude API | Motor de IA de los NPCs — genera respuestas en personaje con memoria inyectada |
-| Wallet connection | Identidad del jugador — la wallet address es el ID único en el mundo |
-| GitHub (público) | Requerido por las reglas — snapshot del repo en cada deadline |
 
-### Checklist de Criterios de Submission
 
-| Criterio | Cómo lo cumple Engram |
-|---|---|
-| 01 Build AI-native en 0G | Engram usa 0G Storage para guardar/leer memoria. Sin 0G, la app no funciona. |
-| 02 Vibe coding | Construido con prompts en 0G Studio. Sin código manual. |
-| 03 Trabajo original, Jun 15+ | Proyecto nuevo, creado durante el torneo. Libraries open-source permitidas. |
-| 04 Repo público + demo funcional | GitHub público desde el día 1. Demo en vivo o video del flujo completo. |
-| 05 Snapshots por deadline | Cada corte congela el repo. Lo que importa: algo funcional en cada fecha. |
-| 06 Mejorar y resubmitir | Entre rondas el proyecto se desbloquea. Iterar es la estrategia. |
-| 07 Un equipo, un proyecto | Proyecto individual — un builder, un proyecto. |
-| 08 Sin trampa | Demo real, repo siempre público, sin bots en el community vote. |
+Tech Stack (confirmado en funcionamiento)
 
----
+TecnologíaRolEstado0G Storage NetworkNúcleo — guarda y lee memoria de NPCs por wallet address✅ Probado@0gfoundation/0g-storage-ts-sdkSDK de TypeScript para upload/download✅ InstaladoNext.js 15 + TypeScriptFrontend + API routes✅ Corriendowagmi + @web3modal/wagmiWallet connection✅ FuncionandoClaude API (Anthropic)Motor de IA de los NPCsPendienteTailwindCSSEstilos✅ InstaladoVercelDeployPendiente
 
-## 2. Plan de Acción
+Checklist de Criterios de Submission
 
-El skill central de este torneo es describir bien. El código lo genera 0G Studio con prompts. La estrategia es: prompts claros → iterar → algo funcional antes de cada corte.
+CriterioCómo lo cumple Engram01 Build AI-native en 0GEngram usa 0G Storage para guardar/leer memoria. Sin 0G, la app no funciona.02 Vibe codingConstruido con prompts + stack propio (Next.js/TypeScript).03 Trabajo original, Jun 15+Proyecto nuevo, creado durante el torneo.04 Repo público + demo funcionalgithub.com/engram-zero/engram — público desde el día 1.05 Snapshots por deadlineCada corte congela el repo.06 Mejorar y resubmitirEntre rondas el proyecto se desbloquea. Iterar es la estrategia.07 Un equipo, un proyectoProyecto individual.08 Sin trampaDemo real, repo siempre público.
 
-> Regla de oro: el repo debe estar público en GitHub desde el día 1. El snapshot es lo que cuenta en cada deadline.
 
-### Calendario — Zero Cup
+2. Lo que aprendimos en el Día 1
 
-| Fecha | Milestone | Estado |
-|---|---|---|
-| Jun 15 | Registro abierto — inicio del torneo (HOY) | Ahora |
-| Jun 23 | DEADLINE Grupo — snapshot del repo. MVP mínimo funcional. | Corte 1 |
-| Jun 27 | Top 32 anunciados | Fase 1 |
-| Jun 28 | DEADLINE Ronda de 32 — mejorar y resubmitir | Corte 2 |
-| Jul 3 | Top 16 anunciados | Fase 2 |
-| Jul 4 | DEADLINE Ronda de 16 — última ronda juzgada | Corte 3 |
-| Jul 7 | Top 8 anunciados — inicia community voting | Fase 3 |
-| Jul 8 | DEADLINE FINAL — último push al repo. Build definitivo. | Lock final |
-| Jul 8–10 | Community voting — Cuartos ($500 garantizados por proyecto) | $500 |
-| Jul 11 | Top 4 anunciados | Cuartos |
-| Jul 12–14 | Community voting — Semis (+$1,000) | +$1,000 |
-| Jul 15 | Top 2 anunciados | Semis |
-| Jul 16–18 | Community voting — Final (+$2,000) | +$2,000 |
-| Jul 19 | Campeón coronado — grand prize +$5,000 (total: $8,500) | Campeón |
+Sobre 0G Studio
 
----
 
-### Guía de Prompts para 0G Studio
+0G Studio (app.0g.ai) requiere tokens OG reales en mainnet para generar apps — no es gratuito.
+La alternativa correcta es el Storage Web Starter Kit + código propio, que corre en testnet gratuito.
 
-Prompts modulares en orden. Cada uno construye sobre el anterior.
 
-| Módulo | Prompt |
-|---|---|
-| 1. Estructura base | Crea una app web de RPG de texto. Hay una aldea medieval llamada Aldenmoor. El jugador puede conectar su wallet de Ethereum. Hay 3 NPCs: Aldric (mercader), Maren (capitana de guardia) y Sable (broker de información). El jugador puede hablar con cada uno por turno. |
-| 2. Objeto de memoria | Cada NPC tiene un objeto JSON de memoria: `{ trust_level: 0-100, interaction_history: [], emotional_state: string, debts: number, last_seen: timestamp }`. Este objeto se guarda en 0G Storage usando la wallet address del jugador como clave y el nombre del NPC como identificador. |
-| 3. Leer memoria al iniciar | Cuando el jugador inicia un diálogo con un NPC, la app lee el objeto de memoria de ese NPC desde 0G Storage. Si no existe, se crea uno con valores por defecto (trust_level: 50, emotional_state: 'neutral'). |
-| 4. Agente NPC con Claude API | Cuando el jugador envía un mensaje, el sistema inyecta el objeto de memoria en el system prompt del NPC junto con su personalidad, y genera una respuesta usando Claude API. Después de cada intercambio, actualiza el objeto de memoria y lo escribe de vuelta en 0G Storage. |
-| 5. Panel de memoria | Agrega un panel lateral que el jugador puede abrir para ver qué sabe cada NPC de él: trust_level como barra visual (0-100), historial de interacciones, estado emocional actual, deudas pendientes. |
-| 6. UI estilo RPG | La interfaz tiene un cuadro de diálogo en la parte inferior estilo JRPG clásico. Fondo ilustrado de una aldea. Cada NPC tiene un retrato diferente. Las opciones de diálogo aparecen como botones. |
+Sobre el stack real
 
-> Si Studio no puede integrar 0G Storage con prompts, pedir que genere el código del cliente HTTP para hacer las llamadas manualmente — sigue siendo válido como vibe coding.
 
----
+Base: 0g-storage-web-starter-kit clonado de GitHub
+Framework: Next.js 15.1.5
+El starter kit usa dos archivos de config que pueden conflictuar:
 
-### Sprint de Desarrollo — 8 Días
+src/config/index.ts — config principal de 0G + wagmi
+src/config/wagmi.ts — debe reexportar desde index, no definir config propia
 
-*Tipos de tarea: PROMPT = trabajo en 0G Studio | CÓDIGO = ajuste manual si Studio falla | ADMIN = tareas del torneo*
 
-#### Día 1 | Jun 15 — Setup
-| Tarea | Tiempo | Tipo |
-|---|---|---|
-| Crear cuenta en 0G Builder Profile en app.0g.ai | 30 min | ADMIN |
-| Crear repo GitHub público: engram-zerocup | 20 min | ADMIN |
-| Explorar 0G Studio: abrir un template y ver qué genera | 1 hr | PROMPT |
-| Leer docs de 0G Storage: cómo se sube y baja un JSON | 1 hr | ADMIN |
-| Definir el JSON schema de la memoria NPC en papel | 30 min | ADMIN |
 
-#### Día 2 | Jun 16 — Estructura base
-| Tarea | Tiempo | Tipo |
-|---|---|---|
-| Prompt 1 en Studio: aldea + 3 NPCs + wallet connect | 2 hrs | PROMPT |
-| Verificar que Studio genera algo navegable en el browser | 30 min | PROMPT |
-| Prompt 2: sistema de diálogo con opciones de respuesta | 1.5 hrs | PROMPT |
-| Primer commit al repo público de lo generado | 20 min | ADMIN |
+El Chain ID correcto de 0G Galileo Testnet es 16602 (no 16600 ni 16601 como dice la documentación)
+La red en MetaMask se llama OG-Galileo-Testnet
 
-#### Día 3 | Jun 17 — Integración 0G Storage
-| Tarea | Tiempo | Tipo |
-|---|---|---|
-| Prompt 3: leer memoria del NPC desde 0G al iniciar diálogo | 2 hrs | PROMPT |
-| Prompt 4: escribir memoria actualizada en 0G al terminar diálogo | 2 hrs | PROMPT |
-| Verificar en 0G explorer que los datos realmente se guardan | 1 hr | ADMIN |
-| Si Studio falla: generar cliente HTTP de 0G Storage manualmente | 2 hrs | CÓDIGO |
 
-#### Día 4 | Jun 18 — Agente NPC
-| Tarea | Tiempo | Tipo |
-|---|---|---|
-| Prompt 5: integrar Claude API como motor de los NPCs | 2 hrs | PROMPT |
-| Ajustar prompt de sistema para cada NPC (personalidad + memoria) | 1.5 hrs | PROMPT |
-| Testing: hablar con Aldric 3 veces, verificar que recuerda | 1 hr | ADMIN |
-| Commit con el flujo completo funcionando | 20 min | ADMIN |
+Sobre los tokens de testnet
 
-#### Día 5 | Jun 19 — Panel de memoria + UI
-| Tarea | Tiempo | Tipo |
-|---|---|---|
-| Prompt 6: panel lateral con lo que sabe el NPC del jugador | 2 hrs | PROMPT |
-| Prompt 7: UI visual — retratos, fondo de aldea, cuadro de diálogo | 2 hrs | PROMPT |
-| Pulir estilos: que se vea como un juego, no como una app genérica | 1.5 hrs | PROMPT |
 
-#### Día 6 | Jun 20 — Testing & buffer
-| Tarea | Tiempo | Tipo |
-|---|---|---|
-| Testing completo: wallet → 3 NPCs → verificar memoria en 0G | 2 hrs | ADMIN |
-| Escribir README: qué hace el proyecto, cómo corre, dónde está 0G | 1 hr | ADMIN |
-| Día de buffer: resolver lo que falló los días anteriores | 3 hrs | PROMPT |
+Faucet: faucet.0g.ai — da 0.5 OG por wallet cada 24 horas
+Es suficiente para múltiples transacciones de testnet
+La wallet usada: Account 1 de MetaMask (0x2d10...528B7)
 
-#### Día 7 | Jun 21 — Deploy
-| Tarea | Tiempo | Tipo |
-|---|---|---|
-| Deploy en 0G Studio — obtener URL pública | 1 hr | ADMIN |
-| Verificar que la URL pública funciona con wallet real | 30 min | ADMIN |
-| Grabar video demo del flujo completo (2–3 min) | 2 hrs | ADMIN |
 
-#### Día 8 | Jun 22–23 — Submission
-| Tarea | Tiempo | Tipo |
-|---|---|---|
-| Completar submission en 0g.ai/arena/zero-cup (repo + descripción) | 1 hr | ADMIN |
-| Publicar post en X con #TheZeroCup y link al proyecto (obligatorio) | 30 min | ADMIN |
-| Verificar criterios de submission uno por uno | 30 min | ADMIN |
-| Confirmar: repo público, demo viva, 0G hace trabajo real | 15 min | ADMIN |
+Sobre el upload a 0G Storage
 
----
 
-### Estrategia por Rondas
+El error "Fee calculation error: BAD_DATA" en la UI no impide el upload — es un warning del contrato de mercado
+El SDK reintenta automáticamente con gas price más alto si la primera transacción falla
+Upload confirmado: transacción 0xe27c7468445e0c8ab47091624b5baeb83218c4995ec921062e04434ef52ee502
+El Root Hash del archivo es la clave para descargarlo: 0x9fcbda0228...0d2c97e6486c
 
-| Ronda | Objetivo |
-|---|---|
-| Group Stage (Jun 23) | MVP funcional. Wallet + 1 NPC con memoria en 0G. Flujo completo demostrable. |
-| Ronda de 32 (Jun 28) | Agregar los 2 NPCs restantes. Panel de memoria. UI mejorada. |
-| Ronda de 16 (Jul 4) | Experiencia pulida. Prompts refinados. Video demo profesional. |
-| Jul 8 — Lock final | Build definitivo. A partir de aquí solo cuenta el community vote. |
-| Cuartos en adelante | Campaña en X. Compartir cada ronda con @0G_labs y #TheZeroCup. |
 
-### Riesgos y Plan B
+Sobre WalletConnect
 
-| Riesgo | Plan B |
-|---|---|
-| 0G Studio no integra Storage con prompts | Usar 0G HTTP API directamente con código mínimo en Node |
-| Prompts generan código que no funciona | Iterar el prompt. Reformular. Empezar de cero si es necesario. |
-| Demo no pasa revisión de 'trabajo real en 0G' | Mostrar en el video cómo la memoria se escribe/lee en 0G |
-| Costo Claude API en demo público | Rate limit por wallet. Cachear respuestas frecuentes. |
-| Pocos votos en community voting | Post en X desde el día 1. Construir audiencia durante el proceso. |
 
-### Recursos
+Registro en cloud.walletconnect.com — plan Starter gratuito es suficiente
+Project ID obtenido: 256e025a69d4bb5bb58a8db315e13a17
+Variable de entorno: NEXT_PUBLIC_PROJECT_ID
 
-| Recurso | URL |
-|---|---|
-| Registro Zero Cup | 0g.ai/arena/zero-cup |
-| 0G Studio | app.0g.ai |
-| 0G Builder Hub / docs | build.0g.ai |
-| Submission criteria | 0g.ai/arena/zero-cup/submission-criteria |
-| Competition rules | 0g.ai/arena/zero-cup/competition-rules |
-| 0G Storage docs | docs.0g.ai |
-| Recordatorios por ronda | luma.com/thezerocup |
-| Seguir el torneo | @0G_labs en X — #TheZeroCup |
 
----
+Sobre el .env.local
 
-*Engram — Zero Cup 2026 — Build on 0G. Own your story.*
+NEXT_PUBLIC_PROJECT_ID=256e025a69d4bb5bb58a8db315e13a17
+NEXT_PUBLIC_L1_RPC=https://evmrpc-testnet.0g.ai
+NEXT_PUBLIC_STANDARD_FLOW_ADDRESS=0xbD75117F80b4E22698D0Cd7612d92BDb8eaff628
+NEXT_PUBLIC_STANDARD_STORAGE_RPC=https://indexer-storage-testnet-turbo.0g.ai
+NEXT_PUBLIC_STANDARD_EXPLORER_URL=https://chainscan-galileo.0g.ai/tx/
+NEXT_PUBLIC_STANDARD_L1_RPC=https://evmrpc-testnet.0g.ai
+NEXT_PUBLIC_TURBO_FLOW_ADDRESS=0xbD75117F80b4E22698D0Cd7612d92BDb8eaff628
+NEXT_PUBLIC_TURBO_STORAGE_RPC=https://indexer-storage-testnet-turbo.0g.ai
+NEXT_PUBLIC_TURBO_EXPLORER_URL=https://chainscan-galileo.0g.ai/tx/
+NEXT_PUBLIC_TURBO_L1_RPC=https://evmrpc-testnet.0g.ai
+NEXT_PUBLIC_DEFAULT_NETWORK=turbo
+
+
+3. Plan de Acción (actualizado)
+
+
+El stack está confirmado. El upload a 0G funciona. Ahora toca construir Engram encima.
+
+
+
+Calendario — Zero Cup
+
+FechaMilestoneEstadoJun 15Stack funcionando + upload a 0G confirmado✅ HECHOJun 23DEADLINE Grupo — MVP mínimo funcionalCorte 1Jun 27Top 32 anunciadosFase 1Jun 28DEADLINE Ronda de 32 — mejorar y resubmitirCorte 2Jul 3Top 16 anunciadosFase 2Jul 4DEADLINE Ronda de 16 — última ronda juzgadaCorte 3Jul 7Top 8 anunciados — inicia community votingFase 3Jul 8DEADLINE FINAL — último push al repoLock finalJul 8–10Community voting — Cuartos ($500 garantizados)$500Jul 11Top 4 anunciadosCuartosJul 12–14Community voting — Semis (+$1,000)+$1,000Jul 15Top 2 anunciadosSemisJul 16–18Community voting — Final (+$2,000)+$2,000Jul 19Campeón coronado (+$5,000 grand prize)Campeón
+
+Estructura del proyecto (sobre el starter kit)
+
+src/
+├── app/
+│   ├── page.tsx                    # Escena de Aldenmoor (reemplaza upload/download UI)
+│   ├── api/
+│   │   └── npc/
+│   │       └── route.ts            # API route: agente NPC con Claude API
+├── components/
+│   ├── DialogBox.tsx               # Cuadro de diálogo estilo JRPG
+│   ├── MemoryPanel.tsx             # Panel: qué sabe el NPC del jugador
+│   ├── NPCPortrait.tsx             # Retrato del NPC activo
+│   └── VillageScene.tsx            # Escena de la aldea
+├── lib/
+│   ├── 0g/                         # Ya existe — upload/download a 0G Storage
+│   │   ├── blob.ts                 # Ya existe
+│   │   ├── uploader.ts             # Ya existe — usar para escribir memoria
+│   │   └── downloader.ts           # Ya existe — usar para leer memoria
+│   ├── npcs.ts                     # Personalidades + prompts de los 3 NPCs
+│   ├── memory.ts                   # Funciones: leer/escribir memoria NPC en 0G
+│   └── types.ts                    # NPCMemory, PlayerProfile, DialogOption
+├── config/
+│   ├── index.ts                    # Config de 0G + wagmi (Chain ID: 16602) ✅
+│   └── wagmi.ts                    # Solo reexporta desde index ✅
+└── hooks/
+    ├── useWallet.ts                # Ya existe ✅
+    ├── useUpload.ts                # Ya existe — reusar para escribir memoria
+    └── useDownload.ts              # Ya existe — reusar para leer memoria
+
+JSON Schema de memoria NPC
+
+json{
+  "trust_level": 50,
+  "interaction_history": [],
+  "emotional_state": "neutral",
+  "debts": 0,
+  "last_seen": null
+}
+
+La clave en 0G Storage es: engram_{walletAddress}_{npcName}
+Ejemplo: engram_0x2d10...528B7_aldric
+
+Sprint restante (Días 2–8)
+
+DíaFechaObjetivoDía 2Jun 16Limpiar starter kit — eliminar UI de upload/download, crear estructura de EngramDía 3Jun 17memory.ts — leer/escribir JSON de memoria NPC en 0G usando hooks existentesDía 4Jun 18api/npc/route.ts — agente NPC con Claude API + memoria inyectadaDía 5Jun 19npcs.ts — personalidades de Aldric, Maren y Sable + promptsDía 6Jun 20UI — DialogBox, VillageScene, NPCPortrait, MemoryPanelDía 7Jun 21Testing end-to-end + deploy en VercelDía 8Jun 22–23Video demo + submission en 0g.ai/arena/zero-cup
+
+Riesgos y Plan B (actualizado)
+
+RiesgoPlan BSDK de 0G no soporta claves custom (solo rootHash)Guardar un índice: un JSON maestro por wallet que mapea npcName → rootHashCosto de Claude API en demo públicoRate limit por wallet. Máximo 10 mensajes por sesión.Pocos votos en community votingPost en X desde el día 1 con #TheZeroCup y @0G_labsError "Fee calculation: BAD_DATA" en producciónEs un warning conocido — no impide el upload. Documentado.
+
+Recursos
+
+RecursoURLRegistro Zero Cup0g.ai/arena/zero-cup0G Storage docsdocs.0g.ai0G Explorer (ver transacciones)chainscan-galileo.0g.ai0G Storage Scanstoragescan.0g.aiFaucet testnetfaucet.0g.aiWalletConnect dashboardcloud.walletconnect.comRepo del proyectogithub.com/engram-zero/engramSeguir el torneo@0G_labs en X — #TheZeroCup
+
+
+4. Prompt para Claude Code
+
+Pegar este prompt en Claude Code (VS Code) para continuar el desarrollo:
+
+Estoy construyendo "Engram" — un RPG de texto en el browser donde los NPCs tienen memoria persistente almacenada en 0G Storage. Es mi participación en el Zero Cup hackathon de 0G Labs (deadline: 23 de junio).
+
+## Stack actual (todo funcionando)
+- Next.js 15.1.5 + TypeScript
+- @0gfoundation/0g-storage-ts-sdk instalado y probado
+- wagmi + @web3modal/wagmi para wallet connection
+- Chain ID: 16602 (OG-Galileo-Testnet)
+- Upload a 0G Storage confirmado en testnet
+
+## Estructura de archivos relevante
+- `src/lib/0g/uploader.ts` — ya existe, hace upload a 0G Storage
+- `src/lib/0g/downloader.ts` — ya existe, hace download desde 0G Storage
+- `src/lib/0g/blob.ts` — ya existe, crea blobs para upload
+- `src/hooks/useUpload.ts` — hook de React para upload
+- `src/hooks/useDownload.ts` — hook de React para download
+- `src/hooks/useWallet.ts` — hook de React para wallet
+- `src/config/index.ts` — config de wagmi con zgTestnet (id: 16602)
+
+## Lo que necesito construir
+El juego tiene 3 NPCs en una aldea medieval (Aldenmoor):
+- Aldric (mercader): recuerda si pagaste bien o regateaste
+- Maren (capitana de guardia): rastrea tu historial de combate
+- Sable (broker de info): agrega lo que los otros saben de ti
+
+Cada NPC tiene un objeto JSON de memoria en 0G Storage, con clave `engram_{walletAddress}_{npcName}`:
+```json
+{
+  "trust_level": 50,
+  "interaction_history": [],
+  "emotional_state": "neutral",
+  "debts": 0,
+  "last_seen": null
+}
+```
+
+## Tarea inmediata
+1. Crear `src/lib/types.ts` con los tipos TypeScript: NPCMemory, NPC, DialogOption
+2. Crear `src/lib/memory.ts` con funciones readMemory(walletAddress, npcName) y writeMemory(walletAddress, npcName, memory) usando el SDK de 0G existente
+3. Crear `src/lib/npcs.ts` con las personalidades y system prompts de los 3 NPCs
+4. Crear `src/app/api/npc/route.ts` — API route que recibe {walletAddress, npcName, message}, lee la memoria de 0G, llama a Claude API con el system prompt del NPC + memoria inyectada, actualiza la memoria y la escribe de vuelta en 0G
+
+Usa el código existente en src/lib/0g/ como base — no reescribas lo que ya funciona.
+El objetivo para el 23 de junio es tener el flujo completo funcionando: wallet conectada → hablar con un NPC → memoria guardada en 0G → NPC recuerda en la siguiente sesión.
+
+
+Engram — Zero Cup 2026 — Build on 0G. Own your story.

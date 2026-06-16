@@ -1,0 +1,59 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* ─── Engram (Aldenmoor) ─────────────────────────────────────────────────── */
+.engram-portrait {
+  border-radius: 9999px;
+  background: #15110a;
+  border: 3px solid var(--accent, #888);
+}
+.engram-bob {
+  animation: engram-bob 0.5s ease-in-out infinite;
+}
+@keyframes engram-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+.engram-thinking {
+  letter-spacing: 4px;
+  animation: engram-pulse 1s infinite;
+}
+@keyframes engram-pulse {
+  50% { opacity: 0.3; }
+}
+.engram-serif {
+  font-family: Georgia, "Times New Roman", serif;
+}
+/* JRPG dialogue frame */
+.engram-dialogue {
+  background: linear-gradient(180deg, #241d12, #15110a);
+  border: 3px solid #c79a3a;
+  box-shadow: 0 0 0 2px #000, 0 -6px 30px rgba(0, 0, 0, 0.6);
+}
+.engram-option:hover:not(:disabled) {
+  background: #4a3d22;
+  border-color: #d6b84a;
+  transform: translateX(3px);
+}
+.engram-panel {
+  transition: transform 0.3s ease;
+}

@@ -1,0 +1,190 @@
+// ─── /api/npc ─────────────────────────────────────────────────────────────────
+// Server-side dialogue engine. Receives the player's message + the NPC's current
+// memory (read from 0G on the client), injects that memory into the NPC's persona
+// system prompt, asks Claude for an in-character turn, applies the AI's memory
+// delta, and returns { response, options, memory, delta }. The CLIENT persists
+// the returned memory back to 0G when the conversation ends (one signature).
+//
+// The ANTHROPIC_API_KEY lives only here — it never reaches the browser.
+
+import Anthropic from '@anthropic-ai/sdk';
+import { NextResponse } from 'next/server';
+import { getNPC } from '@/lib/npcs';
+import type {
+  NPCChatRequest,
+  NPCChatResponse,
+  NPCMemory,
+  MemoryUpdate,
+  NPCName,
+} from '@/lib/types';
+
+export const runtime = 'nodejs';
+
+const MODEL = process.env.ENGRAM_MODEL || 'claude-sonnet-4-6';
+const apiKey = process.env.ANTHROPIC_API_KEY;
+const client = apiKey ? new Anthropic({ apiKey }) : null;
+
+const isAddress = (w: unknown): w is string =>
+  typeof w === 'string' && /^0x[a-fA-F0-9]{40}$/.test(w);
+
+function clamp(n: number, lo: number, hi: number): number {
+  const x = Math.round(Number(n) || 0);
+  return Math.max(lo, Math.min(hi, x));
+}
+
+// Build the final system prompt: inject this player's memory (and, for Sable,
+// what the other NPCs know) into the persona template.
+function buildSystem(npcName: NPCName, memory: NPCMemory, crossMemory?: NPCChatRequest['crossMemory']): string {
+  const npc = getNPC(npcName)!;
+  let prompt = npc.systemPrompt.replace('{MEMORY_JSON}', JSON.stringify(memory, null, 2));
+
+  if (prompt.includes('{CROSS_MEMORY}')) {
+    const lines = crossMemory
+      ? Object.entries(crossMemory)
+          .map(([name, m]) =>
+            m
+              ? `- ${name}: trust ${m.trust_level}/100, mood "${m.emotional_state}", debts ${m.debts}.`
+              : null
+          )
+          .filter(Boolean)
+          .join('\n')
+      : '';
+    prompt = prompt.replace('{CROSS_MEMORY}', lines || '- (you have heard nothing about them yet)');
+  }
+  return prompt;
+}
+
+// Pull the first JSON object out of the model's text.
+function extractJson(text: string): string {
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  return start === -1 || end === -1 ? text : text.slice(start, end + 1);
+}
+
+interface AITurn {
+  dialogue: string;
+  options: string[];
+  memory_update: MemoryUpdate;
+}
+
+function normalizeTurn(raw: any, npcName: string): AITurn {
+  const out = raw && typeof raw === 'object' ? raw : {};
+  const upd = out.memory_update && typeof out.memory_update === 'object' ? out.memory_update : {};
+  let options: string[] = Array.isArray(out.options) ? out.options.filter((o: any) => typeof o === 'string') : [];
+  options = options.slice(0, 4);
+  if (options.length < 3) {
+    options = [...options, 'Tell me more.', 'I should go.', 'What do you make of me?'].slice(0, 3);
+  }
+  return {
+    dialogue:
+      typeof out.dialogue === 'string' && out.dialogue.trim()
+        ? out.dialogue.trim()
+        : `${npcName} regards you in silence.`,
+    options,
+    memory_update: {
+      trust_delta: clamp(upd.trust_delta, -20, 20),
+      emotional_state:
+        typeof upd.emotional_state === 'string' && upd.emotional_state.trim()
+          ? upd.emotional_state.trim().toLowerCase()
+          : undefined,
+      debts_delta: clamp(upd.debts_delta, -999, 999),
+      summary:
+        typeof upd.summary === 'string' && upd.summary.trim() ? upd.summary.trim() : 'Spoke with the traveller.',
+    },
+  };
+}
+
+// Apply the AI's delta onto the memory and stamp the interaction.
+function applyUpdate(memory: NPCMemory, update: MemoryUpdate, playerLine: string): NPCMemory {
+  return {
+    trust_level: clamp(memory.trust_level + update.trust_delta, 0, 100),
+    debts: Math.max(0, memory.debts + (update.debts_delta || 0)),
+    emotional_state: update.emotional_state || memory.emotional_state,
+    last_seen: Date.now(),
+    interaction_history: [
+      ...memory.interaction_history,
+      {
+        at: Date.now(),
+        player: playerLine || '(approached)',
+        summary: update.summary,
+        trust_delta: update.trust_delta,
+      },
+    ].slice(-50),
+  };
+}
+
+async function runClaude(system: string, userContent: string, npcName: string): Promise<AITurn> {
+  const resp = await client!.messages.create({
+    model: MODEL,
+    max_tokens: 700,
+    system,
+    messages: [{ role: 'user', content: userContent }],
+  });
+  const text = resp.content
+    .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+    .map((b) => b.text)
+    .join('');
+  try {
+    return normalizeTurn(JSON.parse(extractJson(text)), npcName);
+  } catch {
+    return normalizeTurn({ dialogue: text }, npcName);
+  }
+}
+
+// Minimal in-character fallback so the UI is clickable before a key is set.
+function fallbackTurn(npcName: NPCName, memory: NPCMemory, message: string): AITurn {
+  const npc = getNPC(npcName)!;
+  const seen = memory.interaction_history.length > 0;
+  const warm = memory.trust_level >= 60;
+  const greet = seen ? (warm ? 'Ah, you again — good.' : 'You. I remember you.') : 'A new face in Aldenmoor.';
+  return normalizeTurn(
+    {
+      dialogue: `${greet} ${message ? `"${message}" — noted.` : `What brings you to ${npc.name}?`} (set ANTHROPIC_API_KEY for real dialogue)`,
+      memory_update: { trust_delta: 0, emotional_state: memory.emotional_state, debts_delta: 0, summary: seen ? 'Exchanged a few words again.' : 'Met for the first time.' },
+    },
+    npc.name
+  );
+}
+
+export async function POST(req: Request) {
+  let body: NPCChatRequest;
+  try {
+    body = (await req.json()) as NPCChatRequest;
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON body.' }, { status: 400 });
+  }
+
+  const { walletAddress, npcName, message, memory, crossMemory } = body;
+
+  if (!isAddress(walletAddress)) return NextResponse.json({ error: 'Invalid wallet address.' }, { status: 400 });
+  if (!getNPC(npcName)) return NextResponse.json({ error: 'Unknown NPC.' }, { status: 400 });
+  if (!memory || typeof memory !== 'object') return NextResponse.json({ error: 'Missing memory object.' }, { status: 400 });
+
+  const userContent =
+    message && message.trim()
+      ? `The player says/does: "${message.trim()}"`
+      : 'The player has just approached you. Greet them.';
+
+  try {
+    const system = buildSystem(npcName, memory, crossMemory);
+    const turn = client
+      ? await runClaude(system, userContent, getNPC(npcName)!.name)
+      : fallbackTurn(npcName, memory, message || '');
+
+    const updated = applyUpdate(memory, turn.memory_update, message || '');
+
+    const payload: NPCChatResponse = {
+      response: turn.dialogue,
+      options: turn.options,
+      memory: updated,
+      delta: turn.memory_update,
+    };
+    return NextResponse.json(payload);
+  } catch (err) {
+    console.error('[api/npc]', err);
+    return NextResponse.json(
+      { error: 'Dialogue failed.', detail: err instanceof Error ? err.message : String(err) },
+      { status: 500 }
+    );
+  }
+}

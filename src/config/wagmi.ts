@@ -1,0 +1,1 @@
+export { config, zgTestnet } from './index';
