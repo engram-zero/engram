@@ -636,13 +636,19 @@ interface Scene3DProps {
   interactive?: boolean;
   /** Show the floating 3D "ENGRAM" title (pre-connect title screen). */
   showTitle?: boolean;
+  /**
+   * True while any 2D GUI overlay is open (e.g. the Memory panel). Releases the
+   * pointer lock and freezes movement so the cursor is usable for the GUI.
+   */
+  uiOpen?: boolean;
 }
 
-export default function Scene3D({ memories = null, active = null, talking = false, onSelect = () => {}, interactive = true, showTitle = false }: Scene3DProps) {
+export default function Scene3D({ memories = null, active = null, talking = false, onSelect = () => {}, interactive = true, showTitle = false, uiOpen = false }: Scene3DProps) {
   // Walk-around mode kicks in once the village is interactive (wallet connected
   // and memories loaded). The title screen stays cinematic.
   const explorable = interactive && !showTitle;
-  const exploring = explorable && !active; // movement only when not mid-dialogue
+  // Movement + pointer lock only when not mid-dialogue and no GUI is open.
+  const exploring = explorable && !active && !uiOpen;
 
   const [nearby, setNearby] = useState<NPCName | null>(null);
   const [locked, setLocked] = useState(false);
@@ -662,9 +668,13 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     return () => window.removeEventListener('keydown', onKey);
   }, [exploring, onSelect]);
 
-  // Clear the proximity prompt whenever we leave explore mode.
+  // Clear the proximity prompt and lock state whenever we leave explore mode
+  // (dialogue or a GUI opened), so the HUD is correct when control returns.
   useEffect(() => {
-    if (!exploring) setNearby(null);
+    if (!exploring) {
+      setNearby(null);
+      setLocked(false);
+    }
   }, [exploring]);
 
   const nearbyNpc = nearby ? NPC_LIST.find((n) => n.id === nearby) : null;

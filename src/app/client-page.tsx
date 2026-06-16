@@ -168,6 +168,7 @@ function Game() {
         talking={scene.loading}
         onSelect={openDialogue}
         interactive={!!memories}
+        uiOpen={panelOpen}
       />
 
       {/* Top bar */}
