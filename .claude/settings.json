@@ -23,7 +23,11 @@
       "PowerShell(Stop-Process -Force -ErrorAction SilentlyContinue)",
       "PowerShell(\"cleaned\")",
       "Bash(curl -s -o /dev/null -w \"page /: %{http_code}\\\\n\" http://localhost:3000/)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Skill(claude-api)",
+      "Skill(claude-api:*)",
+      "PowerShell(npm install @google/generative-ai --legacy-peer-deps)",
+      "Bash(curl -s -X POST http://localhost:3000/api/npc -H \"Content-Type: application/json\" -d '{\"walletAddress\":\"0x1234567890123456789012345678901234567890\",\"npcName\":\"aldric\",\"message\":\"\",\"memory\":{\"trust_level\":50,\"interaction_history\":[],\"emotional_state\":\"neutral\",\"debts\":0,\"last_seen\":null}}')"
     ],
     "additionalDirectories": [
       "d:\\projects\\hackathon\\0g-storage-web-starter-kit\\src\\lib",

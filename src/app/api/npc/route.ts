@@ -1,13 +1,19 @@
 // ─── /api/npc ─────────────────────────────────────────────────────────────────
 // Server-side dialogue engine. Receives the player's message + the NPC's current
 // memory (read from 0G on the client), injects that memory into the NPC's persona
-// system prompt, asks Claude for an in-character turn, applies the AI's memory
+// system prompt, asks an AI for an in-character turn, applies the AI's memory
 // delta, and returns { response, options, memory, delta }. The CLIENT persists
 // the returned memory back to 0G when the conversation ends (one signature).
 //
-// The ANTHROPIC_API_KEY lives only here — it never reaches the browser.
+// Provider selection (automatic fallback, in priority order):
+//   1. ANTHROPIC_API_KEY → Claude (claude-sonnet-4-6)
+//   2. GOOGLE_API_KEY    → Gemini (gemini-1.5-flash, free tier)
+//   3. neither           → deterministic hardcoded text fallback
+// The system prompt and JSON response contract are identical for both models —
+// only the API client differs. API keys live only here; they never reach the browser.
 
 import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { NextResponse } from 'next/server';
 import { getNPC } from '@/lib/npcs';
 import type {
@@ -21,8 +27,13 @@ import type {
 export const runtime = 'nodejs';
 
 const MODEL = process.env.ENGRAM_MODEL || 'claude-sonnet-4-6';
-const apiKey = process.env.ANTHROPIC_API_KEY;
-const client = apiKey ? new Anthropic({ apiKey }) : null;
+const GEMINI_MODEL = process.env.ENGRAM_GEMINI_MODEL || 'gemini-1.5-flash';
+
+const anthropicKey = process.env.ANTHROPIC_API_KEY;
+const googleKey = process.env.GOOGLE_API_KEY;
+
+const anthropic = anthropicKey ? new Anthropic({ apiKey: anthropicKey }) : null;
+const genAI = googleKey ? new GoogleGenerativeAI(googleKey) : null;
 
 const isAddress = (w: unknown): w is string =>
   typeof w === 'string' && /^0x[a-fA-F0-9]{40}$/.test(w);
@@ -114,7 +125,7 @@ function applyUpdate(memory: NPCMemory, update: MemoryUpdate, playerLine: string
 }
 
 async function runClaude(system: string, userContent: string, npcName: string): Promise<AITurn> {
-  const resp = await client!.messages.create({
+  const resp = await anthropic!.messages.create({
     model: MODEL,
     max_tokens: 700,
     system,
@@ -131,7 +142,24 @@ async function runClaude(system: string, userContent: string, npcName: string): 
   }
 }
 
-// Minimal in-character fallback so the UI is clickable before a key is set.
+// Same persona system prompt + JSON contract as Claude — only the client changes.
+// Gemini's free tier makes this a zero-cost option for collaborators.
+async function runGemini(system: string, userContent: string, npcName: string): Promise<AITurn> {
+  const model = genAI!.getGenerativeModel({
+    model: GEMINI_MODEL,
+    systemInstruction: system,
+    generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 800 },
+  });
+  const result = await model.generateContent(userContent);
+  const text = result.response.text();
+  try {
+    return normalizeTurn(JSON.parse(extractJson(text)), npcName);
+  } catch {
+    return normalizeTurn({ dialogue: text }, npcName);
+  }
+}
+
+// Minimal in-character fallback so the UI is clickable before any key is set.
 function fallbackTurn(npcName: NPCName, memory: NPCMemory, message: string): AITurn {
   const npc = getNPC(npcName)!;
   const seen = memory.interaction_history.length > 0;
@@ -139,7 +167,7 @@ function fallbackTurn(npcName: NPCName, memory: NPCMemory, message: string): AIT
   const greet = seen ? (warm ? 'Ah, you again — good.' : 'You. I remember you.') : 'A new face in Aldenmoor.';
   return normalizeTurn(
     {
-      dialogue: `${greet} ${message ? `"${message}" — noted.` : `What brings you to ${npc.name}?`} (set ANTHROPIC_API_KEY for real dialogue)`,
+      dialogue: `${greet} ${message ? `"${message}" — noted.` : `What brings you to ${npc.name}?`} (set ANTHROPIC_API_KEY or GOOGLE_API_KEY for real dialogue)`,
       memory_update: { trust_delta: 0, emotional_state: memory.emotional_state, debts_delta: 0, summary: seen ? 'Exchanged a few words again.' : 'Met for the first time.' },
     },
     npc.name
@@ -167,9 +195,12 @@ export async function POST(req: Request) {
 
   try {
     const system = buildSystem(npcName, memory, crossMemory);
-    const turn = client
-      ? await runClaude(system, userContent, getNPC(npcName)!.name)
-      : fallbackTurn(npcName, memory, message || '');
+    const npcDisplayName = getNPC(npcName)!.name;
+    const turn = anthropic
+      ? await runClaude(system, userContent, npcDisplayName)
+      : genAI
+        ? await runGemini(system, userContent, npcDisplayName)
+        : fallbackTurn(npcName, memory, message || '');
 
     const updated = applyUpdate(memory, turn.memory_update, message || '');
 
