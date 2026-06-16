@@ -10,8 +10,8 @@
 **Repo:** `engram` — Next.js 15.1.5 + TypeScript · 0G Storage (Galileo testnet, chain `16602`) · ethers v6 · wagmi · Three.js / @react-three/fiber / @react-three/drei.
 
 Índice:
-1. [On-chain rootHash registry (memoria cross-device / cross-game)](#prompt-1--on-chain-roothash-registry)
-2. [World pass: terreno con alturas, cielo, casas, árboles y avatares](#prompt-2--world-pass-terreno-cielo-y-props)
+1. [On-chain rootHash registry (memoria cross-device / cross-game)](#prompt-1--on-chain-roothash-registry) — ⏳ pendiente
+2. [World pass: terreno con alturas, cielo, casas, árboles y avatares](#prompt-2--world-pass-terreno-cielo-y-props) — ✅ done
 
 ---
 
@@ -100,6 +100,13 @@ escribir el root en el mismo flujo de storage) — no lo implementes ahora.
 ---
 
 ## Prompt 2 — World pass: terreno, cielo y props
+
+> **✅ DONE — 16 jun 2026.** Implementado en [`src/components/engram/map.ts`](../src/components/engram/map.ts)
+> (fuente única: `getHeightAt`, props y colliders) + refactor de
+> [`src/components/engram/Scene3D.tsx`](../src/components/engram/Scene3D.tsx): terreno
+> desplazado que la cámara sigue, cielo `<Sky>` crepuscular + luna con halo, casas a dos
+> aguas con chimenea humeante, bosque instanciado (pino/frondoso/arbusto) y avatares
+> pulidos. `tsc --noEmit` limpio; smoke test en navegador sin errores de consola.
 
 ```
 # Tarea: hacer de Aldenmoor un entorno detallado y explorable (terreno con alturas)

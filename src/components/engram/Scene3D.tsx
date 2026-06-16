@@ -6,15 +6,26 @@
 // memories, which NPC is active, and a select callback — all game/memory/dialogue
 // logic still lives in client-page.tsx. The 2D dialogue box overlays this Canvas.
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { Stars, Html, ContactShadows, Text, PointerLockControls, KeyboardControls, useKeyboardControls } from '@react-three/drei';
+import { Stars, Sky, Html, ContactShadows, Text, PointerLockControls, KeyboardControls, useKeyboardControls } from '@react-three/drei';
 import * as THREE from 'three';
 import { NPC_LIST } from '@/lib/npcs';
 import type { NPCName, NPCMemory } from '@/lib/types';
+import {
+  getHeightAt,
+  COLLIDERS,
+  COTTAGES,
+  TREES,
+  CAMPFIRE,
+  WORLD_RADIUS,
+  GROUND_RADIUS,
+  type TreeDef,
+  type CottageDef,
+} from './map';
 
-// Where each villager stands. Shared by the characters, the camera rig and the
-// first-person collision/proximity system.
+// Where each villager stands (XZ). They live in the flat clearing, so ground
+// height is ~0; we still anchor their Y to the terrain for safety.
 const NPC_POS: Record<NPCName, [number, number, number]> = {
   aldric: [-3.4, 0, 0.4],
   maren: [0, 0, -0.3],
@@ -25,23 +36,8 @@ const NPC_POS: Record<NPCName, [number, number, number]> = {
 const EYE_HEIGHT = 1.7;
 const PLAYER_RADIUS = 0.45;
 const WALK_SPEED = 4.6;
-const WORLD_RADIUS = 22; // invisible boundary; matches the ground circle
 const TALK_RANGE = 3.2; // how close you must stand before "Press E" appears
-const SPAWN: [number, number, number] = [0, EYE_HEIGHT, 9];
-
-// Solid props the player can't walk through, as XZ circles (x, z, radius).
-// Kept in sync with the cottages/trees/campfire placed in <Village/>.
-const COLLIDERS: { x: number; z: number; r: number }[] = [
-  { x: -7, z: -4, r: 1.7 },
-  { x: -4.5, z: -6.5, r: 1.5 },
-  { x: 4.5, z: -6, r: 1.5 },
-  { x: 7.5, z: -3.5, r: 1.7 },
-  { x: -9, z: 0, r: 0.8 },
-  { x: 9.5, z: -1, r: 0.8 },
-  { x: -6, z: 3, r: 0.7 },
-  { x: 6.5, z: 3.5, r: 0.7 },
-  { x: 0, z: 2.6, r: 1.0 }, // campfire
-];
+const SPAWN_XZ: [number, number] = [0, 9]; // y is sampled from the terrain
 
 const keyboardMap = [
   { name: 'forward', keys: ['ArrowUp', 'KeyW'] },
@@ -136,7 +132,8 @@ function Player({
   // Drop the camera at the spawn point whenever we (re)enter explore mode.
   useEffect(() => {
     if (!enabled) return;
-    camera.position.set(...SPAWN);
+    const [sx, sz] = SPAWN_XZ;
+    camera.position.set(sx, getHeightAt(sx, sz) + EYE_HEIGHT, sz);
     camera.lookAt(0, 1.2, 0);
   }, [enabled, camera]);
 
@@ -167,7 +164,8 @@ function Player({
     } else {
       bob.current.off += (0 - bob.current.off) * Math.min(1, dt * 10);
     }
-    camera.position.y = EYE_HEIGHT + bob.current.off;
+    // Follow the terrain: ground height under the feet + eye height + head-bob.
+    camera.position.y = getHeightAt(camera.position.x, camera.position.z) + EYE_HEIGHT + bob.current.off;
 
     // Nearest villager within talking range.
     let best: NPCName | null = null;
@@ -210,48 +208,235 @@ function TalkFraming({ active }: { active: NPCName | null }) {
 
 // ─── Scenery ──────────────────────────────────────────────────────────────────
 
-function Cottage({
-  position,
-  body,
-  roof,
-  scale = 1,
-}: {
-  position: [number, number, number];
-  body: string;
-  roof: string;
-  scale?: number;
-}) {
+// A soft round radial texture (sprites, glows, smoke). `core` is the centre
+// colour; it fades to transparent at the rim.
+function makeRadialTexture(core: string, mid = 'rgba(255,255,255,0)') {
+  const size = 64;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  g.addColorStop(0, core);
+  g.addColorStop(0.5, mid);
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  return new THREE.CanvasTexture(canvas);
+}
+
+// ── Terrain ──
+// A single displaced plane whose vertices read their height from getHeightAt,
+// so the visible ground and the walked-on ground are literally the same surface.
+function Terrain() {
+  const geom = useMemo(() => {
+    const size = GROUND_RADIUS * 2;
+    const seg = 150;
+    const g = new THREE.PlaneGeometry(size, size, seg, seg);
+    g.rotateX(-Math.PI / 2);
+    const pos = g.attributes.position as THREE.BufferAttribute;
+    for (let i = 0; i < pos.count; i++) {
+      pos.setY(i, getHeightAt(pos.getX(i), pos.getZ(i)));
+    }
+    g.computeVertexNormals();
+    return g;
+  }, []);
   return (
-    <group position={position} scale={scale}>
-      <mesh castShadow position={[0, 0.6, 0]}>
-        <boxGeometry args={[1.6, 1.2, 1.4]} />
-        <meshStandardMaterial color={body} flatShading />
+    <mesh geometry={geom} receiveShadow>
+      <meshStandardMaterial color="#3e4a32" roughness={1} />
+    </mesh>
+  );
+}
+
+// ── Moon ── emissive disc + an additive halo sprite.
+function Moon() {
+  const halo = useMemo(() => makeRadialTexture('rgba(255,247,224,0.9)', 'rgba(255,240,200,0.25)'), []);
+  return (
+    <group position={[20, 24, -46]}>
+      <mesh>
+        <sphereGeometry args={[3, 24, 24]} />
+        <meshBasicMaterial color="#fff7e0" />
       </mesh>
-      {/* Pyramid roof — a 4-sided cone. */}
-      <mesh castShadow position={[0, 1.6, 0]} rotation={[0, Math.PI / 4, 0]}>
-        <coneGeometry args={[1.4, 0.9, 4]} />
-        <meshStandardMaterial color={roof} flatShading />
-      </mesh>
-      {/* Warm window glow. */}
-      <mesh position={[0, 0.55, 0.71]}>
-        <planeGeometry args={[0.34, 0.34]} />
-        <meshBasicMaterial color="#ffcf7a" />
-      </mesh>
+      <sprite scale={[22, 22, 1]}>
+        <spriteMaterial map={halo} transparent depthWrite={false} blending={THREE.AdditiveBlending} opacity={0.7} />
+      </sprite>
     </group>
   );
 }
 
-function Tree({ position, scale = 1 }: { position: [number, number, number]; scale?: number }) {
+// ── Chimney smoke ── a few slow grey puffs rising from a cottage chimney.
+function ChimneySmoke({ origin }: { origin: [number, number, number] }) {
+  const ref = useRef<THREE.Points>(null);
+  const count = 10;
+  const tex = useMemo(() => makeRadialTexture('rgba(190,185,176,0.7)', 'rgba(170,165,156,0.25)'), []);
+  const parts = useMemo(
+    () => Array.from({ length: count }, () => ({ y: Math.random() * 1.4, speed: 0.12 + Math.random() * 0.1, seed: Math.random() * 10 })),
+    []
+  );
+  const positions = useMemo(() => new Float32Array(count * 3), []);
+  useFrame((_, dt) => {
+    const dtc = Math.min(dt, 0.05);
+    for (let i = 0; i < count; i++) {
+      const p = parts[i];
+      p.y += p.speed * dtc;
+      if (p.y > 1.4) p.y = 0;
+      positions[i * 3] = Math.sin(p.y * 3 + p.seed) * 0.12;
+      positions[i * 3 + 1] = p.y;
+      positions[i * 3 + 2] = Math.cos(p.y * 2 + p.seed) * 0.1;
+    }
+    if (ref.current) ref.current.geometry.attributes.position.needsUpdate = true;
+  });
   return (
-    <group position={position} scale={scale}>
-      <mesh castShadow position={[0, 0.5, 0]}>
-        <cylinderGeometry args={[0.12, 0.16, 1, 6]} />
-        <meshStandardMaterial color="#5a3f28" flatShading />
+    <points ref={ref} position={origin}>
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-position" args={[positions, 3]} />
+      </bufferGeometry>
+      <pointsMaterial map={tex} size={0.55} sizeAttenuation transparent opacity={0.32} depthWrite={false} />
+    </points>
+  );
+}
+
+// ── Cottage ── bigger, gabled, with corner beams, a framed door, glowing
+// windows and a smoking chimney. Anchored to the terrain height at its spot.
+function Cottage({ def }: { def: CottageDef }) {
+  const y = getHeightAt(def.x, def.z);
+  return (
+    <group position={[def.x, y, def.z]} rotation={[0, def.rot, 0]} scale={def.scale}>
+      {/* stone plinth */}
+      <mesh position={[0, 0.1, 0]} castShadow receiveShadow>
+        <boxGeometry args={[2.7, 0.2, 2.3]} />
+        <meshStandardMaterial color="#5b5048" flatShading />
       </mesh>
-      <mesh castShadow position={[0, 1.4, 0]}>
-        <coneGeometry args={[0.7, 1.6, 7]} />
-        <meshStandardMaterial color="#33502f" flatShading />
+      {/* body */}
+      <mesh position={[0, 1.05, 0]} castShadow receiveShadow>
+        <boxGeometry args={[2.4, 1.8, 2.0]} />
+        <meshStandardMaterial color={def.body} flatShading />
       </mesh>
+      {/* corner beams */}
+      {([[-1.2, -1.0], [1.2, -1.0], [-1.2, 1.0], [1.2, 1.0]] as [number, number][]).map(([x, z], i) => (
+        <mesh key={i} position={[x, 1.05, z]} castShadow>
+          <boxGeometry args={[0.16, 1.85, 0.16]} />
+          <meshStandardMaterial color="#4a3424" flatShading />
+        </mesh>
+      ))}
+      {/* gable roof — two slopes meeting at a ridge running along X */}
+      <mesh position={[0, 2.2, -0.66]} rotation={[0.62, 0, 0]} castShadow>
+        <boxGeometry args={[2.8, 0.14, 1.6]} />
+        <meshStandardMaterial color={def.roof} flatShading />
+      </mesh>
+      <mesh position={[0, 2.2, 0.66]} rotation={[-0.62, 0, 0]} castShadow>
+        <boxGeometry args={[2.8, 0.14, 1.6]} />
+        <meshStandardMaterial color={def.roof} flatShading />
+      </mesh>
+      <mesh position={[0, 2.62, 0]}>
+        <boxGeometry args={[2.9, 0.12, 0.12]} />
+        <meshStandardMaterial color="#3a2a1a" flatShading />
+      </mesh>
+      {/* door + frame */}
+      <mesh position={[0, 0.7, 1.04]}>
+        <boxGeometry args={[0.74, 1.44, 0.04]} />
+        <meshStandardMaterial color="#2a1a10" flatShading />
+      </mesh>
+      <mesh position={[0, 0.7, 1.06]}>
+        <boxGeometry args={[0.6, 1.3, 0.04]} />
+        <meshStandardMaterial color="#5a3a1f" flatShading />
+      </mesh>
+      {/* windows: dark frame + warm glow */}
+      {[-0.78, 0.78].map((x, i) => (
+        <group key={i} position={[x, 1.2, 1.01]}>
+          <mesh>
+            <boxGeometry args={[0.5, 0.5, 0.05]} />
+            <meshStandardMaterial color="#2a1a10" flatShading />
+          </mesh>
+          <mesh position={[0, 0, 0.04]}>
+            <planeGeometry args={[0.36, 0.36]} />
+            <meshBasicMaterial color="#ffcf7a" />
+          </mesh>
+        </group>
+      ))}
+      {/* chimney + smoke */}
+      <mesh position={[0.8, 2.55, -0.25]} castShadow>
+        <boxGeometry args={[0.34, 1.1, 0.34]} />
+        <meshStandardMaterial color="#5a4a40" flatShading />
+      </mesh>
+      <ChimneySmoke origin={[0.8, 3.15, -0.25]} />
+    </group>
+  );
+}
+
+// ── Forest ── 2–3 species, each drawn as a handful of InstancedMeshes (one per
+// part) so a hundred-plus trees cost only a few draw calls. Every instance is
+// anchored to the terrain and pushed into the shared collider set via map.ts.
+function TreePart({
+  items,
+  geometry,
+  material,
+  localY,
+}: {
+  items: TreeDef[];
+  geometry: THREE.BufferGeometry;
+  material: THREE.Material;
+  localY: number;
+}) {
+  const ref = useRef<THREE.InstancedMesh>(null);
+  useLayoutEffect(() => {
+    const mesh = ref.current;
+    if (!mesh) return;
+    const dummy = new THREE.Object3D();
+    items.forEach((t, i) => {
+      dummy.position.set(t.x, getHeightAt(t.x, t.z) + localY * t.scale, t.z);
+      dummy.rotation.set(0, t.rot, 0);
+      dummy.scale.setScalar(t.scale);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(i, dummy.matrix);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.computeBoundingSphere();
+  }, [items, localY]);
+  if (items.length === 0) return null;
+  return <instancedMesh ref={ref} args={[geometry, material, items.length]} castShadow />;
+}
+
+function InstancedTrees() {
+  const pine = useMemo(() => TREES.filter((t) => t.species === 0), []);
+  const broad = useMemo(() => TREES.filter((t) => t.species === 1), []);
+  const bush = useMemo(() => TREES.filter((t) => t.species === 2), []);
+
+  const geo = useMemo(
+    () => ({
+      trunk: new THREE.CylinderGeometry(0.16, 0.24, 1.4, 6),
+      pineA: new THREE.ConeGeometry(0.95, 1.7, 7),
+      pineB: new THREE.ConeGeometry(0.72, 1.4, 7),
+      pineC: new THREE.ConeGeometry(0.46, 1.1, 7),
+      broadTrunk: new THREE.CylinderGeometry(0.2, 0.28, 1.6, 6),
+      leaf: new THREE.IcosahedronGeometry(1.0, 0),
+      leafS: new THREE.IcosahedronGeometry(0.72, 0),
+      bush: new THREE.IcosahedronGeometry(0.72, 0),
+    }),
+    []
+  );
+  const mat = useMemo(
+    () => ({
+      bark: new THREE.MeshStandardMaterial({ color: '#5a3f28', flatShading: true, roughness: 1 }),
+      pine: new THREE.MeshStandardMaterial({ color: '#2f4a2c', flatShading: true, roughness: 1 }),
+      broad: new THREE.MeshStandardMaterial({ color: '#3b5a30', flatShading: true, roughness: 1 }),
+      bushLeaf: new THREE.MeshStandardMaterial({ color: '#45683a', flatShading: true, roughness: 1 }),
+    }),
+    []
+  );
+
+  return (
+    <group>
+      {/* pines: trunk + three stacked cones */}
+      <TreePart items={pine} geometry={geo.trunk} material={mat.bark} localY={0.7} />
+      <TreePart items={pine} geometry={geo.pineA} material={mat.pine} localY={1.9} />
+      <TreePart items={pine} geometry={geo.pineB} material={mat.pine} localY={2.8} />
+      <TreePart items={pine} geometry={geo.pineC} material={mat.pine} localY={3.6} />
+      {/* broadleaf: taller trunk + two foliage clumps */}
+      <TreePart items={broad} geometry={geo.broadTrunk} material={mat.bark} localY={0.8} />
+      <TreePart items={broad} geometry={geo.leaf} material={mat.broad} localY={2.3} />
+      <TreePart items={broad} geometry={geo.leafS} material={mat.broad} localY={3.0} />
+      {/* bushes: a single low clump */}
+      <TreePart items={bush} geometry={geo.bush} material={mat.bushLeaf} localY={0.55} />
     </group>
   );
 }
@@ -348,7 +533,7 @@ function Campfire() {
     }
   });
   return (
-    <group position={[0, 0, 2.6]}>
+    <group position={[CAMPFIRE.x, getHeightAt(CAMPFIRE.x, CAMPFIRE.z), CAMPFIRE.z]}>
       <pointLight ref={light} color="#ff9a3c" intensity={2.2} distance={9} position={[0, 0.6, 0]} />
       <FireParticles />
       <mesh position={[0, 0.18, 0]}>
@@ -369,29 +554,13 @@ function Campfire() {
 function Village() {
   return (
     <group>
-      {/* Ground. */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
-        <circleGeometry args={[26, 48]} />
-        <meshStandardMaterial color="#3e4a32" />
-      </mesh>
-
-      <Cottage position={[-7, 0, -4]} body="#7a5a3a" roof="#8a3a2a" scale={1.1} />
-      <Cottage position={[-4.5, 0, -6.5]} body="#6a4a32" roof="#7a4a2a" scale={0.95} />
-      <Cottage position={[4.5, 0, -6]} body="#7a5a3a" roof="#5a3a6a" />
-      <Cottage position={[7.5, 0, -3.5]} body="#6a4a32" roof="#8a3a2a" scale={1.1} />
-
-      <Tree position={[-9, 0, 0]} scale={1.2} />
-      <Tree position={[9.5, 0, -1]} scale={1.1} />
-      <Tree position={[-6, 0, 3]} scale={0.9} />
-      <Tree position={[6.5, 0, 3.5]} scale={1} />
-
+      <Terrain />
+      <Moon />
+      {COTTAGES.map((c, i) => (
+        <Cottage key={i} def={c} />
+      ))}
+      <InstancedTrees />
       <Campfire />
-
-      {/* Moon. */}
-      <mesh position={[10, 9, -18]}>
-        <sphereGeometry args={[2.4, 24, 24]} />
-        <meshBasicMaterial color="#fff7e0" />
-      </mesh>
     </group>
   );
 }
@@ -430,29 +599,53 @@ function FloatingTitle() {
 // ─── NPC characters ───────────────────────────────────────────────────────────
 
 function CharacterBody({ npc, accent }: { npc: NPCName; accent: string }) {
+  const skin = '#e8c4a0';
+
   if (npc === 'maren') {
-    // Guard captain: armoured, helmeted, holds a spear.
+    // Guard captain: plated torso, pauldrons, gauntleted arms, plumed helm, spear.
     return (
       <group>
         <mesh castShadow position={[0, 0.7, 0]}>
           <capsuleGeometry args={[0.42, 0.8, 4, 12]} />
-          <meshStandardMaterial color="#4a5a6a" flatShading metalness={0.4} roughness={0.6} />
+          <meshStandardMaterial color="#4a5a6a" flatShading metalness={0.45} roughness={0.55} />
         </mesh>
+        {/* chest plate */}
+        <mesh position={[0, 0.95, 0.32]}>
+          <boxGeometry args={[0.56, 0.5, 0.16]} />
+          <meshStandardMaterial color="#5a6b7c" flatShading metalness={0.5} roughness={0.45} />
+        </mesh>
+        {/* pauldrons + arms */}
+        {([-1, 1] as const).map((s) => (
+          <group key={s}>
+            <mesh castShadow position={[s * 0.5, 1.12, 0]}>
+              <sphereGeometry args={[0.2, 12, 12]} />
+              <meshStandardMaterial color={accent} flatShading metalness={0.5} roughness={0.4} />
+            </mesh>
+            <mesh castShadow position={[s * 0.5, 0.7, 0.05]} rotation={[0, 0, s * 0.18]}>
+              <capsuleGeometry args={[0.13, 0.6, 4, 8]} />
+              <meshStandardMaterial color="#41505f" flatShading metalness={0.4} roughness={0.6} />
+            </mesh>
+          </group>
+        ))}
+        {/* head + helmet + plume */}
         <mesh castShadow position={[0, 1.55, 0]}>
           <sphereGeometry args={[0.3, 12, 12]} />
-          <meshStandardMaterial color="#e8c4a0" flatShading />
+          <meshStandardMaterial color={skin} flatShading />
         </mesh>
-        {/* Helmet. */}
         <mesh castShadow position={[0, 1.66, 0]}>
           <sphereGeometry args={[0.34, 12, 12, 0, Math.PI * 2, 0, Math.PI / 1.7]} />
           <meshStandardMaterial color={accent} flatShading metalness={0.5} roughness={0.4} />
         </mesh>
-        {/* Spear. */}
-        <mesh position={[0.5, 1, 0]}>
+        <mesh position={[0, 1.94, -0.04]} rotation={[0.3, 0, 0]}>
+          <boxGeometry args={[0.08, 0.34, 0.12]} />
+          <meshStandardMaterial color="#b6433a" flatShading />
+        </mesh>
+        {/* spear, gripped to the right */}
+        <mesh position={[0.5, 1.0, 0.12]}>
           <cylinderGeometry args={[0.04, 0.04, 2.4, 6]} />
           <meshStandardMaterial color="#6a4a2a" flatShading />
         </mesh>
-        <mesh position={[0.5, 2.25, 0]}>
+        <mesh position={[0.5, 2.25, 0.12]}>
           <coneGeometry args={[0.09, 0.3, 6]} />
           <meshStandardMaterial color="#cdd3da" flatShading metalness={0.6} />
         </mesh>
@@ -461,23 +654,34 @@ function CharacterBody({ npc, accent }: { npc: NPCName; accent: string }) {
   }
 
   if (npc === 'sable') {
-    // Broker: slender, hooded robe, glinting eyes.
+    // Broker: slender hooded robe, sleeve-crossed arms, a satchel, glinting eyes.
     return (
       <group>
         <mesh castShadow position={[0, 0.7, 0]}>
           <coneGeometry args={[0.55, 1.5, 10]} />
           <meshStandardMaterial color="#2a1d40" flatShading />
         </mesh>
+        {/* crossed sleeves */}
+        {([-1, 1] as const).map((s) => (
+          <mesh key={s} castShadow position={[s * 0.16, 0.78, 0.34]} rotation={[1.1, 0, -s * 0.5]}>
+            <capsuleGeometry args={[0.11, 0.42, 4, 8]} />
+            <meshStandardMaterial color="#231836" flatShading />
+          </mesh>
+        ))}
+        {/* satchel */}
+        <mesh castShadow position={[0.34, 0.6, 0.18]} rotation={[0, 0, 0.2]}>
+          <boxGeometry args={[0.26, 0.24, 0.14]} />
+          <meshStandardMaterial color={accent} flatShading roughness={0.7} />
+        </mesh>
+        {/* head + hood */}
         <mesh castShadow position={[0, 1.5, 0]}>
           <sphereGeometry args={[0.27, 12, 12]} />
-          <meshStandardMaterial color="#e8c4a0" flatShading />
+          <meshStandardMaterial color={skin} flatShading />
         </mesh>
-        {/* Hood. */}
         <mesh castShadow position={[0, 1.62, -0.02]}>
           <coneGeometry args={[0.4, 0.7, 10]} />
           <meshStandardMaterial color={accent} flatShading />
         </mesh>
-        {/* Glinting eyes. */}
         <mesh position={[-0.1, 1.5, 0.24]}>
           <sphereGeometry args={[0.04, 8, 8]} />
           <meshBasicMaterial color="#b98bff" />
@@ -490,26 +694,43 @@ function CharacterBody({ npc, accent }: { npc: NPCName; accent: string }) {
     );
   }
 
-  // Aldric — merchant: round, robed, gold trim, a floating coin.
+  // Aldric — merchant: round, robed, gold trim, short arms, a floating coin.
   return (
     <group>
       <mesh castShadow position={[0, 0.65, 0]}>
         <capsuleGeometry args={[0.48, 0.6, 4, 12]} />
         <meshStandardMaterial color="#7a5a2a" flatShading />
       </mesh>
-      {/* Belt / trim. */}
+      {/* belt / trim */}
       <mesh position={[0, 0.6, 0]}>
         <torusGeometry args={[0.49, 0.06, 8, 20]} />
         <meshStandardMaterial color={accent} flatShading metalness={0.5} roughness={0.4} />
       </mesh>
+      {/* coin pouch */}
+      <mesh castShadow position={[0.3, 0.5, 0.34]}>
+        <sphereGeometry args={[0.13, 10, 10]} />
+        <meshStandardMaterial color="#5a3f1f" flatShading />
+      </mesh>
+      {/* short arms */}
+      {([-1, 1] as const).map((s) => (
+        <mesh key={s} castShadow position={[s * 0.52, 0.62, 0.1]} rotation={[0, 0, s * 0.32]}>
+          <capsuleGeometry args={[0.13, 0.34, 4, 8]} />
+          <meshStandardMaterial color="#6a4d24" flatShading />
+        </mesh>
+      ))}
+      {/* head + cap */}
       <mesh castShadow position={[0, 1.5, 0]}>
         <sphereGeometry args={[0.3, 12, 12]} />
-        <meshStandardMaterial color="#e8c4a0" flatShading />
+        <meshStandardMaterial color={skin} flatShading />
       </mesh>
-      {/* Cap. */}
       <mesh castShadow position={[0, 1.72, 0]}>
         <cylinderGeometry args={[0.26, 0.3, 0.18, 10]} />
         <meshStandardMaterial color="#8a3a2a" flatShading />
+      </mesh>
+      {/* floating gold coin over the open hand */}
+      <mesh position={[0.62, 1.05, 0.1]} rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[0.1, 0.1, 0.03, 16]} />
+        <meshStandardMaterial color={accent} flatShading metalness={0.7} roughness={0.3} emissive={accent} emissiveIntensity={0.25} />
       </mesh>
     </group>
   );
@@ -549,8 +770,8 @@ function Character({
     const phase = pos[0] * 1.7; // stagger each villager
     const speed = talking ? 6 : 2.4;
     const amp = talking ? 0.16 : 0.11;
-    // Bouncier vertical bob…
-    group.current.position.y = pos[1] + Math.abs(Math.sin(t * speed + phase)) * amp;
+    // Bouncier vertical bob, anchored to the ground height under the villager.
+    group.current.position.y = getHeightAt(pos[0], pos[2]) + Math.abs(Math.sin(t * speed + phase)) * amp;
     // …plus a gentle side-to-side sway and lean so they feel alive.
     group.current.rotation.y = Math.sin(t * 0.9 + phase) * 0.16;
     group.current.rotation.z = Math.sin(t * 1.5 + phase) * 0.05;
@@ -700,20 +921,29 @@ export default function Scene3D({ memories = null, active = null, talking = fals
           camera={{ position: [0, 3.1, 9], fov: 60 }}
           gl={{ antialias: true }}
         >
-          <color attach="background" args={['#0f1320']} />
-          <fog attach="fog" args={['#0f1320', 14, 34]} />
+          <color attach="background" args={['#0e1220']} />
+          <fog attach="fog" args={['#10131f', 24, 80]} />
+
+          {/* Dusk skydome behind the stars for a deep, graded horizon. */}
+          <Sky distance={450000} sunPosition={[-40, 5, -70]} turbidity={12} rayleigh={0.7} mieCoefficient={0.02} mieDirectionalG={0.86} />
 
           {/* Moonlight + soft ambient + cool fill. */}
-          <ambientLight intensity={0.35} color="#9fb3d6" />
+          <ambientLight intensity={0.32} color="#9fb3d6" />
           <directionalLight
-            position={[10, 12, -8]}
-            intensity={1.1}
+            position={[20, 24, -46]}
+            intensity={1.05}
             color="#cdd9ff"
             castShadow
-            shadow-mapSize={[1024, 1024]}
+            shadow-mapSize={[2048, 2048]}
+            shadow-camera-near={1}
+            shadow-camera-far={80}
+            shadow-camera-left={-26}
+            shadow-camera-right={26}
+            shadow-camera-top={26}
+            shadow-camera-bottom={-26}
           />
 
-          <Stars radius={60} depth={40} count={1500} factor={3} saturation={0} fade speed={0.5} />
+          <Stars radius={80} depth={45} count={1800} factor={3.2} saturation={0} fade speed={0.5} />
 
           {/* Cinematic rig on the title/loading screen; first-person controls
               once Aldenmoor is explorable. */}
