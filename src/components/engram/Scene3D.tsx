@@ -6,19 +6,74 @@
 // memories, which NPC is active, and a select callback — all game/memory/dialogue
 // logic still lives in client-page.tsx. The 2D dialogue box overlays this Canvas.
 
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { Stars, Html, ContactShadows, Text } from '@react-three/drei';
+import { Stars, Html, ContactShadows, Text, PointerLockControls, KeyboardControls, useKeyboardControls } from '@react-three/drei';
 import * as THREE from 'three';
 import { NPC_LIST } from '@/lib/npcs';
 import type { NPCName, NPCMemory } from '@/lib/types';
 
-// Where each villager stands. Shared by the characters and the camera rig.
+// Where each villager stands. Shared by the characters, the camera rig and the
+// first-person collision/proximity system.
 const NPC_POS: Record<NPCName, [number, number, number]> = {
   aldric: [-3.4, 0, 0.4],
   maren: [0, 0, -0.3],
   sable: [3.4, 0, 0.4],
 };
+
+// ─── First-person walking constants ───────────────────────────────────────────
+const EYE_HEIGHT = 1.7;
+const PLAYER_RADIUS = 0.45;
+const WALK_SPEED = 4.6;
+const WORLD_RADIUS = 22; // invisible boundary; matches the ground circle
+const TALK_RANGE = 3.2; // how close you must stand before "Press E" appears
+const SPAWN: [number, number, number] = [0, EYE_HEIGHT, 9];
+
+// Solid props the player can't walk through, as XZ circles (x, z, radius).
+// Kept in sync with the cottages/trees/campfire placed in <Village/>.
+const COLLIDERS: { x: number; z: number; r: number }[] = [
+  { x: -7, z: -4, r: 1.7 },
+  { x: -4.5, z: -6.5, r: 1.5 },
+  { x: 4.5, z: -6, r: 1.5 },
+  { x: 7.5, z: -3.5, r: 1.7 },
+  { x: -9, z: 0, r: 0.8 },
+  { x: 9.5, z: -1, r: 0.8 },
+  { x: -6, z: 3, r: 0.7 },
+  { x: 6.5, z: 3.5, r: 0.7 },
+  { x: 0, z: 2.6, r: 1.0 }, // campfire
+];
+
+const keyboardMap = [
+  { name: 'forward', keys: ['ArrowUp', 'KeyW'] },
+  { name: 'backward', keys: ['ArrowDown', 'KeyS'] },
+  { name: 'left', keys: ['ArrowLeft', 'KeyA'] },
+  { name: 'right', keys: ['ArrowRight', 'KeyD'] },
+];
+
+// Slide the player out of the boundary and any prop/NPC they overlap.
+function resolveCollision(x: number, z: number): [number, number] {
+  const d = Math.hypot(x, z);
+  if (d > WORLD_RADIUS) {
+    x = (x / d) * WORLD_RADIUS;
+    z = (z / d) * WORLD_RADIUS;
+  }
+  const obstacles = [
+    ...COLLIDERS,
+    ...(Object.values(NPC_POS) as [number, number, number][]).map((p) => ({ x: p[0], z: p[2], r: 0.6 })),
+  ];
+  for (const c of obstacles) {
+    const dx = x - c.x;
+    const dz = z - c.z;
+    const dist = Math.hypot(dx, dz);
+    const min = c.r + PLAYER_RADIUS;
+    if (dist < min && dist > 1e-4) {
+      const push = min - dist;
+      x += (dx / dist) * push;
+      z += (dz / dist) * push;
+    }
+  }
+  return [x, z];
+}
 
 function trustColor(t: number) {
   if (t >= 70) return '#5fb86a';
@@ -51,6 +106,102 @@ function CameraRig({ active }: { active: NPCName | null }) {
     const k = 1 - Math.pow(0.0015, dt);
     camera.position.lerp(tmpPos, k);
     look.current.lerp(tmpLook, k);
+    camera.lookAt(look.current);
+  });
+
+  return null;
+}
+
+// ─── First-person player ──────────────────────────────────────────────────────
+// Walks the camera around Aldenmoor (WASD / arrows) using the yaw that
+// PointerLockControls feeds in via the mouse. Resolves collisions, adds a subtle
+// head-bob, and reports which villager (if any) is within talking range.
+
+function Player({
+  enabled,
+  onNearbyChange,
+}: {
+  enabled: boolean;
+  onNearbyChange: (npc: NPCName | null) => void;
+}) {
+  const { camera } = useThree();
+  const [, getKeys] = useKeyboardControls();
+  const bob = useRef({ t: 0, off: 0 });
+  const nearbyRef = useRef<NPCName | null>(null);
+  const forward = useMemo(() => new THREE.Vector3(), []);
+  const right = useMemo(() => new THREE.Vector3(), []);
+  const move = useMemo(() => new THREE.Vector3(), []);
+  const up = useMemo(() => new THREE.Vector3(0, 1, 0), []);
+
+  // Drop the camera at the spawn point whenever we (re)enter explore mode.
+  useEffect(() => {
+    if (!enabled) return;
+    camera.position.set(...SPAWN);
+    camera.lookAt(0, 1.2, 0);
+  }, [enabled, camera]);
+
+  useFrame((_, dtRaw) => {
+    if (!enabled) return;
+    const dt = Math.min(dtRaw, 0.05);
+    const k = getKeys();
+
+    camera.getWorldDirection(forward);
+    forward.y = 0;
+    forward.normalize();
+    right.crossVectors(forward, up).normalize();
+
+    move.set(0, 0, 0);
+    if (k.forward) move.add(forward);
+    if (k.backward) move.sub(forward);
+    if (k.left) move.sub(right);
+    if (k.right) move.add(right);
+    const moving = move.lengthSq() > 0;
+
+    if (moving) {
+      move.normalize().multiplyScalar(WALK_SPEED * dt);
+      const [nx, nz] = resolveCollision(camera.position.x + move.x, camera.position.z + move.z);
+      camera.position.x = nx;
+      camera.position.z = nz;
+      bob.current.t += dt * 10.5;
+      bob.current.off = Math.sin(bob.current.t) * 0.045;
+    } else {
+      bob.current.off += (0 - bob.current.off) * Math.min(1, dt * 10);
+    }
+    camera.position.y = EYE_HEIGHT + bob.current.off;
+
+    // Nearest villager within talking range.
+    let best: NPCName | null = null;
+    let bestD = Infinity;
+    for (const npc of NPC_LIST) {
+      const p = NPC_POS[npc.id];
+      const dd = Math.hypot(camera.position.x - p[0], camera.position.z - p[2]);
+      if (dd < TALK_RANGE && dd < bestD) {
+        bestD = dd;
+        best = npc.id;
+      }
+    }
+    if (best !== nearbyRef.current) {
+      nearbyRef.current = best;
+      onNearbyChange(best);
+    }
+  });
+
+  return null;
+}
+
+// While a dialogue is open in first-person, keep the player rooted but gently
+// turn the camera to face whoever they're talking to.
+function TalkFraming({ active }: { active: NPCName | null }) {
+  const { camera } = useThree();
+  const look = useRef(new THREE.Vector3(0, 1.2, 0));
+  const target = useMemo(() => new THREE.Vector3(), []);
+
+  useFrame((_, dt) => {
+    if (!active) return;
+    const [x, , z] = NPC_POS[active];
+    target.set(x, 1.5, z);
+    const k = 1 - Math.pow(0.0025, Math.min(dt, 0.05));
+    look.current.lerp(target, k);
     camera.lookAt(look.current);
   });
 
@@ -488,51 +639,125 @@ interface Scene3DProps {
 }
 
 export default function Scene3D({ memories = null, active = null, talking = false, onSelect = () => {}, interactive = true, showTitle = false }: Scene3DProps) {
+  // Walk-around mode kicks in once the village is interactive (wallet connected
+  // and memories loaded). The title screen stays cinematic.
+  const explorable = interactive && !showTitle;
+  const exploring = explorable && !active; // movement only when not mid-dialogue
+
+  const [nearby, setNearby] = useState<NPCName | null>(null);
+  const [locked, setLocked] = useState(false);
+  const nearbyRef = useRef<NPCName | null>(null);
+  nearbyRef.current = nearby;
+
+  // Press E to talk to whoever is in range.
+  useEffect(() => {
+    if (!exploring) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== 'KeyE') return;
+      const tag = (document.activeElement as HTMLElement | null)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (nearbyRef.current) onSelect(nearbyRef.current);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [exploring, onSelect]);
+
+  // Clear the proximity prompt whenever we leave explore mode.
+  useEffect(() => {
+    if (!exploring) setNearby(null);
+  }, [exploring]);
+
+  const nearbyNpc = nearby ? NPC_LIST.find((n) => n.id === nearby) : null;
+
   return (
     <div className="absolute inset-0">
-      <Canvas
-        shadows
-        dpr={[1, 1.75]}
-        camera={{ position: [0, 3.1, 9], fov: 50 }}
-        gl={{ antialias: true }}
-      >
-        <color attach="background" args={['#0f1320']} />
-        <fog attach="fog" args={['#0f1320', 12, 30]} />
+      <KeyboardControls map={keyboardMap}>
+        <Canvas
+          shadows
+          dpr={[1, 1.75]}
+          camera={{ position: [0, 3.1, 9], fov: 60 }}
+          gl={{ antialias: true }}
+        >
+          <color attach="background" args={['#0f1320']} />
+          <fog attach="fog" args={['#0f1320', 14, 34]} />
 
-        {/* Moonlight + soft ambient + cool fill. */}
-        <ambientLight intensity={0.35} color="#9fb3d6" />
-        <directionalLight
-          position={[10, 12, -8]}
-          intensity={1.1}
-          color="#cdd9ff"
-          castShadow
-          shadow-mapSize={[1024, 1024]}
-        />
-
-        <Stars radius={60} depth={40} count={1500} factor={3} saturation={0} fade speed={0.5} />
-
-        <CameraRig active={active} />
-        <Village />
-        {showTitle && <FloatingTitle />}
-
-        <ContactShadows position={[0, 0.01, 0]} opacity={0.45} scale={20} blur={2.4} far={6} />
-
-        {NPC_LIST.map((npc) => (
-          <Character
-            key={npc.id}
-            npc={npc.id}
-            name={npc.name}
-            role={npc.role}
-            accent={npc.accent}
-            memory={memories ? memories[npc.id] : null}
-            active={active === npc.id}
-            dim={!!active && active !== npc.id}
-            talking={talking && active === npc.id}
-            interactive={interactive}
-            onSelect={onSelect}
+          {/* Moonlight + soft ambient + cool fill. */}
+          <ambientLight intensity={0.35} color="#9fb3d6" />
+          <directionalLight
+            position={[10, 12, -8]}
+            intensity={1.1}
+            color="#cdd9ff"
+            castShadow
+            shadow-mapSize={[1024, 1024]}
           />
-        ))}
-      </Canvas>
+
+          <Stars radius={60} depth={40} count={1500} factor={3} saturation={0} fade speed={0.5} />
+
+          {/* Cinematic rig on the title/loading screen; first-person controls
+              once Aldenmoor is explorable. */}
+          {!explorable && <CameraRig active={active} />}
+          {exploring && (
+            <>
+              <Player enabled={exploring} onNearbyChange={setNearby} />
+              <PointerLockControls onLock={() => setLocked(true)} onUnlock={() => setLocked(false)} />
+            </>
+          )}
+          {explorable && active && <TalkFraming active={active} />}
+
+          <Village />
+          {showTitle && <FloatingTitle />}
+
+          <ContactShadows position={[0, 0.01, 0]} opacity={0.45} scale={20} blur={2.4} far={6} />
+
+          {NPC_LIST.map((npc) => (
+            <Character
+              key={npc.id}
+              npc={npc.id}
+              name={npc.name}
+              role={npc.role}
+              accent={npc.accent}
+              memory={memories ? memories[npc.id] : null}
+              active={active === npc.id}
+              dim={!!active && active !== npc.id}
+              talking={talking && active === npc.id}
+              interactive={interactive && !explorable}
+              onSelect={onSelect}
+            />
+          ))}
+        </Canvas>
+      </KeyboardControls>
+
+      {/* First-person HUD (crosshair, proximity prompt, controls hint). */}
+      {exploring && (
+        <>
+          <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
+            <div className="h-1.5 w-1.5 rounded-full bg-white/70 shadow-[0_0_4px_rgba(0,0,0,0.8)]" />
+          </div>
+
+          {!locked && (
+            <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+              <div className="rounded-full bg-black/55 px-5 py-2 text-sm text-[#f4e8d0]/90">
+                Click to look around · WASD to walk
+              </div>
+            </div>
+          )}
+
+          {locked && nearbyNpc && (
+            <div className="pointer-events-none absolute bottom-28 left-1/2 z-10 -translate-x-1/2">
+              <div
+                className="rounded-full border px-5 py-2 text-sm font-semibold text-[#f4e8d0] shadow-lg"
+                style={{ background: 'rgba(20,16,10,0.88)', borderColor: nearbyNpc.accent }}
+              >
+                Press <span style={{ color: nearbyNpc.accent }}>E</span> to speak with {nearbyNpc.name}
+              </div>
+            </div>
+          )}
+
+          <div className="pointer-events-none absolute bottom-4 left-4 z-10 text-xs text-[#f4e8d0]/55">
+            WASD move · Mouse look · E talk · Esc release cursor
+          </div>
+        </>
+      )}
     </div>
   );
 }

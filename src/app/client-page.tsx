@@ -212,12 +212,7 @@ function Game() {
       {/* Villagers are rendered inside the 3D Scene above; the dialogue box and
           memory panel below stay as 2D overlays. */}
 
-      {/* Hint to click a villager when idle */}
-      {memories && !active && (
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 text-sm italic text-[#f4e8d0]/70 bg-black/40 px-4 py-2 rounded-full pointer-events-none">
-          Click a villager to speak with them.
-        </div>
-      )}
+      {/* Walking + interaction hints now live inside the 3D first-person HUD. */}
 
       {/* JRPG dialogue box */}
       {active && activeNpc && (
