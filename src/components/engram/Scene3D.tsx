@@ -670,11 +670,23 @@ export default function Scene3D({ memories = null, active = null, talking = fals
 
   // Clear the proximity prompt and lock state whenever we leave explore mode
   // (dialogue or a GUI opened), so the HUD is correct when control returns.
+  // Also force-release any pointer lock: drei re-locks on *any* document click,
+  // so the same click that opens a GUI can issue a lock request right before
+  // PointerLockControls unmounts — exitPointerLock guarantees the cursor is freed.
   useEffect(() => {
-    if (!exploring) {
-      setNearby(null);
-      setLocked(false);
-    }
+    if (exploring) return;
+    setNearby(null);
+    setLocked(false);
+    if (typeof document === 'undefined') return;
+    // Exit any lock already held, and any lock whose async grant lands after the
+    // GUI-opening click (drei's request can resolve after PointerLockControls
+    // has unmounted).
+    const release = () => {
+      if (document.pointerLockElement) document.exitPointerLock();
+    };
+    release();
+    document.addEventListener('pointerlockchange', release);
+    return () => document.removeEventListener('pointerlockchange', release);
   }, [exploring]);
 
   const nearbyNpc = nearby ? NPC_LIST.find((n) => n.id === nearby) : null;
