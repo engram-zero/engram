@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { useWeb3Modal } from '@web3modal/wagmi/react';
+import { useDisconnect } from 'wagmi';
 import { useNetwork } from '@/app/providers';
 import { useWalletContext } from '@/context/WalletContext';
 
@@ -7,7 +7,7 @@ import { useWalletContext } from '@/context/WalletContext';
 export function ConnectButtonClient() {
   const { networkType } = useNetwork();
   const { address, isConnected, isConnecting, connect, isHydrated } = useWalletContext();
-  const { open } = useWeb3Modal();
+  const { disconnect } = useDisconnect();
   
   // Use ref for key to avoid state updates during render
   const keyRef = useRef(`${networkType}-${Date.now()}`);
@@ -50,7 +50,8 @@ export function ConnectButtonClient() {
     return (
       <div className="relative flex items-center gap-2">
         <button
-          onClick={() => open()}
+          onClick={() => disconnect()}
+          title="Disconnect wallet"
           className="px-4 py-2 font-semibold text-sm bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg shadow-sm 
             hover:from-blue-600 hover:to-blue-700 transition-all duration-200 
             focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50
