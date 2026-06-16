@@ -1,6 +1,5 @@
 'use client';
 
-import { ContextProvider } from "@/context";
 import { useEffect, useState } from "react";
 
 export default function ClientLayout({
@@ -18,5 +17,5 @@ export default function ClientLayout({
     return null;
   }
 
-  return <ContextProvider>{children}</ContextProvider>;
+  return <>{children}</>;
 } 

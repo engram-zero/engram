@@ -60,10 +60,14 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // Simplified connect function
   const connect = () => {
     if (!isHydrated) return;
-    
-    const injector = connectors.find(c => c.id === 'injected');
-    if (injector) {
-      wagmiConnect({ connector: injector });
+
+    const preferredConnector =
+      connectors.find((connector) => connector.id === 'metaMask') ??
+      connectors.find((connector) => connector.id === 'injected') ??
+      connectors[0];
+
+    if (preferredConnector) {
+      wagmiConnect({ connector: preferredConnector });
     }
   };
   
