@@ -5,10 +5,11 @@ _Last updated: 16 jun 2026. Read this first when resuming._
 ## TL;DR
 The whole game works **except the final save to 0G**, which is one step from done.
 Saving now runs **server-side** (`/api/save`, sponsor wallet) and has cleared every
-earlier blocker; the current failure is the on-chain `submit` returning
-**"Failed to submit transaction"**, and the #1 suspect is **the sponsor wallet
-(Account 3) has no testnet OG** (the faucet showed "missing bearer token", which may
-have blocked funding).
+earlier blocker. From the Vercel logs we now know the on-chain `submit` **reverts**
+(`require(false)`) even though funding, node selection, Flow address and fee are all
+correct — i.e. the **Flow contract rejects the SDK's submit**. The strong lead: we're on
+the **outdated `@0glabs/0g-ts-sdk@0.3.0`** (Newton-era); Galileo's current SDK is
+**`@0gfoundation/0g-ts-sdk@1.2.1`**. **Resume by upgrading the SDK** (details below).
 
 ## ✅ Working
 - First-person explorable Aldenmoor (WASD + mouse-look, terrain, sky, forest).
@@ -35,24 +36,44 @@ have blocked funding).
    (`/api/save`, sponsor wallet `ENGRAM_SPONSOR_KEY`).
 5. `503` from the storage node → **Standard indexer is deprecated/down.** Fixed: default
    network is now **Turbo** (`src/app/providers.tsx`).
-6. **← YOU ARE HERE:** on Turbo, node selection succeeds but the on-chain `submit`
-   fails with **"Failed to submit transaction"** (the SDK's generic message).
+6. `503` from Standard indexer → default to **Turbo**.
+7. **← YOU ARE HERE:** on Turbo the `submit` tx **reverts** (`require(false)`).
 
-### Most likely cause (check FIRST)
-**The sponsor wallet (Account 3, key in `ENGRAM_SPONSOR_KEY`) has no / not enough OG.**
-- The faucet at faucet.0g.ai showed **"missing bearer token"** — funding may have failed.
-- **Action:** open MetaMask → Account 3 → OG-Galileo-Testnet → check the balance.
-  If ~0, fund it: copy Account 3's address → faucet.0g.ai (resolve the bearer-token
-  issue: reload / re-login / connect wallet; or try an alternate 0G faucet) → request OG.
-- Each save costs ~0.002 OG of gas + a small storage fee, so even 0.5 OG is plenty.
+### Diagnosed (17 jun, from Vercel Functions logs) — it's a CONTRACT REVERT
+Ruled out: sponsor **funding** (balance = 0.5 OG ✅), **node selection** (Turbo ✅),
+**Flow address** (node reports `0x22E03a…105296` ✅), **fee/value** (SDK sends the
+computed market fee `122934579848n` ✅). The submit itself reverts:
 
-### If Account 3 IS funded and it still fails
-- Read **Vercel → the Project → Functions logs** for `/api/save`: the route logs
-  `[api/save] …` and the SDK logs `Data prepared to upload root=…`, selected nodes,
-  and the real submit error. That pinpoints revert vs gas vs nonce.
-- Possible follow-ups: surface the SDK's underlying submit error (it currently returns a
-  generic "Failed to submit transaction"); try without the `gasPrice * 2` bump; confirm
-  `net.l1Rpc` (evmrpc-testnet.0g.ai) is reachable from the server.
+```
+execution reverted (no data; likely require(false)), action="estimateGas",
+to=0x22E03a…105296, selector=0xef3e12dc, value = market fee
+```
+
+So the SDK does everything right and the **Flow contract rejects the submit**.
+
+### Strong hypothesis (try FIRST tomorrow): the 0G SDK is OUTDATED
+We use **`@0glabs/0g-ts-sdk@0.3.0`** (old, Newton-era — see `package.json`). The current
+SDK for Galileo is **`@0gfoundation/0g-ts-sdk` v1.2.1** (new npm scope + major version).
+`market()`/`pricePerSector()` still decode (stable ABI), but the `submit`
+encoding/logic almost certainly changed on the new Flow contract → `require(false)`.
+
+**Next action:**
+1. `npm rm @0glabs/0g-ts-sdk && npm i @0gfoundation/0g-ts-sdk@^1.2.1 --legacy-peer-deps`
+2. Update every import of `@0glabs/0g-ts-sdk` → `@0gfoundation/0g-ts-sdk` in
+   `src/lib/0g/{blob,uploader,downloader,fees}.ts` and adapt to API changes
+   (Blob/Indexer/MerkleTree/`submit` may differ — follow the v1.2.1 README and the
+   official **0g-storage-ts-starter-kit**).
+3. `npm run build`, then test **Leave & save** (sponsor Account 3 is already funded).
+
+Refs: https://github.com/0glabs/0g-ts-sdk ·
+https://github.com/0gfoundation/0g-storage-ts-starter-kit ·
+https://www.npmjs.com/package/@0gfoundation/0g-ts-sdk
+
+### If the SDK upgrade is NOT the fix
+- Decode the revert further or ask in the 0G Discord with the calldata above.
+- Read the full `/api/save` Vercel Functions logs (the route logs
+  `[api/save] sponsor 0x… balance=…` and the SDK logs node status + submit error).
+- Try without the `gasPrice * 2` bump (`src/app/api/save/route.ts`).
 
 ## Env vars (Vercel, Production)
 - `ANTHROPIC_API_KEY` — set ✅ (dialogue is live).
