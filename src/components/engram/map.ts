@@ -9,9 +9,12 @@ import * as THREE from 'three';
 // World dimensions. The player is fenced inside WORLD_RADIUS; the village square
 // (NPCs, campfire) sits in a flat CLEARING so nobody stands on a slope; hills
 // roll up outside it, out to the visible GROUND_RADIUS under the fog.
-export const WORLD_RADIUS = 22;
+// The player can roam the whole terrain — the boundary now sits far out at the
+// visible terrain edge (so you don't walk off the mesh into the void), not as a
+// close invisible wall. For a truly endless world we'd stream terrain chunks.
+export const GROUND_RADIUS = 140;
+export const WORLD_RADIUS = GROUND_RADIUS - 8;
 export const CLEARING_RADIUS = 9;
-export const GROUND_RADIUS = 72;
 
 function smoothstep(edge0: number, edge1: number, x: number): number {
   const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)));
