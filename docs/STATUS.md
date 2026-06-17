@@ -1,103 +1,82 @@
-# Engram — Status / resume-here (handoff)
+# Engram — Status & 0G integration notes
 
-_Last updated: 16 jun 2026. Read this first when resuming._
+_Last updated: 17 jun 2026. If you're an AI/contributor touching storage, read the
+"0G integration gotchas" section — it's hard-won and non-obvious._
 
-## TL;DR
-The whole game works; the final save to 0G was reverting (`require(false)`) because we
-were on the **outdated `@0glabs/0g-ts-sdk@0.3.0`** (Newton-era). **FIXED (17 jun):**
-migrated to the current **`@0gfoundation/0g-storage-ts-sdk`** (the package moved twice:
-`@0glabs/0g-ts-sdk` → `@0gfoundation/0g-ts-sdk` → `@0gfoundation/0g-storage-ts-sdk`).
-Imports swapped in all `src/**` files; `upload()` now returns `[{ txHash, rootHash,
-txSeq }, err]` (handled in `uploader.ts`). Typecheck + `next build` pass.
-**RESUME = deploy and test Leave & save** (sponsor Account 3 is funded with 0.5 OG). If
-the submit still reverts, see "If the SDK upgrade is NOT the fix" below.
+## Current state — the core loop WORKS ✅
+Verified end-to-end on the live Vercel demo:
+1. Talk to an NPC → memory updates (real Claude, with cross-memory).
+2. **Leave & save** → bundle written to 0G (server-side, sponsored) → banner shows
+   `✓ Saved to 0G · root … · tx …`.
+3. **Reload the page** → the NPC recalls you (e.g. Sable greets "AriiBen —" after the
+   name was told in a prior conversation; the 📜 Memory panel shows trust + the
+   interaction log). The write→0G→read→recall loop is closed → **tournament criterion #1
+   ("0G must do real work") is genuinely satisfied.**
 
-## ✅ Working
-- First-person explorable Aldenmoor (WASD + mouse-look, terrain, sky, forest).
-- Dialogue is **real Claude** (cross-memory confirmed: Sable references Aldric/Maren).
-- Rate-limit / size guard on `/api/npc` (verified).
-- **Reads** from 0G work (client GET `/file?root=…`; the download endpoint allows CORS).
-- Save architecture: client builds the full bundle → `POST /api/save` → server uploads
-  to 0G with the 0G SDK (no CORS in Node).
-- Pointer-lock UX fixes (release on GUI, no teleport on Leave).
-- Deployed on Vercel (auto-deploy on push to `main`): https://engram-bay.vercel.app/
+Also working: first-person explorable Aldenmoor (WASD + mouse-look, terrain/sky/forest),
+rate-limit/size guard on `/api/npc`, pointer-lock UX, Vercel auto-deploy on push to `main`.
 
-## ❌ The one remaining blocker: Leave & save → "Failed to submit transaction"
+## 0G integration gotchas (READ before touching storage)
+These cost a long debugging session; keep them in mind.
 
-### How we got here (each fix unblocked the next error)
-1. `Fee calc error: market() BAD_DATA` → **stale Flow contract address.** Fixed:
-   `src/lib/0g/network.ts` now defaults to the current Galileo Flow
-   `0x22E03a6A89B950F1c82ec5e74F8eCa321a105296` (docs.0g.ai).
-2. `eth_maxPriorityFeePerGas -32601` / `Internal JSON-RPC -32603` (no MetaMask popup) →
-   **0G has no EIP-1559**, pre-flight fee/gas estimation aborted the tx. Fixed: legacy
-   `eth_gasPrice` + explicit gasLimit, no `getFeeData`.
-3. `transaction execution reverted` → our **hand-rolled fee + manual submit** were
-   wrong. Fixed: let the **SDK** do submit+upload (`indexer.upload`, skipTx:false).
-4. **CORS** blocked from the browser → moved the whole upload **server-side**
-   (`/api/save`, sponsor wallet `ENGRAM_SPONSOR_KEY`).
-5. `503` from the storage node → **Standard indexer is deprecated/down.** Fixed: default
-   network is now **Turbo** (`src/app/providers.tsx`).
-6. `503` from Standard indexer → default to **Turbo**.
-7. **← YOU ARE HERE:** on Turbo the `submit` tx **reverts** (`require(false)`).
-
-### Diagnosed (17 jun, from Vercel Functions logs) — it's a CONTRACT REVERT
-Ruled out: sponsor **funding** (balance = 0.5 OG ✅), **node selection** (Turbo ✅),
-**Flow address** (node reports `0x22E03a…105296` ✅), **fee/value** (SDK sends the
-computed market fee `122934579848n` ✅). The submit itself reverts:
-
-```
-execution reverted (no data; likely require(false)), action="estimateGas",
-to=0x22E03a…105296, selector=0xef3e12dc, value = market fee
-```
-
-So the SDK does everything right and the **Flow contract rejects the submit**.
-
-### Strong hypothesis (try FIRST tomorrow): the 0G SDK is OUTDATED
-We use **`@0glabs/0g-ts-sdk@0.3.0`** (old, Newton-era — see `package.json`). The current
-SDK for Galileo is **`@0gfoundation/0g-ts-sdk` v1.2.1** (new npm scope + major version).
-`market()`/`pricePerSector()` still decode (stable ABI), but the `submit`
-encoding/logic almost certainly changed on the new Flow contract → `require(false)`.
-
-**Next action:**
-1. `npm rm @0glabs/0g-ts-sdk && npm i @0gfoundation/0g-ts-sdk@^1.2.1 --legacy-peer-deps`
-2. Update every import of `@0glabs/0g-ts-sdk` → `@0gfoundation/0g-ts-sdk` in
-   `src/lib/0g/{blob,uploader,downloader,fees}.ts` and adapt to API changes
-   (Blob/Indexer/MerkleTree/`submit` may differ — follow the v1.2.1 README and the
-   official **0g-storage-ts-starter-kit**).
-3. `npm run build`, then test **Leave & save** (sponsor Account 3 is already funded).
-
-Refs: https://github.com/0glabs/0g-ts-sdk ·
-https://github.com/0gfoundation/0g-storage-ts-starter-kit ·
-https://www.npmjs.com/package/@0gfoundation/0g-ts-sdk
-
-### If the SDK upgrade is NOT the fix
-- Decode the revert further or ask in the 0G Discord with the calldata above.
-- Read the full `/api/save` Vercel Functions logs (the route logs
-  `[api/save] sponsor 0x… balance=…` and the SDK logs node status + submit error).
-- Try without the `gasPrice * 2` bump (`src/app/api/save/route.ts`).
+1. **SDK package = `@0gfoundation/0g-storage-ts-sdk`.** It moved TWICE:
+   `@0glabs/0g-ts-sdk` (old, Newton-era — its `submit` encoding **reverts** with
+   `require(false)` on the current Galileo Flow contract) → `@0gfoundation/0g-ts-sdk`
+   (deprecated redirect) → **`@0gfoundation/0g-storage-ts-sdk`** (current). Using the old
+   `@0glabs/0g-ts-sdk@0.3.0` was the root cause of the save reverting.
+2. **The 0G storage SDK can't run in the browser (CORS).** The indexer/node HTTP
+   endpoints send no `Access-Control-Allow-Origin`, so `selectNodes`/segment POSTs are
+   blocked. Therefore **writes run server-side** in `src/app/api/save/route.ts` with a
+   **sponsor wallet** (`ENGRAM_SPONSOR_KEY`). **Reads stay client-side** — the download
+   endpoint (`GET {storageRpc}/file?root=…`, `src/lib/0g/downloader.ts`) does allow CORS.
+3. **0G Chain has no EIP-1559.** Don't let ethers/MetaMask call
+   `eth_maxPriorityFeePerGas` (RPC returns -32601 → the tx fails with -32603). Fetch a
+   legacy `eth_gasPrice` and pass it explicitly (we do this in `/api/save`).
+4. **Default network = Turbo.** The Standard testnet storage indexer is deprecated and
+   returns 503. `src/app/providers.tsx` defaults to Turbo. Standard and Turbo are
+   **independent networks** — data written to one is not on the other, so reads and
+   writes must use the same one.
+5. **Current Galileo Flow contract** = `0x22E03a6A89B950F1c82ec5e74F8eCa321a105296`
+   (`src/lib/0g/network.ts` default). Testnet contracts get redeployed; the SDK actually
+   reads the Flow address from the storage node, so this default mostly matters for the
+   client read path. Source of truth: docs.0g.ai.
+6. **`Indexer.upload(...)` now returns `[{ txHash, rootHash, txSeq } | { txHashes,
+   rootHashes, txSeqs }, Error | null]`** (changed from the old `[string, Error]`).
+   Handled in `src/lib/0g/uploader.ts`.
 
 ## Env vars (Vercel, Production)
-- `ANTHROPIC_API_KEY` — set ✅ (dialogue is live).
-- `ENGRAM_SPONSOR_KEY` — set ✅ (Account 3 private key, server-only, no NEXT_PUBLIC). **But
-  Account 3 must be funded.**
-- `NEXT_PUBLIC_PROJECT_ID` — set (WalletConnect).
-- 0G RPC/Flow vars — NOT set → code defaults used (correct; Flow read from node anyway).
+- `ANTHROPIC_API_KEY` — Claude dialogue. (Falls back to Gemini via `GOOGLE_API_KEY`, then a
+  deterministic stub.) Server-only.
+- `ENGRAM_SPONSOR_KEY` — funded 0G Galileo testnet private key the server writes 0G with.
+  **Server-only, never `NEXT_PUBLIC_`.** The wallet must hold testnet OG (faucet.0g.ai).
+- `NEXT_PUBLIC_PROJECT_ID` — WalletConnect (optional for injected wallets).
+- 0G RPC/Flow vars — unset → code defaults used (correct).
 
-## Roles (don't confuse them)
-- **Player wallet** = your identity in the browser (e.g. Account 1). Signs/pays nothing now.
-- **Sponsor wallet** = Account 3, key on the server, pays storage. Needs testnet OG.
+## Two wallet roles (don't confuse them)
+- **Player wallet** = the player's identity, connected in the browser. **Signs/pays
+  nothing now** — it's just the key the memory bundle is indexed by.
+- **Sponsor wallet** = `ENGRAM_SPONSOR_KEY` on the server; pays the storage fee. Needs
+  testnet OG. (We used a dedicated throwaway MetaMask account for this.)
 
-## Key files (save path)
-- `src/lib/memory.ts` — `writeMemory()` builds bundle → POST `/api/save`; reads stay client-side.
-- `src/app/api/save/route.ts` — server-side 0G upload with the sponsor wallet.
-- `src/lib/0g/uploader.ts` — `uploadToStorage()` wraps `indexer.upload` (returns txHash).
-- `src/lib/0g/network.ts` — RPC + Flow defaults (Flow updated to current Galileo).
-- `src/app/providers.tsx` — default network = Turbo.
+## Key files (memory path)
+- `src/lib/memory.ts` — read the bundle from 0G (client GET) + `writeMemory()` POSTs the
+  full bundle to `/api/save`. Caches the rootHash pointer in localStorage.
+- `src/app/api/save/route.ts` — server-side 0G upload with the sponsor wallet + legacy gas.
+- `src/lib/0g/uploader.ts` — `uploadToStorage()` wraps `indexer.upload`.
+- `src/lib/0g/{blob,downloader,fees,network}.ts` — 0G primitives + network config.
+- `src/app/providers.tsx` — default network (Turbo).
 
-## Submission to-dos (tournament, deadline Jun 23)
-- [ ] **Fix the save** (above) — this is criterion #1 ("0G must do real work").
+## Known limitation (next real feature)
+**Cross-device recall is NOT live.** The rootHash pointer is cached in the client's
+`localStorage`, so a different device/browser won't find the bundle. The data itself is
+fully on 0G. Fixing this = an on-chain rootHash registry (see Prompt 1 in
+`docs/ENGRAM_PROMPTS.md`). Don't claim "cross-device" anywhere until that ships
+(tournament rules forbid misrepresenting functionality).
+
+## Remaining for the Jun 23 submission
+- [x] Save to 0G working end-to-end (criterion #1). ✅
 - [ ] Update the 0g.ai dashboard **Description** to the corrected, honest copy (no
-      "MetaMask signature / no server / cross-device"; see chat history). Reframed:
-      sponsored writes, keyed to wallet, auditable, can't be erased.
-- [ ] (Optional) record a 2–3 min demo video.
-- [ ] Backlog in `docs/ENGRAM_PROMPTS.md`: on-chain registry, mobile, textures, audio.
+      "MetaMask signature / no server / cross-device" — see README / chat history).
+- [ ] (Optional) 2–3 min demo video.
+- [ ] Backlog in `docs/ENGRAM_PROMPTS.md`: on-chain registry (1), mobile (4), textures
+      (5), audio (6), deferred 429-UX check (7).

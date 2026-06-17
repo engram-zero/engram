@@ -18,9 +18,9 @@
 6. [Audio ambiental (fogata, pasos, noche)](#prompt-6--audio-ambiental) — ⏳ pendiente
 7. [Verificar end-to-end la UX del 429 en el cliente](#prompt-7--verificación-diferida-ux-del-429) — ⏳ diferida (ver precondición)
 
-> **Tareas no-código pendientes (ADMIN):** deploy a Vercel + env vars (en curso) ·
-> grabar video demo (2–3 min) · completar submission en 0g.ai/arena/zero-cup ·
-> post en X con `#TheZeroCup` y `@0G_labs`.
+> **Tareas no-código (ADMIN):** ✅ deploy a Vercel + env vars · ✅ save a 0G end-to-end ·
+> ⏳ actualizar la Description del dashboard 0g.ai (versión honesta) ·
+> ⏳ grabar video demo (2–3 min) · ⏳ completar submission · ⏳ post en X (`#TheZeroCup`, `@0G_labs`).
 
 ---
 
@@ -66,30 +66,35 @@ Mover el puntero a un contrato registry en 0G Chain (EVM, chain 16602), de forma
    - `readRootOnchain(wallet, l1Rpc): Promise<string | null>`
      usa un JsonRpcProvider de solo lectura (sin firma) → registry.rootOf(wallet).
      Devuelve null si es bytes32 cero.
-   - `writeRootOnchain(wallet, root): Promise<{ txHash: string }>`
-     usa BrowserProvider+signer (reutiliza getProvider/getSigner de src/lib/0g/fees.ts)
-     y llama registry.setRoot(root). Esto dispara MetaMask.
+   - `readRootOnchain(wallet, l1Rpc)` puede usar el provider del wallet conectado
+     (window.ethereum) o un JsonRpcProvider de solo lectura.
+   - La ESCRITURA del root tiene dos diseños posibles (elige y documenta — ver abajo).
    - Address del registry desde env: NEXT_PUBLIC_ENGRAM_REGISTRY (documéntala en .env.example).
 
-### 3) Integración en `src/lib/memory.ts` (sin romper la API pública)
-   - getBundleRoot/readBundle: primero intenta registry (readRootOnchain); si falla
-     o no hay address, cae al caché localStorage. Cachea en localStorage el root que
-     venga de la cadena para lecturas instantáneas posteriores.
-   - writeMemory: tras el upload exitoso a 0G y setBundleRoot(local), llama
-     writeRootOnchain(wallet, rootHash) SOLO si el root cambió respecto al último
-     conocido (evita una tx redundante). Devuelve también `registryTxHash?` en
-     WriteResult. Si la escritura al registro falla, NO tires el guardado: la memoria
-     ya está en 0G; loggea un warning y deja el caché local como respaldo.
+### 3) Integración (OJO: las escrituras hoy son server-side patrocinadas)
+   IMPORTANTE: desde el fix de junio, el bundle ya **no se sube desde el cliente** —
+   `src/lib/memory.ts:writeMemory` hace `POST /api/save` y el **servidor** sube a 0G con la
+   sponsor wallet (`ENGRAM_SPONSOR_KEY`). Ver `docs/STATUS.md`. Así que el registro on-chain
+   debe encajar en ese flujo. Dos opciones:
 
-## Restricción crítica (léela)
-El lema del proyecto es "1 firma de MetaMask por conversación". Añadir el registro
-implica una 2ª tx por guardado. Mitigaciones que DEBES implementar:
-  - escribir a la cadena solo cuando el rootHash realmente cambió;
-  - el orden es: subir bundle a 0G (firma 1) → setRoot (firma 2);
-  - mantener localStorage como caché/fallback para que la app siga usable aunque el
-    registro no esté configurado (NEXT_PUBLIC_ENGRAM_REGISTRY vacío → comportamiento actual).
-Documenta en un comentario el camino futuro de "1 sola firma" (relayer/meta-tx o
-escribir el root en el mismo flujo de storage) — no lo implementes ahora.
+   - **A) Sponsor escribe (gasless para el jugador).** Contrato `setRootFor(address wallet,
+     bytes32 root)` restringido a un escritor autorizado (la sponsor). `/api/save`, tras
+     subir a 0G, llama `setRootFor(walletAddress, rootHash)` con la misma sponsor wallet.
+     Simple y sin firma del jugador, pero el puntero queda mediado por el dev (la data en 0G
+     sigue siendo inmutable/auditable; el registry es solo el puntero + un evento auditable).
+   - **B) El jugador firma el puntero (más fiel a "tú lo posees").** `setRoot(bytes32)` con
+     `msg.sender` = jugador. Tras `/api/save` devolver el rootHash, el cliente llama
+     `registry.setRoot(rootHash)` vía MetaMask (esto NO tiene problema de CORS — es una tx
+     L1, no storage). Añade una firma del jugador solo para el puntero.
+
+   - `readBundle`: primero intenta `readRootOnchain`; si no hay address/falla, cae al caché
+     localStorage. Cachea en localStorage el root que venga de la cadena. Escribe a la cadena
+     solo si el root cambió.
+
+## Recomendación
+Empieza con **A** (sponsor `setRootFor`) por simplicidad y para no reintroducir fricción de
+firma; docémenta el evento `RootUpdated` como la pista auditable. Si quieres el ángulo fuerte
+de "el jugador es dueño del puntero", ofrece **B** como opción detrás de un toggle.
 
 ## No rompas
   - La firma de readMemory/readAllMemories/writeMemory que consume src/app/client-page.tsx.

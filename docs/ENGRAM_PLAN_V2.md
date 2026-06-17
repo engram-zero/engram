@@ -39,8 +39,8 @@
 
 | Tecnología | Rol | Estado |
 |---|---|---|
-| 0G Storage Network | Núcleo — guarda y lee la memoria de los NPCs por wallet address | ✅ Probado en testnet |
-| `@0glabs/0g-ts-sdk` (0.3.0) | SDK TypeScript para upload/download | ✅ Instalado y funcionando |
+| 0G Storage Network | Núcleo — guarda/lee la memoria por wallet address (loop verificado end-to-end) | ✅ Funcionando en testnet |
+| `@0gfoundation/0g-storage-ts-sdk` | SDK TypeScript de 0G (el paquete se movió 2 veces; ver STATUS.md) | ✅ Instalado y funcionando |
 | Next.js 15.1.5 + TypeScript | Frontend + API routes | ✅ Corriendo |
 | wagmi + `@web3modal/wagmi` | Wallet connection (identidad del jugador) | ✅ Funcionando |
 | Claude API (`@anthropic-ai/sdk`) | Motor de IA de los NPCs (proveedor primario) | ✅ Integrado |
@@ -49,7 +49,7 @@
 | **`@react-three/fiber` (9.6.1)** | React renderer para Three.js | ✅ **Instalado y funcionando** |
 | **`@react-three/drei` (10.7.7)** | Helpers 3D (PointerLockControls, KeyboardControls, Stars, Html…) | ✅ **Instalado y funcionando** |
 | TailwindCSS | Estilos / overlays HUD | ✅ Instalado |
-| Vercel | Deploy | Pendiente |
+| Vercel | Deploy (auto-deploy en cada push a `main`) | ✅ Desplegado (engram-bay.vercel.app) |
 
 **Render actual:** Aldenmoor es una escena 3D low-poly nocturna. Una vez conectada la wallet, la cámara es **primera persona explorable** (ratón para mirar con PointerLockControls, WASD para caminar, colisiones contra casas/árboles/fogata, prompt de proximidad "Press E to speak"). La pantalla de título mantiene una cámara cinemática.
 
@@ -60,18 +60,29 @@
 ### 3.1 — Bundle único de memoria por wallet (no un archivo por NPC)
 Toda la memoria de Aldenmoor para una wallet vive en **un solo documento JSON** — el `MemoryBundle { version, wallet, npcs: { aldric, maren, sable }, updatedAt }` — almacenado en 0G Storage.
 
-- **Razón:** una sola subida por guardado = **1 firma de MetaMask por conversación** en vez de 2–3 (una por NPC).
+- **Razón:** una sola subida por guardado = **una sola escritura a 0G por conversación** en vez de 2–3 (una por NPC).
 - **Beneficio extra:** Sable puede leer la memoria de los otros NPCs **gratis**, porque está en el mismo documento (no requiere lecturas adicionales).
 - 0G es content-addressed: para releer el bundle hace falta su `rootHash`. Ese puntero de 32 bytes se cachea en `localStorage` (`engram:bundleRoot:{wallet}`). **Solo el puntero es local** — la data vive entera en 0G y es auditable por su rootHash.
 - *Siguiente paso documentado:* reemplazar el caché del puntero por un registro on-chain / 0G-KV para recall real cross-device.
 - Implementado en [`src/lib/memory.ts`](../src/lib/memory.ts).
 
-### 3.2 — `/api/npc` solo llama al modelo de IA; el cliente escribe a 0G
-La API route [`src/app/api/npc/route.ts`](../src/app/api/npc/route.ts) recibe `{ walletAddress, npcName, message, memory, crossMemory }`, inyecta la memoria en el system prompt del NPC, pide un turno en personaje y devuelve `{ response, options, memory, delta }`. **No escribe a 0G.**
+### 3.2 — Lecturas en el cliente; escrituras server-side patrocinadas (`/api/save`)
+El SDK de storage de 0G **no funciona en el navegador** (los nodos/indexer no mandan
+cabeceras CORS). Por eso:
 
-- **Razón:** la escritura a 0G requiere firma de la wallet del jugador (clave privada), que vive solo en el browser. El servidor nunca debe firmar por el usuario.
-- El **cliente persiste la memoria devuelta a 0G al salir del diálogo** (botón "Leave & save"), disparando la única firma de MetaMask de esa conversación.
-- Las API keys de IA viven solo en el servidor; nunca llegan al browser.
+- **Lectura** (cliente): `GET {storageRpc}/file?root=…` sí permite CORS → `src/lib/memory.ts`
+  baja el bundle directo en el browser.
+- **Escritura** (servidor): al salir del diálogo, el cliente arma el bundle completo y lo
+  **POSTea a [`/api/save`](../src/app/api/save/route.ts)**, que sube a 0G en Node (sin CORS)
+  con una **wallet patrocinadora** (`ENGRAM_SPONSOR_KEY`) y devuelve `{ rootHash, txHash }`.
+- **Modelo de pago:** el servidor patrocina el fee de storage para el demo. La memoria sigue
+  **indexada por la wallet del jugador** y direccionada por contenido en 0G (auditable). El
+  jugador **no firma** la escritura — *no* es "1 firma de MetaMask" (eso quedó obsoleto).
+- [`/api/npc`](../src/app/api/npc/route.ts) **solo llama al modelo de IA** y devuelve el turno
+  + la memoria actualizada; **no escribe a 0G**. Las API keys viven solo en el servidor.
+- *Por qué patrocinado:* mover la firma al jugador exigiría que el SDK corriera en el browser
+  (imposible por CORS) o partir submit+upload entre cliente y servidor (frágil). Ver gotchas
+  en [`docs/STATUS.md`](STATUS.md).
 
 ### 3.3 — Soporte multi-proveedor de IA con fallback automático
 Selección de proveedor por prioridad en [`route.ts`](../src/app/api/npc/route.ts):
@@ -167,13 +178,15 @@ src/
 ├── app/
 │   ├── client-page.tsx          # UI del juego (diálogo, panel, HUD)
 │   ├── api/npc/route.ts         # Motor de diálogo (Claude → Gemini → fallback)
-│   └── providers.tsx            # wagmi + red (testnet)
+│   ├── api/save/route.ts        # Escritura a 0G server-side (sponsor wallet)
+│   └── providers.tsx            # wagmi + red (default Turbo)
 ├── components/engram/
 │   ├── Scene3D.tsx              # Escena 3D + primera persona explorable
+│   ├── map.ts                   # Terreno (getHeightAt) + props + colliders
 │   └── Art.tsx                  # Retratos de NPCs
 ├── lib/
 │   ├── 0g/                      # blob / fees / uploader / downloader / network
-│   ├── memory.ts                # MemoryBundle: read/write a 0G (1 firma por save)
+│   ├── memory.ts                # MemoryBundle: lee de 0G (cliente) + POST a /api/save
 │   ├── npcs.ts                  # Personalidades + system prompts
 │   └── types.ts                 # MemoryBundle, NPCMemory, NPCName, etc.
 └── config/                      # 0G + wagmi (Chain ID 16602)

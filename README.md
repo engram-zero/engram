@@ -92,7 +92,11 @@ If you're an AI (or human) about to work on this project:
    index — keep the doc the canonical to-do list.
 
 Broader project context lives in [`docs/ENGRAM_PLAN_V2.md`](docs/ENGRAM_PLAN_V2.md)
-(architecture decisions, tournament rules, current state).
+(architecture decisions, tournament rules, current state). **Before touching anything 0G /
+storage, read [`docs/STATUS.md`](docs/STATUS.md)** — it documents the non-obvious 0G
+integration gotchas (the SDK package moved twice; writes must run server-side because the
+storage nodes have no CORS; 0G has no EIP-1559; default network is Turbo) that cost a full
+debugging session to find.
 
 ## Why 0G is the core
 
