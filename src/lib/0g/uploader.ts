@@ -15,28 +15,41 @@ export async function submitTransaction(
   gasPrice?: bigint
 ): Promise<[any | null, Error | null]> {
   try {
-    // 0G Chain is a legacy (non-EIP-1559) chain. With an explicit gasPrice the
-    // tx is built as type-0 and skips eth_maxPriorityFeePerGas (which the RPC
-    // doesn't implement → -32601 / Internal JSON-RPC error). gasPrice is passed
-    // in from memory.ts; fall back to the provider's gasPrice if absent.
-    const overrides: { value: bigint; gasPrice?: bigint } = { value };
+    // 0G reports EIP-1559 block fields but its RPC lacks
+    // eth_maxPriorityFeePerGas. Force a legacy (type-0) tx with an explicit
+    // gasPrice AND gasLimit so neither ethers nor MetaMask run any pre-flight
+    // fee/gas estimation — that probing hits the missing method and fails with
+    // -32601 / -32603 BEFORE the wallet even prompts (no popup, instant error).
+    const overrides: { value: bigint; gasPrice?: bigint; gasLimit?: bigint } = { value };
+
     let gp = gasPrice;
     if (gp === undefined) {
       try {
-        const provider = (flowContract.runner as { provider?: { getFeeData: () => Promise<{ gasPrice: bigint | null }> } })?.provider;
-        const feeData = provider ? await provider.getFeeData() : null;
-        if (feeData?.gasPrice) gp = feeData.gasPrice;
+        const provider = (flowContract.runner as unknown as { provider?: { send: (m: string, p: unknown[]) => Promise<string> } })?.provider;
+        if (provider) gp = BigInt(await provider.send('eth_gasPrice', []));
       } catch {
-        // No gasPrice available — let the wallet decide.
+        // leave undefined — wallet decides
       }
     }
     if (gp) overrides.gasPrice = gp;
+
+    // Pre-set the gasLimit ourselves so ethers doesn't call eth_estimateGas in a
+    // way that re-triggers the fee probing. Estimate if we can, else a safe cap.
+    try {
+      const est = await flowContract.submit.estimateGas(submission, gp ? { value, gasPrice: gp } : { value });
+      overrides.gasLimit = (est * BigInt(12)) / BigInt(10);
+    } catch {
+      overrides.gasLimit = BigInt(3000000);
+    }
 
     const tx = await flowContract.submit(submission, overrides);
     const receipt = await tx.wait();
     return [{ tx, receipt }, null];
   } catch (error) {
-    return [null, error instanceof Error ? error : new Error(String(error))];
+    // Surface the real revert/RPC reason instead of a generic message.
+    const e = error as { reason?: string; shortMessage?: string; info?: { error?: { message?: string } }; message?: string };
+    const msg = e.reason || e.info?.error?.message || e.shortMessage || e.message || String(error);
+    return [null, new Error(msg)];
   }
 }
 

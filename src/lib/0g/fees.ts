@@ -76,9 +76,16 @@ export async function calculateFees(
     // wei-scale bigint at runtime; coerce so all fee math stays in bigint).
     const storageFee = calculatePrice(submission, pricePerSector) as unknown as bigint;
 
-    // Get gas price
-    const feeData = await provider.getFeeData();
-    const gasPrice: bigint = feeData.gasPrice ?? BigInt(0);
+    // 0G's RPC reports EIP-1559-ish block fields but does NOT implement
+    // eth_maxPriorityFeePerGas, so provider.getFeeData() probes it and fails
+    // (-32601), which can abort the whole pre-flight before the wallet prompts.
+    // Use the raw eth_gasPrice instead — no EIP-1559 probing.
+    let gasPrice: bigint = BigInt(0);
+    try {
+      gasPrice = BigInt(await provider.send('eth_gasPrice', []));
+    } catch {
+      gasPrice = BigInt(0);
+    }
 
     // Estimate gas
     let gasEstimate: bigint;
