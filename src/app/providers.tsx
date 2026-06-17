@@ -53,8 +53,10 @@ export function useNetwork() {
 const queryClient = new QueryClient();
 
 export function Providers({ children }: { children: React.ReactNode }) {
-  // Use a default value for initial render to prevent hydration mismatch
-  const [networkType, setNetworkType] = useState<NetworkType>('standard');
+  // Use a default value for initial render to prevent hydration mismatch.
+  // Default to Turbo: the Standard testnet storage indexer is deprecated and
+  // returns 503, while Turbo is the endpoint 0G currently recommends.
+  const [networkType, setNetworkType] = useState<NetworkType>('turbo');
   const initialized = useRef(false);
   const [mounted, setMounted] = useState(false);
 
@@ -69,23 +71,20 @@ export function Providers({ children }: { children: React.ReactNode }) {
     
     // Delay initialization to ensure we're past hydration phase
     const timer = setTimeout(() => {
-      // Get stored network preference
-      let initialNetwork: NetworkType = 'standard';
-      
+      // Default to Turbo; honor a saved preference, or an explicit
+      // NEXT_PUBLIC_DEFAULT_NETWORK=standard override.
+      let initialNetwork: NetworkType = 'turbo';
+
       if (typeof window !== 'undefined') {
         const saved = localStorage.getItem('networkType');
-        if (saved === 'turbo') {
-          initialNetwork = 'turbo';
-        } else {
-          // Check environment variable default
-          const envDefault = process.env.NEXT_PUBLIC_DEFAULT_NETWORK;
-          if (envDefault === 'turbo') {
-            initialNetwork = 'turbo';
-          }
+        if (saved === 'standard' || saved === 'turbo') {
+          initialNetwork = saved;
+        } else if (process.env.NEXT_PUBLIC_DEFAULT_NETWORK === 'standard') {
+          initialNetwork = 'standard';
         }
-        
-        // Only update state if different from default
-        if (initialNetwork !== 'standard') {
+
+        // Only update state if different from the initial render value.
+        if (initialNetwork !== 'turbo') {
           console.log(`[Providers] Setting initial network to ${initialNetwork} after hydration`);
           setNetworkType(initialNetwork);
         }
