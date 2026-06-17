@@ -70,6 +70,25 @@ the NPC remembers.
 > Without `ANTHROPIC_API_KEY`, NPCs use a deterministic fallback so the UI is still
 > clickable. Set the key for real Claude-powered dialogue.
 
+## For AI assistants & contributors
+
+**The task backlog lives in [`docs/ENGRAM_PROMPTS.md`](docs/ENGRAM_PROMPTS.md).** It is
+the single source of truth for what's planned and what's done — each pending feature is
+written as a self-contained, ready-to-run prompt, and the index marks status
+(⏳ pendiente / ✅ done).
+
+If you're an AI (or human) about to work on this project:
+
+1. **Read `docs/ENGRAM_PROMPTS.md` first.** Pick a task from the index; don't invent
+   scope. Each prompt lists its own files, constraints and acceptance criteria.
+2. **When you finish a task, update that doc** — flip its index entry to ✅ and add a
+   short "DONE" note (date + where it landed), mirroring the existing entries.
+3. **Add new pending work as a new prompt** in the same format, and register it in the
+   index — keep the doc the canonical to-do list.
+
+Broader project context lives in [`docs/ENGRAM_PLAN_V2.md`](docs/ENGRAM_PLAN_V2.md)
+(architecture decisions, tournament rules, current state).
+
 ## Why 0G is the core
 
 Remove 0G and the memory has nowhere to live — the whole premise (NPCs that remember
