@@ -59,6 +59,19 @@ export async function POST(req: Request) {
     // Sponsor signer + legacy gasPrice (0G Chain has no EIP-1559).
     const provider = new JsonRpcProvider(net.l1Rpc);
     const wallet = new Wallet(key, provider);
+
+    // The #1 cause of "Failed to submit transaction" is the sponsor wallet having
+    // no testnet OG. Check up front and return an actionable message (with the
+    // address, so a key/account mismatch is obvious too).
+    const balance = await provider.getBalance(wallet.address).catch(() => null);
+    console.log(`[api/save] sponsor ${wallet.address} balance=${balance?.toString() ?? 'unknown'}`);
+    if (balance !== null && balance === BigInt(0)) {
+      return NextResponse.json(
+        { error: `Sponsor wallet ${wallet.address} has 0 OG. Fund it at faucet.0g.ai (0G-Galileo-Testnet).` },
+        { status: 402 }
+      );
+    }
+
     let gasPrice: bigint | undefined;
     try {
       const gp = BigInt(await provider.send('eth_gasPrice', []));
