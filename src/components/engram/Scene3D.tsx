@@ -337,15 +337,16 @@ function AerialRig({ enabled, posRef }: { enabled: boolean; posRef: PlayerPosRef
     }
 
     // Overhead follow from due south (no X offset → screen axes match world axes).
+    // Tilted ~43° from horizontal (not straight down) for a 3/4 "diagonal" view.
     const { x, z } = posRef.current;
     cam.zoom = zoom.current;
-    cam.position.set(x, 34, z + 24);
+    cam.position.set(x, 28, z + 30);
     cam.up.set(0, 1, 0);
     cam.lookAt(x, getHeightAt(x, z), z);
     cam.updateProjectionMatrix();
   });
 
-  return <OrthographicCamera ref={camRef} makeDefault near={0.1} far={400} position={[0, 34, 24]} />;
+  return <OrthographicCamera ref={camRef} makeDefault near={0.1} far={400} position={[0, 28, 30]} />;
 }
 
 // ─── Scenery ──────────────────────────────────────────────────────────────────
