@@ -1586,7 +1586,9 @@ export default function Scene3D({ memories = null, active = null, talking = fals
 
           <Village />
           {explorable && <EnemySpawner />}
-          {showTitle && <FloatingTitle />}
+          {/* The title text is HTML in client-page now: a 3D drei <Text> here
+              orphaned in the persistent canvas across the title→game transition,
+              showing up as stray letters in the aerial view. */}
 
           <ContactShadows position={[0, 0.01, 0]} opacity={0.45} scale={20} blur={2.4} far={6} />
 

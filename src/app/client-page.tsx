@@ -173,12 +173,22 @@ function Game() {
   if (!isConnected || !address) {
     return (
       <div className="relative w-screen h-screen overflow-hidden engram-serif">
-        {/* key forces a full remount vs the in-game Scene3D, so the 3D title text
-            (drei/troika) is fully disposed when the wallet connects instead of
-            lingering as an orphan in the persistent canvas. */}
+        {/* key forces a full remount vs the in-game Scene3D so nothing lingers
+            in the persistent canvas when the wallet connects. */}
         <Scene3D key="title" interactive={false} showTitle />
-        {/* Title + tagline now float in 3D; keep the connect prompt as an overlay,
-            anchored low so it doesn't cover the 3D lettering. */}
+        {/* Title as HTML (was a 3D drei <Text> that orphaned in the canvas across
+            the title→game transition and showed up as stray letters in-game). */}
+        <div className="absolute inset-x-0 top-[16vh] z-10 px-6 text-center pointer-events-none">
+          <h1
+            className="text-5xl sm:text-7xl font-bold tracking-[0.2em] text-[#e7c14e]"
+            style={{ textShadow: '0 3px 14px #000, 0 0 36px rgba(214,167,42,0.35)' }}
+          >
+            ENGRAM
+          </h1>
+          <p className="mt-3 text-base sm:text-lg italic text-[#f4e8d0]/85" style={{ textShadow: '0 2px 8px #000' }}>
+            The village of Aldenmoor remembers you.
+          </p>
+        </div>
         <div className="absolute inset-x-0 bottom-0 z-10 flex flex-col items-center text-center gap-4 pb-[12vh] bg-gradient-to-t from-black/60 via-black/20 to-transparent pointer-events-none">
           <div className="pointer-events-auto">
             <ConnectButton />
