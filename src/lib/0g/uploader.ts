@@ -1,4 +1,4 @@
-import { Indexer, Blob } from '@0glabs/0g-ts-sdk';
+import { Indexer, Blob } from '@0gfoundation/0g-storage-ts-sdk';
 import { Contract } from 'ethers';
 
 /**
@@ -85,11 +85,13 @@ export async function uploadToStorage(
     // Force the SDK's flow tx to legacy gas (0G has no EIP-1559). The 6th arg is
     // TransactionOptions { gasPrice, gasLimit }.
     const txOpts = gasPrice ? { gasPrice } : undefined;
-    const [txHash, err] = await indexer.upload(blob, l1Rpc, signer, uploadOptions, undefined, txOpts);
+    const [result, err] = await indexer.upload(blob, l1Rpc, signer, uploadOptions, undefined, txOpts);
     if (err) {
       const e = err as { reason?: string; shortMessage?: string; info?: { error?: { message?: string } }; message?: string };
       return ['', new Error(e.reason || e.info?.error?.message || e.shortMessage || e.message || String(err))];
     }
+    // The SDK returns either a single { txHash } or a batched { txHashes } shape.
+    const txHash = 'txHash' in result ? result.txHash : result.txHashes?.[0] ?? '';
     return [txHash, null];
   } catch (error) {
     const e = error as { reason?: string; shortMessage?: string; info?: { error?: { message?: string } }; message?: string };

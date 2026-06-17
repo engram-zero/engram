@@ -1,4 +1,4 @@
-import { calculatePrice, getMarketContract, FixedPriceFlow__factory } from '@0glabs/0g-ts-sdk';
+import { calculatePrice, getMarketContract, FixedPriceFlow__factory } from '@0gfoundation/0g-storage-ts-sdk';
 import { BrowserProvider, Contract, formatEther } from 'ethers';
 
 export interface FeeInfo {

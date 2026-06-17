@@ -5,7 +5,7 @@ import {
   getMarketContract,
   calculatePrice,
   FixedPriceFlow__factory
-} from '@0glabs/0g-ts-sdk';
+} from '@0gfoundation/0g-storage-ts-sdk';
 
 export {
   MerkleTree,

@@ -3,13 +3,14 @@
 _Last updated: 16 jun 2026. Read this first when resuming._
 
 ## TL;DR
-The whole game works **except the final save to 0G**, which is one step from done.
-Saving now runs **server-side** (`/api/save`, sponsor wallet) and has cleared every
-earlier blocker. From the Vercel logs we now know the on-chain `submit` **reverts**
-(`require(false)`) even though funding, node selection, Flow address and fee are all
-correct — i.e. the **Flow contract rejects the SDK's submit**. The strong lead: we're on
-the **outdated `@0glabs/0g-ts-sdk@0.3.0`** (Newton-era); Galileo's current SDK is
-**`@0gfoundation/0g-ts-sdk@1.2.1`**. **Resume by upgrading the SDK** (details below).
+The whole game works; the final save to 0G was reverting (`require(false)`) because we
+were on the **outdated `@0glabs/0g-ts-sdk@0.3.0`** (Newton-era). **FIXED (17 jun):**
+migrated to the current **`@0gfoundation/0g-storage-ts-sdk`** (the package moved twice:
+`@0glabs/0g-ts-sdk` → `@0gfoundation/0g-ts-sdk` → `@0gfoundation/0g-storage-ts-sdk`).
+Imports swapped in all `src/**` files; `upload()` now returns `[{ txHash, rootHash,
+txSeq }, err]` (handled in `uploader.ts`). Typecheck + `next build` pass.
+**RESUME = deploy and test Leave & save** (sponsor Account 3 is funded with 0.5 OG). If
+the submit still reverts, see "If the SDK upgrade is NOT the fix" below.
 
 ## ✅ Working
 - First-person explorable Aldenmoor (WASD + mouse-look, terrain, sky, forest).

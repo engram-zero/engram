@@ -1,4 +1,4 @@
-import { Blob, MerkleTree } from '@0glabs/0g-ts-sdk';
+import { Blob, MerkleTree } from '@0gfoundation/0g-storage-ts-sdk';
 
 /**
  * Creates a blob object from a file

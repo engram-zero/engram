@@ -3,7 +3,7 @@ import { useNetwork } from '@/app/providers';
 import { getProvider, getSigner } from '@/lib/0g/fees';
 import { submitTransaction, uploadToStorage } from '@/lib/0g/uploader';
 import { getNetworkConfig, getExplorerUrl } from '@/lib/0g/network';
-import { Blob } from '@0glabs/0g-ts-sdk';
+import { Blob } from '@0gfoundation/0g-storage-ts-sdk';
 import { Contract } from 'ethers';
 
 /**

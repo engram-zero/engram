@@ -3,7 +3,7 @@ import { useNetwork } from '@/app/providers';
 import { createBlob, generateMerkleTree, createSubmission, getRootHash } from '@/lib/0g/blob';
 import { getProvider, getSigner, getFlowContract, calculateFees, FeeInfo } from '@/lib/0g/fees';
 import { getNetworkConfig } from '@/lib/0g/network';
-import { Blob, MerkleTree } from '@0glabs/0g-ts-sdk';
+import { Blob, MerkleTree } from '@0gfoundation/0g-storage-ts-sdk';
 import { Contract } from 'ethers';
 
 /**

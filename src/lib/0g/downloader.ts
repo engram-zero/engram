@@ -1,4 +1,4 @@
-import { Indexer } from '@0glabs/0g-ts-sdk';
+import { Indexer } from '@0gfoundation/0g-storage-ts-sdk';
 
 /**
  * Downloads a file from 0G storage by root hash using direct API call
