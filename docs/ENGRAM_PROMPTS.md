@@ -12,7 +12,7 @@
 Índice:
 1. [On-chain rootHash registry (memoria cross-device / cross-game)](#prompt-1--on-chain-roothash-registry) — ⏳ pendiente
 2. [World pass: terreno con alturas, cielo, casas, árboles y avatares](#prompt-2--world-pass-terreno-cielo-y-props) — ✅ done
-3. [Protección de coste/abuso en /api/npc (rate limit)](#prompt-3--rate-limit--anti-abuso-en-apinpc) — ⏳ pendiente
+3. [Protección de coste/abuso en /api/npc (rate limit)](#prompt-3--rate-limit--anti-abuso-en-apinpc) — ✅ done
 4. [Controles móviles / táctiles (sin pointer lock)](#prompt-4--controles-móviles--táctiles) — ⏳ pendiente
 5. [Texturas PNG en lugar de materiales planos](#prompt-5--texturas-png) — ⏳ pendiente
 6. [Audio ambiental (fogata, pasos, noche)](#prompt-6--audio-ambiental) — ⏳ pendiente
@@ -198,6 +198,15 @@ fluido y el flujo de "acércate + E para hablar" intacto.
 ---
 
 ## Prompt 3 — Rate limit / anti-abuso en /api/npc
+
+> **✅ DONE — 16 jun 2026.** Limitador sliding-window en memoria en
+> [`src/lib/ratelimit.ts`](../src/lib/ratelimit.ts) (15/min + 200/día por clave),
+> cableado en [`src/app/api/npc/route.ts`](../src/app/api/npc/route.ts) por wallet **e**
+> IP, con guard de tamaño (mensaje >500 chars → 413) y respuesta 429
+> `{ retryAfter }` + header `Retry-After`. El cliente
+> ([`client-page.tsx`](../src/app/client-page.tsx)) muestra aviso amable y reintenta una
+> vez si la espera es corta. Verificado por HTTP: 413 en mensaje gigante; 15×200→429 en
+> ráfaga; `Retry-After: 59`. Upstash queda documentado como upgrade opcional (no añadido).
 
 ```
 # Tarea: proteger /api/npc del abuso y del coste descontrolado de la IA

@@ -15,6 +15,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { NextResponse } from 'next/server';
+import { reserve } from '@/lib/ratelimit';
 import { getNPC } from '@/lib/npcs';
 import type {
   NPCChatRequest,
@@ -28,6 +29,18 @@ export const runtime = 'nodejs';
 
 const MODEL = process.env.ENGRAM_MODEL || 'claude-sonnet-4-6';
 const GEMINI_MODEL = process.env.ENGRAM_GEMINI_MODEL || 'gemini-1.5-flash';
+
+// A player turn is a sentence or two; anything longer is junk or an attempt to
+// blow up token cost. Reject before it reaches the model.
+const MAX_MESSAGE_LEN = 500;
+
+// Best-effort client IP (Vercel sets x-forwarded-for). Used as a second rate-limit
+// key so one wallet can't be swapped freely to dodge the per-wallet cap.
+function clientIp(req: Request): string {
+  const fwd = req.headers.get('x-forwarded-for');
+  if (fwd) return fwd.split(',')[0].trim();
+  return req.headers.get('x-real-ip') || 'unknown';
+}
 
 const anthropicKey = process.env.ANTHROPIC_API_KEY;
 const googleKey = process.env.GOOGLE_API_KEY;
@@ -187,6 +200,23 @@ export async function POST(req: Request) {
   if (!isAddress(walletAddress)) return NextResponse.json({ error: 'Invalid wallet address.' }, { status: 400 });
   if (!getNPC(npcName)) return NextResponse.json({ error: 'Unknown NPC.' }, { status: 400 });
   if (!memory || typeof memory !== 'object') return NextResponse.json({ error: 'Missing memory object.' }, { status: 400 });
+
+  // Reject oversized messages before they reach the model (cost / abuse guard).
+  if (typeof message === 'string' && message.length > MAX_MESSAGE_LEN) {
+    return NextResponse.json(
+      { error: `Message too long (max ${MAX_MESSAGE_LEN} characters).` },
+      { status: 413 }
+    );
+  }
+
+  // Rate limit per wallet AND per IP. A blocked request consumes neither budget.
+  const rl = reserve([`w:${walletAddress.toLowerCase()}`, `ip:${clientIp(req)}`]);
+  if (!rl.ok) {
+    return NextResponse.json(
+      { error: 'Aldenmoor needs a breath. Try again shortly.', retryAfter: rl.retryAfter },
+      { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } }
+    );
+  }
 
   const userContent =
     message && message.trim()

@@ -6,7 +6,7 @@
 //   readAllMemories (0G) → POST /api/npc (Claude) → ...chat... → writeMemory (0G)
 // Memory is written once, when you leave an NPC (one wallet signature).
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Providers, useNetwork } from './providers';
 import ConnectButton from '@/components/ConnectButton';
 import NetworkToggle from '@/components/NetworkToggle';
@@ -46,10 +46,17 @@ async function chat(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ walletAddress, npcName, message, memory, crossMemory }),
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Dialogue failed.');
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(data.error || 'Dialogue failed.') as ChatError;
+    err.code = res.status;
+    if (typeof data.retryAfter === 'number') err.retryAfter = data.retryAfter;
+    throw err;
+  }
   return data as { response: string; options: string[]; memory: NPCMemory; delta: unknown };
 }
+
+type ChatError = Error & { code?: number; retryAfter?: number };
 
 function trustColor(t: number) {
   if (t >= 70) return '#5fb86a';
@@ -72,6 +79,10 @@ function Game() {
   const [save, setSave] = useState<SaveState>({ status: 'idle' });
   const [err, setErr] = useState<string | null>(null);
 
+  // Latest active NPC, readable from inside a delayed retry without stale closure.
+  const activeRef = useRef<NPCName | null>(active);
+  activeRef.current = active;
+
   // Load all three memories from 0G when the wallet connects.
   useEffect(() => {
     if (!isConnected || !address) return;
@@ -93,7 +104,7 @@ function Game() {
     [memories]
   );
 
-  async function runTurn(npc: NPCName, message: string) {
+  async function runTurn(npc: NPCName, message: string, attempt = 0) {
     if (!address || !memories) return;
     setErr(null);
     setScene((s) => ({ ...s, loading: true }));
@@ -103,7 +114,21 @@ function Game() {
       setDirty((d) => ({ ...d, [npc]: true }));
       setScene({ dialogue: data.response, options: data.options, loading: false });
     } catch (e) {
-      setScene((s) => ({ ...s, loading: false, dialogue: `(${(e as Error).message})` }));
+      const error = e as ChatError;
+      // Rate limited: be gentle, and auto-retry once for short cool-downs.
+      if (error.code === 429) {
+        const wait = Math.max(1, error.retryAfter ?? 5);
+        if (wait <= 30 && attempt < 1) {
+          setScene((s) => ({ ...s, loading: true, dialogue: `${error.message} (retrying in ${wait}s…)` }));
+          window.setTimeout(() => {
+            if (activeRef.current === npc) runTurn(npc, message, attempt + 1);
+          }, wait * 1000);
+          return;
+        }
+        setScene((s) => ({ ...s, loading: false, dialogue: `${error.message} (try again in ~${wait}s)` }));
+        return;
+      }
+      setScene((s) => ({ ...s, loading: false, dialogue: `(${error.message})` }));
     }
   }
 
