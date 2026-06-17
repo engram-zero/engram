@@ -327,11 +327,12 @@ function AerialRig({ enabled, posRef }: { enabled: boolean; posRef: PlayerPosRef
   const [, getKeys] = useKeyboardControls();
   const zoom = useRef(22);
 
-  // Mouse-wheel zoom while in aerial view.
+  // Mouse-wheel zoom while in aerial view (min raised so you can't zoom out past
+  // the world into the sky).
   useEffect(() => {
     if (!enabled) return;
     const onWheel = (e: WheelEvent) => {
-      zoom.current = THREE.MathUtils.clamp(zoom.current - e.deltaY * 0.02, 9, 46);
+      zoom.current = THREE.MathUtils.clamp(zoom.current - e.deltaY * 0.02, 14, 50);
     };
     window.addEventListener('wheel', onWheel, { passive: true });
     return () => window.removeEventListener('wheel', onWheel);
@@ -343,7 +344,8 @@ function AerialRig({ enabled, posRef }: { enabled: boolean; posRef: PlayerPosRef
     const dt = Math.min(dtRaw, 0.05);
     const k = getKeys();
 
-    // WASD moves the avatar in WORLD directions: W=north (−Z), S=+Z, A=−X, D=+X.
+    // MAP-aligned movement: the camera sits due south looking north, so world
+    // axes line up with the screen — W=up(north −Z), S=down(+Z), A=left(−X), D=right(+X).
     let dx = 0;
     let dz = 0;
     if (k.forward) dz -= 1;
@@ -360,16 +362,17 @@ function AerialRig({ enabled, posRef }: { enabled: boolean; posRef: PlayerPosRef
       posRef.current.heading = Math.atan2(dx, dz); // face the move direction
     }
 
-    // Angled overhead follow (AoE-ish), with wheel zoom.
+    // Overhead follow from due south (no X offset → screen axes match world axes).
+    // Tilted ~43° from horizontal (not straight down) for a 3/4 "diagonal" view.
     const { x, z } = posRef.current;
     cam.zoom = zoom.current;
-    cam.position.set(x + 16, 30, z + 16);
+    cam.position.set(x, 28, z + 30);
     cam.up.set(0, 1, 0);
     cam.lookAt(x, getHeightAt(x, z), z);
     cam.updateProjectionMatrix();
   });
 
-  return <OrthographicCamera ref={camRef} makeDefault near={0.1} far={300} position={[16, 30, 16]} />;
+  return <OrthographicCamera ref={camRef} makeDefault near={0.1} far={400} position={[0, 28, 30]} />;
 }
 
 // ─── Scenery ──────────────────────────────────────────────────────────────────
@@ -396,7 +399,7 @@ function makeRadialTexture(core: string, mid = 'rgba(255,255,255,0)') {
 function Terrain() {
   const geom = useMemo(() => {
     const size = GROUND_RADIUS * 2;
-    const seg = 150;
+    const seg = 200; // keep hill detail across the much larger terrain
     const g = new THREE.PlaneGeometry(size, size, seg, seg);
     g.rotateX(-Math.PI / 2);
     const pos = g.attributes.position as THREE.BufferAttribute;
