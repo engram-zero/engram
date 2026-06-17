@@ -8,7 +8,7 @@
 
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { Stars, Sky, Html, ContactShadows, Text, PointerLockControls, OrthographicCamera, KeyboardControls, useKeyboardControls } from '@react-three/drei';
+import { Stars, Sky, Html, ContactShadows, PointerLockControls, OrthographicCamera, KeyboardControls, useKeyboardControls } from '@react-three/drei';
 import * as THREE from 'three';
 import { NPC_LIST } from '@/lib/npcs';
 import type { NPCName, NPCMemory } from '@/lib/types';
@@ -963,36 +963,9 @@ function Village() {
   );
 }
 
-// ─── Floating 3D title (shown before a wallet connects) ───────────────────────
-
-function FloatingTitle() {
-  const group = useRef<THREE.Group>(null);
-  useFrame((state) => {
-    if (!group.current) return;
-    const t = state.clock.elapsedTime;
-    group.current.position.y = 3.6 + Math.sin(t * 0.8) * 0.18;
-    group.current.rotation.y = Math.sin(t * 0.4) * 0.12;
-  });
-  return (
-    <group ref={group} position={[0, 3.6, -1]}>
-      <Text
-        fontSize={1.5}
-        letterSpacing={0.18}
-        color="#e7c14e"
-        anchorX="center"
-        anchorY="middle"
-        outlineWidth={0.04}
-        outlineColor="#5a4310"
-      >
-        ENGRAM
-        <meshStandardMaterial attach="material" color="#e7c14e" emissive="#d6a72a" emissiveIntensity={0.55} metalness={0.3} roughness={0.4} />
-      </Text>
-      <Text position={[0, -1, 0]} fontSize={0.32} color="#f4e8d0" anchorX="center" anchorY="middle" fillOpacity={0.85}>
-        The village of Aldenmoor remembers you.
-      </Text>
-    </group>
-  );
-}
+// The 3D floating title was removed — it's rendered as HTML in client-page now.
+// A drei/troika <Text> here orphaned in the persistent canvas across the
+// title→game transition and showed up as stray letters in the aerial view.
 
 // ─── NPC characters ───────────────────────────────────────────────────────────
 
