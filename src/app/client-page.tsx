@@ -173,7 +173,10 @@ function Game() {
   if (!isConnected || !address) {
     return (
       <div className="relative w-screen h-screen overflow-hidden engram-serif">
-        <Scene3D interactive={false} showTitle />
+        {/* key forces a full remount vs the in-game Scene3D, so the 3D title text
+            (drei/troika) is fully disposed when the wallet connects instead of
+            lingering as an orphan in the persistent canvas. */}
+        <Scene3D key="title" interactive={false} showTitle />
         {/* Title + tagline now float in 3D; keep the connect prompt as an overlay,
             anchored low so it doesn't cover the 3D lettering. */}
         <div className="absolute inset-x-0 bottom-0 z-10 flex flex-col items-center text-center gap-4 pb-[12vh] bg-gradient-to-t from-black/60 via-black/20 to-transparent pointer-events-none">
@@ -195,6 +198,7 @@ function Game() {
       {/* 3D Aldenmoor. Clicking a villager opens their dialogue; the camera
           eases toward whoever is active. All memory/dialogue logic is unchanged. */}
       <Scene3D
+        key="game"
         memories={memories}
         active={active}
         talking={scene.loading}
