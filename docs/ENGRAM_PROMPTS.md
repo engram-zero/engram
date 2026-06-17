@@ -21,7 +21,8 @@
 
 > **Tareas no-código (ADMIN):** ✅ deploy a Vercel + env vars · ✅ save a 0G end-to-end ·
 > ⏳ actualizar la Description del dashboard 0g.ai (versión honesta) ·
-> ⏳ grabar video demo (2–3 min) · ⏳ completar submission · ⏳ post en X (`#TheZeroCup`, `@0G_labs`).
+> ⏳ grabar video demo (guion en [`DEMO_SCRIPT.md`](DEMO_SCRIPT.md)) · ⏳ completar submission ·
+> ⏳ post en X (`#TheZeroCup`, `@0G_labs`).
 
 ---
 
@@ -103,8 +104,8 @@ de "el jugador es dueño del puntero", ofrece **B** como opción detrás de un t
   - El typecheck: `npx tsc --noEmit` debe pasar.
 
 ## Criterios de aceptación
-  1. Conectar wallet en un navegador, hablar con un NPC, guardar → setRoot emite RootUpdated
-     (verificable en chainscan-galileo.0g.ai).
+  1. Hablar con un NPC y guardar → la tx de registro (setRoot **o** setRootFor, según el
+     diseño A/B elegido) emite `RootUpdated` (verificable en chainscan-galileo.0g.ai).
   2. Abrir la app en OTRO navegador/perfil con la misma wallet y vacío el localStorage →
      la memoria se recupera leyendo el root desde el contrato.
   3. Con NEXT_PUBLIC_ENGRAM_REGISTRY sin definir, la app funciona igual que hoy (solo local).
