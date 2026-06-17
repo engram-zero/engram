@@ -8,7 +8,7 @@
 
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { Stars, Sky, Html, ContactShadows, Text, PointerLockControls, KeyboardControls, useKeyboardControls } from '@react-three/drei';
+import { Stars, Sky, Html, ContactShadows, Text, PointerLockControls, OrthographicCamera, KeyboardControls, useKeyboardControls } from '@react-three/drei';
 import * as THREE from 'three';
 import { NPC_LIST } from '@/lib/npcs';
 import type { NPCName, NPCMemory } from '@/lib/types';
@@ -23,11 +23,21 @@ import {
   type TreeDef,
   type CottageDef,
 } from './map';
-import { getTexture } from './textures';
+import { getTexture, getTextureVariant, hasTexture } from './textures';
 import { useWorld, chopTree, isChopped } from '@/lib/world';
 
 // A tree carries its global index (into TREES) so chopping can target it.
 type TreeInst = TreeDef & { idx: number };
+
+// Shared player ground position + facing, so the first-person camera and the
+// aerial avatar stay in sync when you switch views.
+type PlayerPos = { x: number; z: number; heading: number };
+type PlayerPosRef = React.MutableRefObject<PlayerPos>;
+type ViewMode = 'fp' | 'aerial';
+
+// How many texture-variant groups the forest is split into (cycles through the
+// PNGs registered per slot, so the woods don't look uniform).
+const TREE_BUCKETS = 4;
 
 // Where each villager stands (XZ). They live in the flat clearing, so ground
 // height is ~0; we still anchor their Y to the terrain for safety.
@@ -121,10 +131,12 @@ function CameraRig({ active }: { active: NPCName | null }) {
 
 function Player({
   enabled,
+  posRef,
   onNearbyChange,
   onNearbyTreeChange,
 }: {
   enabled: boolean;
+  posRef: PlayerPosRef;
   onNearbyChange: (npc: NPCName | null) => void;
   onNearbyTreeChange?: (treeIdx: number | null) => void;
 }) {
@@ -133,19 +145,24 @@ function Player({
   const bob = useRef({ t: 0, off: 0 });
   const nearbyRef = useRef<NPCName | null>(null);
   const treeRef = useRef<number | null>(null);
+  const didLook = useRef(false);
   const forward = useMemo(() => new THREE.Vector3(), []);
   const right = useMemo(() => new THREE.Vector3(), []);
   const move = useMemo(() => new THREE.Vector3(), []);
   const up = useMemo(() => new THREE.Vector3(0, 1, 0), []);
 
-  // Spawn ONCE when explore mode begins. Must not re-run when movement is merely
-  // toggled off/on for a dialogue, or leaving an NPC would teleport you back to
-  // the spawn point instead of where you were standing.
+  // Sync the camera to the shared player position whenever first-person control
+  // (re)engages — so leaving a dialogue, or returning from the aerial view,
+  // resumes where the player actually is rather than teleporting to spawn.
   useEffect(() => {
-    const [sx, sz] = SPAWN_XZ;
-    camera.position.set(sx, getHeightAt(sx, sz) + EYE_HEIGHT, sz);
-    camera.lookAt(0, 1.2, 0);
-  }, [camera]);
+    if (!enabled) return;
+    const { x, z } = posRef.current;
+    camera.position.set(x, getHeightAt(x, z) + EYE_HEIGHT, z);
+    if (!didLook.current) {
+      camera.lookAt(0, 1.2, 0);
+      didLook.current = true;
+    }
+  }, [enabled, camera, posRef]);
 
   useFrame((_, dtRaw) => {
     if (!enabled) return;
@@ -176,6 +193,11 @@ function Player({
     }
     // Follow the terrain: ground height under the feet + eye height + head-bob.
     camera.position.y = getHeightAt(camera.position.x, camera.position.z) + EYE_HEIGHT + bob.current.off;
+
+    // Publish position + facing so the aerial avatar can pick up where we are.
+    posRef.current.x = camera.position.x;
+    posRef.current.z = camera.position.z;
+    posRef.current.heading = Math.atan2(forward.x, forward.z);
 
     // Nearest villager within talking range.
     let best: NPCName | null = null;
@@ -232,6 +254,87 @@ function TalkFraming({ active }: { active: NPCName | null }) {
   });
 
   return null;
+}
+
+// ─── Aerial (top-down RTS) view ───────────────────────────────────────────────
+// A third-person avatar driven by WASD in WORLD directions, with an orthographic
+// camera following from above. Shares the player position with the FP camera.
+
+function Avatar({ posRef }: { posRef: PlayerPosRef }) {
+  const g = useRef<THREE.Group>(null);
+  useFrame(() => {
+    if (!g.current) return;
+    const { x, z, heading } = posRef.current;
+    g.current.position.set(x, getHeightAt(x, z), z);
+    g.current.rotation.y = heading;
+  });
+  return (
+    <group ref={g}>
+      <mesh castShadow position={[0, 0.85, 0]}>
+        <capsuleGeometry args={[0.32, 0.7, 4, 10]} />
+        <meshStandardMaterial color="#c98b3a" flatShading />
+      </mesh>
+      <mesh castShadow position={[0, 1.5, 0]}>
+        <sphereGeometry args={[0.26, 12, 12]} />
+        <meshStandardMaterial color="#e8c4a0" flatShading />
+      </mesh>
+      {/* nose marker so facing is readable from above */}
+      <mesh position={[0, 1.5, 0.24]}>
+        <boxGeometry args={[0.08, 0.08, 0.12]} />
+        <meshStandardMaterial color="#7a5a2a" flatShading />
+      </mesh>
+    </group>
+  );
+}
+
+function AerialRig({ enabled, posRef }: { enabled: boolean; posRef: PlayerPosRef }) {
+  const camRef = useRef<THREE.OrthographicCamera>(null);
+  const [, getKeys] = useKeyboardControls();
+  const zoom = useRef(22);
+
+  // Mouse-wheel zoom while in aerial view.
+  useEffect(() => {
+    if (!enabled) return;
+    const onWheel = (e: WheelEvent) => {
+      zoom.current = THREE.MathUtils.clamp(zoom.current - e.deltaY * 0.02, 9, 46);
+    };
+    window.addEventListener('wheel', onWheel, { passive: true });
+    return () => window.removeEventListener('wheel', onWheel);
+  }, [enabled]);
+
+  useFrame((_, dtRaw) => {
+    const cam = camRef.current;
+    if (!enabled || !cam) return;
+    const dt = Math.min(dtRaw, 0.05);
+    const k = getKeys();
+
+    // WASD moves the avatar in WORLD directions: W=north (−Z), S=+Z, A=−X, D=+X.
+    let dx = 0;
+    let dz = 0;
+    if (k.forward) dz -= 1;
+    if (k.backward) dz += 1;
+    if (k.left) dx -= 1;
+    if (k.right) dx += 1;
+    if (dx || dz) {
+      const len = Math.hypot(dx, dz);
+      dx /= len;
+      dz /= len;
+      const [rx, rz] = resolveCollision(posRef.current.x + dx * WALK_SPEED * dt, posRef.current.z + dz * WALK_SPEED * dt);
+      posRef.current.x = rx;
+      posRef.current.z = rz;
+      posRef.current.heading = Math.atan2(dx, dz); // face the move direction
+    }
+
+    // Angled overhead follow (AoE-ish), with wheel zoom.
+    const { x, z } = posRef.current;
+    cam.zoom = zoom.current;
+    cam.position.set(x + 16, 30, z + 16);
+    cam.up.set(0, 1, 0);
+    cam.lookAt(x, getHeightAt(x, z), z);
+    cam.updateProjectionMatrix();
+  });
+
+  return <OrthographicCamera ref={camRef} makeDefault near={0.1} far={300} position={[16, 30, 16]} />;
 }
 
 // ─── Scenery ──────────────────────────────────────────────────────────────────
@@ -325,19 +428,19 @@ function ChimneySmoke({ origin }: { origin: [number, number, number] }) {
 
 // ── Cottage ── bigger, gabled, with corner beams, a framed door, glowing
 // windows and a smoking chimney. Anchored to the terrain height at its spot.
-function Cottage({ def }: { def: CottageDef }) {
+function Cottage({ def, seed }: { def: CottageDef; seed: number }) {
   const y = getHeightAt(def.x, def.z);
   return (
     <group position={[def.x, y, def.z]} rotation={[0, def.rot, 0]} scale={def.scale}>
       {/* stone plinth */}
       <mesh position={[0, 0.1, 0]} castShadow receiveShadow>
         <boxGeometry args={[2.7, 0.2, 2.3]} />
-        <meshStandardMaterial color="#5b5048" map={getTexture('stone')} flatShading />
+        <meshStandardMaterial color="#5b5048" map={getTextureVariant('stone', seed)} flatShading />
       </mesh>
       {/* body */}
       <mesh position={[0, 1.05, 0]} castShadow receiveShadow>
         <boxGeometry args={[2.4, 1.8, 2.0]} />
-        <meshStandardMaterial color={def.body} map={getTexture('cottage_wood')} flatShading />
+        <meshStandardMaterial color={def.body} map={getTextureVariant('cottage_wood', seed)} flatShading />
       </mesh>
       {/* corner beams */}
       {([[-1.2, -1.0], [1.2, -1.0], [-1.2, 1.0], [1.2, 1.0]] as [number, number][]).map(([x, z], i) => (
@@ -349,11 +452,11 @@ function Cottage({ def }: { def: CottageDef }) {
       {/* gable roof — two slopes meeting at a ridge running along X */}
       <mesh position={[0, 2.2, -0.66]} rotation={[0.62, 0, 0]} castShadow>
         <boxGeometry args={[2.8, 0.14, 1.6]} />
-        <meshStandardMaterial color={def.roof} map={getTexture('cottage_roof')} flatShading />
+        <meshStandardMaterial color={def.roof} map={getTextureVariant('cottage_roof', seed)} flatShading />
       </mesh>
       <mesh position={[0, 2.2, 0.66]} rotation={[-0.62, 0, 0]} castShadow>
         <boxGeometry args={[2.8, 0.14, 1.6]} />
-        <meshStandardMaterial color={def.roof} map={getTexture('cottage_roof')} flatShading />
+        <meshStandardMaterial color={def.roof} map={getTextureVariant('cottage_roof', seed)} flatShading />
       </mesh>
       <mesh position={[0, 2.62, 0]}>
         <boxGeometry args={[2.9, 0.12, 0.12]} />
@@ -384,7 +487,7 @@ function Cottage({ def }: { def: CottageDef }) {
       {/* chimney + smoke */}
       <mesh position={[0.8, 2.55, -0.25]} castShadow>
         <boxGeometry args={[0.34, 1.1, 0.34]} />
-        <meshStandardMaterial color="#5a4a40" map={getTexture('stone')} flatShading />
+        <meshStandardMaterial color="#5a4a40" map={getTextureVariant('stone', seed)} flatShading />
       </mesh>
       <ChimneySmoke origin={[0.8, 3.15, -0.25]} />
     </group>
@@ -435,9 +538,6 @@ function TreePart({
 function InstancedTrees() {
   // Carry each tree's global index so chopping can target individual trees.
   const withIdx = useMemo<TreeInst[]>(() => TREES.map((t, idx) => ({ ...t, idx })), []);
-  const pine = useMemo(() => withIdx.filter((t) => t.species === 0), [withIdx]);
-  const broad = useMemo(() => withIdx.filter((t) => t.species === 1), [withIdx]);
-  const bush = useMemo(() => withIdx.filter((t) => t.species === 2), [withIdx]);
 
   // Re-render instance matrices when the chopped set changes.
   const world = useWorld();
@@ -456,31 +556,51 @@ function InstancedTrees() {
     }),
     []
   );
-  // Optional textures (bark / foliage) with flat-color fallback. The artist adds
-  // PNGs via src/components/engram/textures.ts; until then `map` is null = current look.
-  const mat = useMemo(
-    () => ({
-      bark: new THREE.MeshStandardMaterial({ color: '#5a3f28', map: getTexture('bark', { repeat: 1 }), flatShading: !getTexture('bark'), roughness: 1 }),
-      pine: new THREE.MeshStandardMaterial({ color: '#2f4a2c', map: getTexture('foliage_pine'), flatShading: !getTexture('foliage_pine'), roughness: 1 }),
-      broad: new THREE.MeshStandardMaterial({ color: '#3b5a30', map: getTexture('foliage_broadleaf'), flatShading: !getTexture('foliage_broadleaf'), roughness: 1 }),
-      bushLeaf: new THREE.MeshStandardMaterial({ color: '#45683a', map: getTexture('foliage_bush'), flatShading: !getTexture('foliage_bush'), roughness: 1 }),
-    }),
+
+  // Spread trees across TREE_BUCKETS texture variants so the forest isn't
+  // uniform. Each bucket gets bark + foliage from a different registered PNG
+  // (getTextureVariant cycles through whatever the artist added; null = flat).
+  const buckets = useMemo(
+    () =>
+      Array.from({ length: TREE_BUCKETS }, (_, b) => ({
+        bark: new THREE.MeshStandardMaterial({ color: '#5a3f28', map: getTextureVariant('bark', b, { repeat: 1 }), flatShading: !hasTexture('bark'), roughness: 1 }),
+        pine: new THREE.MeshStandardMaterial({ color: '#2f4a2c', map: getTextureVariant('foliage_pine', b), flatShading: !hasTexture('foliage_pine'), roughness: 1 }),
+        broad: new THREE.MeshStandardMaterial({ color: '#3b5a30', map: getTextureVariant('foliage_broadleaf', b), flatShading: !hasTexture('foliage_broadleaf'), roughness: 1 }),
+        bushLeaf: new THREE.MeshStandardMaterial({ color: '#45683a', map: getTextureVariant('foliage_bush', b), flatShading: !hasTexture('foliage_bush'), roughness: 1 }),
+      })),
     []
   );
 
+  // Partition each species' trees into buckets by their global index.
+  const groups = useMemo(() => {
+    const empty = () => Array.from({ length: TREE_BUCKETS }, () => [] as TreeInst[]);
+    const pine = empty();
+    const broad = empty();
+    const bush = empty();
+    for (const t of withIdx) {
+      const b = t.idx % TREE_BUCKETS;
+      (t.species === 0 ? pine : t.species === 1 ? broad : bush)[b].push(t);
+    }
+    return { pine, broad, bush };
+  }, [withIdx]);
+
   return (
     <group>
-      {/* pines: trunk + three stacked cones */}
-      <TreePart items={pine} geometry={geo.trunk} material={mat.bark} localY={0.7} chopped={chopped} />
-      <TreePart items={pine} geometry={geo.pineA} material={mat.pine} localY={1.9} chopped={chopped} />
-      <TreePart items={pine} geometry={geo.pineB} material={mat.pine} localY={2.8} chopped={chopped} />
-      <TreePart items={pine} geometry={geo.pineC} material={mat.pine} localY={3.6} chopped={chopped} />
-      {/* broadleaf: taller trunk + two foliage clumps */}
-      <TreePart items={broad} geometry={geo.broadTrunk} material={mat.bark} localY={0.8} chopped={chopped} />
-      <TreePart items={broad} geometry={geo.leaf} material={mat.broad} localY={2.3} chopped={chopped} />
-      <TreePart items={broad} geometry={geo.leafS} material={mat.broad} localY={3.0} chopped={chopped} />
-      {/* bushes: a single low clump */}
-      <TreePart items={bush} geometry={geo.bush} material={mat.bushLeaf} localY={0.55} chopped={chopped} />
+      {Array.from({ length: TREE_BUCKETS }, (_, b) => (
+        <group key={b}>
+          {/* pines: trunk + three stacked cones */}
+          <TreePart items={groups.pine[b]} geometry={geo.trunk} material={buckets[b].bark} localY={0.7} chopped={chopped} />
+          <TreePart items={groups.pine[b]} geometry={geo.pineA} material={buckets[b].pine} localY={1.9} chopped={chopped} />
+          <TreePart items={groups.pine[b]} geometry={geo.pineB} material={buckets[b].pine} localY={2.8} chopped={chopped} />
+          <TreePart items={groups.pine[b]} geometry={geo.pineC} material={buckets[b].pine} localY={3.6} chopped={chopped} />
+          {/* broadleaf: taller trunk + two foliage clumps */}
+          <TreePart items={groups.broad[b]} geometry={geo.broadTrunk} material={buckets[b].bark} localY={0.8} chopped={chopped} />
+          <TreePart items={groups.broad[b]} geometry={geo.leaf} material={buckets[b].broad} localY={2.3} chopped={chopped} />
+          <TreePart items={groups.broad[b]} geometry={geo.leafS} material={buckets[b].broad} localY={3.0} chopped={chopped} />
+          {/* bushes: a single low clump */}
+          <TreePart items={groups.bush[b]} geometry={geo.bush} material={buckets[b].bushLeaf} localY={0.55} chopped={chopped} />
+        </group>
+      ))}
     </group>
   );
 }
@@ -601,7 +721,7 @@ function Village() {
       <Terrain />
       <Moon />
       {COTTAGES.map((c, i) => (
-        <Cottage key={i} def={c} />
+        <Cottage key={i} def={c} seed={i} />
       ))}
       <InstancedTrees />
       <Campfire />
@@ -918,18 +1038,30 @@ export default function Scene3D({ memories = null, active = null, talking = fals
   const [nearby, setNearby] = useState<NPCName | null>(null);
   const [nearbyTree, setNearbyTree] = useState<number | null>(null);
   const [locked, setLocked] = useState(false);
+  const [view, setView] = useState<ViewMode>('fp');
   const nearbyRef = useRef<NPCName | null>(null);
   nearbyRef.current = nearby;
   const nearbyTreeRef = useRef<number | null>(null);
   nearbyTreeRef.current = nearbyTree;
   const world = useWorld();
 
-  // Press E to talk to whoever is in range; F to chop a nearby tree.
+  // Shared player position (first-person camera ↔ aerial avatar).
+  const posRef = useRef<PlayerPos>({ x: SPAWN_XZ[0], z: SPAWN_XZ[1], heading: 0 });
+
+  const fpExploring = exploring && view === 'fp';
+  const aerialExploring = exploring && view === 'aerial';
+
+  // V toggles first-person ↔ aerial; E talks / F chops (first-person only).
   useEffect(() => {
     if (!exploring) return;
     const onKey = (e: KeyboardEvent) => {
       const tag = (document.activeElement as HTMLElement | null)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (e.code === 'KeyV') {
+        setView((v) => (v === 'fp' ? 'aerial' : 'fp'));
+        return;
+      }
+      if (view !== 'fp') return; // interactions are first-person only
       if (e.code === 'KeyE' && nearbyRef.current) onSelect(nearbyRef.current);
       if (e.code === 'KeyF' && nearbyTreeRef.current !== null && !isChopped(nearbyTreeRef.current)) {
         chopTree(nearbyTreeRef.current);
@@ -938,7 +1070,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [exploring, onSelect]);
+  }, [exploring, onSelect, view]);
 
   // Clear the proximity prompt and lock state whenever we leave explore mode
   // (dialogue or a GUI opened), so the HUD is correct when control returns.
@@ -1000,11 +1132,19 @@ export default function Scene3D({ memories = null, active = null, talking = fals
           {/* Cinematic rig on the title/loading screen; first-person controls
               once Aldenmoor is explorable. */}
           {!explorable && <CameraRig active={active} />}
-          {/* Player stays mounted across dialogues (movement gated by `enabled`)
-              so leaving an NPC resumes where you stood, not at spawn. */}
-          {explorable && <Player enabled={exploring} onNearbyChange={setNearby} onNearbyTreeChange={setNearbyTree} />}
-          {exploring && <PointerLockControls onLock={() => setLocked(true)} onUnlock={() => setLocked(false)} />}
-          {explorable && active && <TalkFraming active={active} />}
+          {/* Player stays mounted across dialogues/views (movement gated by
+              `enabled`) so switching back resumes where you stood, not at spawn. */}
+          {explorable && (
+            <Player enabled={fpExploring} posRef={posRef} onNearbyChange={setNearby} onNearbyTreeChange={setNearbyTree} />
+          )}
+          {fpExploring && <PointerLockControls onLock={() => setLocked(true)} onUnlock={() => setLocked(false)} />}
+          {explorable && view === 'aerial' && (
+            <>
+              <AerialRig enabled={aerialExploring} posRef={posRef} />
+              <Avatar posRef={posRef} />
+            </>
+          )}
+          {explorable && active && view === 'fp' && <TalkFraming active={active} />}
 
           <Village />
           {showTitle && <FloatingTitle />}
@@ -1029,8 +1169,24 @@ export default function Scene3D({ memories = null, active = null, talking = fals
         </Canvas>
       </KeyboardControls>
 
-      {/* First-person HUD (crosshair, proximity prompt, controls hint). */}
+      {/* Shared HUD while exploring (either view): inventory + view toggle. */}
       {exploring && (
+        <>
+          <div className="pointer-events-none absolute top-20 left-4 z-10 flex gap-3 text-sm text-[#f4e8d0]">
+            <span className="rounded-md bg-black/45 px-2.5 py-1" title="Wood">🪵 {world.inventory.wood}</span>
+            <span className="rounded-md bg-black/45 px-2.5 py-1" title="Coin">🪙 {world.inventory.coin}</span>
+          </div>
+          <button
+            onClick={() => setView((v) => (v === 'fp' ? 'aerial' : 'fp'))}
+            className="absolute top-20 right-4 z-10 rounded-md border border-[#5a4a28] bg-black/50 px-3 py-1.5 text-sm text-[#f4e8d0] hover:border-[#d6b84a]"
+          >
+            {view === 'fp' ? '🦅 Aerial (V)' : '🚶 First person (V)'}
+          </button>
+        </>
+      )}
+
+      {/* First-person HUD (crosshair, proximity prompts, controls). */}
+      {fpExploring && (
         <>
           <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
             <div className="h-1.5 w-1.5 rounded-full bg-white/70 shadow-[0_0_4px_rgba(0,0,0,0.8)]" />
@@ -1039,7 +1195,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
           {!locked && (
             <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
               <div className="rounded-full bg-black/55 px-5 py-2 text-sm text-[#f4e8d0]/90">
-                Click to look around · WASD to walk
+                Click to look around · WASD to walk · V for aerial view
               </div>
             </div>
           )}
@@ -1055,7 +1211,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
             </div>
           )}
 
-          {locked && nearbyTree !== null && (
+          {locked && nearbyTree !== null && !nearbyNpc && (
             <div className="pointer-events-none absolute bottom-28 left-1/2 z-10 -translate-x-1/2">
               <div className="rounded-full border border-[#6a8a4a] px-5 py-2 text-sm font-semibold text-[#f4e8d0] shadow-lg" style={{ background: 'rgba(16,20,10,0.88)' }}>
                 Press <span className="text-[#8fd06a]">F</span> to chop this tree
@@ -1063,16 +1219,17 @@ export default function Scene3D({ memories = null, active = null, talking = fals
             </div>
           )}
 
-          {/* Resource inventory */}
-          <div className="pointer-events-none absolute top-20 left-4 z-10 flex gap-3 text-sm text-[#f4e8d0]">
-            <span className="rounded-md bg-black/45 px-2.5 py-1" title="Wood">🪵 {world.inventory.wood}</span>
-            <span className="rounded-md bg-black/45 px-2.5 py-1" title="Coin">🪙 {world.inventory.coin}</span>
-          </div>
-
           <div className="pointer-events-none absolute bottom-4 left-4 z-10 text-xs text-[#f4e8d0]/55">
-            WASD move · Mouse look · E talk · F chop · Esc release cursor
+            WASD move · Mouse look · E talk · F chop · V aerial · Esc release cursor
           </div>
         </>
+      )}
+
+      {/* Aerial HUD. */}
+      {aerialExploring && (
+        <div className="pointer-events-none absolute bottom-4 left-4 z-10 text-xs text-[#f4e8d0]/60">
+          WASD move (W=north) · Scroll to zoom · V back to first person
+        </div>
       )}
     </div>
   );

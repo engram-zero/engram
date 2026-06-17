@@ -1,33 +1,18 @@
-// ─── Engram texture system (drop-in PNGs with graceful fallback) ──────────────
+// ─── Engram texture system (drop-in PNGs, multiple variants, graceful fallback) ─
 //
-// FOR THE ARTIST: drop your PNGs into `public/textures/` and add their filenames
-// to TEXTURE_MANIFEST below. The scene then uses them automatically. If a texture
-// is NOT in the manifest (or you delete the PNG), the scene falls back to the
-// existing generic flat-shaded look — nothing breaks. You can iterate one texture
-// at a time.
+// FOR THE ARTIST:
+//   1. Drop your PNGs into `public/textures/`.
+//   2. Add the filename(s) to the matching slot array below. You can list SEVERAL
+//      variants per slot (e.g. madera1/2/3) — the scene spreads them across the
+//      houses/trees so the world doesn't look repetitive.
+//   3. A slot with an empty array → the generic flat-color fallback (nothing breaks).
 //
-// Recommended PNGs: tileable, 512×512, < ~80 KB each (PNG or WebP). See the list
-// in docs/ART_ASSETS.md.
+// IMPORTANT: only list files that you've actually added. A name with no file will
+// show a broken texture (not a fallback). Adding/removing a name is a one-line edit.
+//
+// Specs: tileable, 512×512, < ~80 KB each. See docs/ART_ASSETS.md for the full list.
 
 import * as THREE from 'three';
-
-/**
- * Filenames present in `public/textures/`. Flip an entry to `true` (or add a new
- * one) when the PNG exists. Anything not listed → generic fallback (flat color).
- *
- * Keys are the canonical texture slots the scene asks for. You can also point a
- * slot at any filename you like by changing the value to that filename string.
- */
-export const TEXTURE_MANIFEST: Record<TextureSlot, string | false> = {
-  terrain_grass: false, // ground
-  cottage_wood: false, // house walls
-  cottage_roof: false, // house roof
-  stone: false, // plinth / chimney
-  bark: false, // tree trunks
-  foliage_pine: false, // pine canopy
-  foliage_broadleaf: false, // broadleaf canopy
-  foliage_bush: false, // bushes
-};
 
 export type TextureSlot =
   | 'terrain_grass'
@@ -39,6 +24,22 @@ export type TextureSlot =
   | 'foliage_broadleaf'
   | 'foliage_bush';
 
+/**
+ * Each slot maps to an ARRAY of filenames in `public/textures/` (the variants).
+ * Fill these in as you add PNGs. Recommended filenames are shown in comments —
+ * use them (or any names you like) and the scene picks them up.
+ */
+export const TEXTURE_MANIFEST: Record<TextureSlot, string[]> = {
+  terrain_grass: [], // e.g. 'pasto1.png', 'pasto2.png'
+  cottage_wood: [], // e.g. 'madera1.png', 'madera2.png', 'madera3.png'
+  cottage_roof: [], // e.g. 'tejado1.png', 'tejado2.png', 'tejado3.png'
+  stone: [], // e.g. 'piedra1.png', 'piedra2.png', 'piedra3.png'
+  bark: [], // e.g. 'corteza1.png', 'corteza2.png', 'corteza3.png'
+  foliage_pine: [], // e.g. 'pino1.png', 'pino2.png', 'pino3.png'
+  foliage_broadleaf: [], // e.g. 'follaje1.png', 'follaje2.png', 'follaje3.png'
+  foliage_bush: [], // e.g. 'arbusto1.png', 'arbusto2.png'
+};
+
 const cache = new Map<string, THREE.Texture>();
 
 export interface TextureOpts {
@@ -46,25 +47,15 @@ export interface TextureOpts {
   repeat?: number;
 }
 
-/**
- * Returns a loaded THREE.Texture for the given slot, or `null` if no PNG is
- * registered for it (caller should then keep its flat color). Safe to call every
- * render — textures are cached and load asynchronously without blocking.
- */
-export function getTexture(slot: TextureSlot, opts: TextureOpts = {}): THREE.Texture | null {
-  if (typeof window === 'undefined') return null; // SSR guard
-  const file = TEXTURE_MANIFEST[slot];
-  if (!file) return null;
-
+function load(file: string, opts: TextureOpts): THREE.Texture {
   const key = `${file}|${opts.repeat ?? 0}`;
   const hit = cache.get(key);
   if (hit) return hit;
-
   const tex = new THREE.TextureLoader().load(
     `/textures/${file}`,
     undefined,
     undefined,
-    () => console.warn(`[engram] texture "${file}" failed to load — using fallback`)
+    () => console.warn(`[engram] texture "${file}" failed to load`)
   );
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
@@ -76,7 +67,30 @@ export function getTexture(slot: TextureSlot, opts: TextureOpts = {}): THREE.Tex
   return tex;
 }
 
-/** True if a real PNG is registered for this slot (handy for toggling flatShading). */
+/** How many variant PNGs are registered for a slot. */
+export function variantCount(slot: TextureSlot): number {
+  return TEXTURE_MANIFEST[slot].length;
+}
+
+/**
+ * Returns the texture for a slot, choosing variant `seed % count` so each object
+ * (house, tree group) gets a stable variant. Returns `null` when no PNG is
+ * registered → caller keeps its flat color. Safe to call every render (cached).
+ */
+export function getTextureVariant(slot: TextureSlot, seed: number, opts: TextureOpts = {}): THREE.Texture | null {
+  if (typeof window === 'undefined') return null; // SSR guard
+  const files = TEXTURE_MANIFEST[slot];
+  if (files.length === 0) return null;
+  const file = files[((seed % files.length) + files.length) % files.length];
+  return load(file, opts);
+}
+
+/** Convenience: first/only variant of a slot (for single surfaces like the terrain). */
+export function getTexture(slot: TextureSlot, opts: TextureOpts = {}): THREE.Texture | null {
+  return getTextureVariant(slot, 0, opts);
+}
+
+/** True if at least one PNG is registered for this slot. */
 export function hasTexture(slot: TextureSlot): boolean {
-  return !!TEXTURE_MANIFEST[slot];
+  return variantCount(slot) > 0;
 }

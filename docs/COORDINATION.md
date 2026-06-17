@@ -45,8 +45,12 @@ export function setWorldPersistence(p: WorldPersistence): void; // register your
   token come later (see `docs/ENGRAM_ECONOMY.md`).
 - Whatever you choose, expose it ONLY through `WorldPersistence` so gameplay stays decoupled.
 
-## ⏭️ Next world/UI task (NOT done yet): dual camera + avatar (Prompt 8a)
-Spec so whoever picks it up doesn't guess:
+## ✅ Dual camera + avatar (Prompt 8a) — implemented (verify visually)
+Done in `Scene3D.tsx`: `view: 'fp' | 'aerial'` (toggle key **V** + HUD button); aerial
+uses a drei `<OrthographicCamera>` following a third-person **Avatar**; WASD moves the
+avatar in world directions (W=north); FP/aerial share one player position (`posRef`) so
+switching is seamless; chop/talk stay first-person. Build + typecheck pass — **please test
+the aerial view live** (camera framing/zoom feel may want tuning). Original spec kept below:
 - Add a `view: 'fp' | 'aerial'` toggle (key `V` + a HUD button) in `Scene3D`.
 - **fp**: current first-person (PointerLockControls + `Player`). Unchanged.
 - **aerial**: a drei `<OrthographicCamera makeDefault>` looking down; render a **third-person
