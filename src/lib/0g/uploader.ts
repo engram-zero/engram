@@ -11,22 +11,26 @@ import { Contract } from 'ethers';
 export async function submitTransaction(
   flowContract: Contract,
   submission: any,
-  value: bigint
+  value: bigint,
+  gasPrice?: bigint
 ): Promise<[any | null, Error | null]> {
   try {
-    // 0G Chain is a legacy (non-EIP-1559) chain. Without an explicit gasPrice,
-    // ethers/MetaMask try the EIP-1559 path and call eth_maxPriorityFeePerGas,
-    // which the RPC doesn't implement (-32601) → the tx fails with an Internal
-    // JSON-RPC error (-32603). Fetch the legacy gasPrice and pass it so the tx
-    // is built as type-0 and skips the priority-fee call entirely.
+    // 0G Chain is a legacy (non-EIP-1559) chain. With an explicit gasPrice the
+    // tx is built as type-0 and skips eth_maxPriorityFeePerGas (which the RPC
+    // doesn't implement → -32601 / Internal JSON-RPC error). gasPrice is passed
+    // in from memory.ts; fall back to the provider's gasPrice if absent.
     const overrides: { value: bigint; gasPrice?: bigint } = { value };
-    try {
-      const provider = (flowContract.runner as { provider?: { getFeeData: () => Promise<{ gasPrice: bigint | null }> } })?.provider;
-      const feeData = provider ? await provider.getFeeData() : null;
-      if (feeData?.gasPrice) overrides.gasPrice = feeData.gasPrice;
-    } catch {
-      // No gasPrice available — fall through and let the wallet decide.
+    let gp = gasPrice;
+    if (gp === undefined) {
+      try {
+        const provider = (flowContract.runner as { provider?: { getFeeData: () => Promise<{ gasPrice: bigint | null }> } })?.provider;
+        const feeData = provider ? await provider.getFeeData() : null;
+        if (feeData?.gasPrice) gp = feeData.gasPrice;
+      } catch {
+        // No gasPrice available — let the wallet decide.
+      }
     }
+    if (gp) overrides.gasPrice = gp;
 
     const tx = await flowContract.submit(submission, overrides);
     const receipt = await tx.wait();
@@ -45,14 +49,15 @@ export async function submitTransaction(
  * @returns A promise that resolves to a success flag and any error
  */
 export async function uploadToStorage(
-  blob: Blob, 
-  storageRpc: string, 
-  l1Rpc: string, 
-  signer: any
+  blob: Blob,
+  storageRpc: string,
+  l1Rpc: string,
+  signer: any,
+  gasPrice?: bigint
 ): Promise<[boolean, Error | null]> {
   try {
     const indexer = new Indexer(storageRpc);
-    
+
     const uploadOptions = {
       taskSize: 10,
       expectedReplica: 1,
@@ -61,8 +66,11 @@ export async function uploadToStorage(
       skipTx: false,
       fee: BigInt(0)
     };
-    
-    await indexer.upload(blob, l1Rpc, signer, uploadOptions);
+
+    // Force the SDK's internal flow tx to legacy gas too (same 0G no-EIP-1559
+    // issue). The 6th arg is TransactionOptions { gasPrice, gasLimit }.
+    const txOpts = gasPrice ? { gasPrice } : undefined;
+    await indexer.upload(blob, l1Rpc, signer, uploadOptions, undefined, txOpts);
     return [true, null];
   } catch (error) {
     return [false, error instanceof Error ? error : new Error(String(error))];

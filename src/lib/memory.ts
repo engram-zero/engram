@@ -200,11 +200,24 @@ export async function writeMemory(
   const [fees, feeErr] = await calculateFees(submission, flowContract, provider);
   if (!fees) throw new Error(`Fee calc error: ${feeErr?.message}`);
 
+  // 0G Chain has no EIP-1559. Fetch a plain legacy gasPrice (eth_gasPrice, no
+  // EIP-1559 probing) and force BOTH on-chain txs (our submit + the SDK's
+  // internal upload tx) to type-0. Otherwise ethers/MetaMask call
+  // eth_maxPriorityFeePerGas — unsupported on 0G (-32601) — and the save fails
+  // with an Internal JSON-RPC error (-32603). Bump x2 for reliable inclusion.
+  let gasPrice: bigint | undefined;
+  try {
+    const gp = BigInt(await provider.send('eth_gasPrice', []));
+    if (gp > BigInt(0)) gasPrice = gp * BigInt(2);
+  } catch {
+    // Leave undefined; the helpers fall back to the wallet's own gas handling.
+  }
+
   // 4. Submit the flow-contract tx (signature + storage fee), then upload bytes.
-  const [txResult, txErr] = await submitTransaction(flowContract, submission, fees.rawTotalFee);
+  const [txResult, txErr] = await submitTransaction(flowContract, submission, fees.rawTotalFee, gasPrice);
   if (!txResult) throw new Error(`Transaction error: ${txErr?.message}`);
 
-  const [ok, uploadErr] = await uploadToStorage(blob, network.storageRpc, network.l1Rpc, signer);
+  const [ok, uploadErr] = await uploadToStorage(blob, network.storageRpc, network.l1Rpc, signer, gasPrice);
   if (!ok) throw new Error(`Upload error: ${uploadErr?.message}`);
 
   // 5. Remember the new anchor so we can read this bundle back next session.
