@@ -9,16 +9,17 @@
 //
 // 0G Storage is content-addressed: you can only fetch a document if you know its
 // rootHash. Something must remember "the latest rootHash for this wallet". We
-// cache that 32-byte pointer in localStorage. IMPORTANT: only the *pointer* is
-// local — the memory DATA itself lives entirely on 0G and is auditable by its
-// rootHash. True cross-device recall would replace this pointer cache with an
-// on-chain registry / 0G-KV lookup (documented as next step).
+// read that 32-byte pointer from EngramRegistry when possible and keep
+// localStorage as an instant cache/fallback. IMPORTANT: only the *pointer* is
+// cached locally — the memory DATA itself lives entirely on 0G and is auditable
+// by its rootHash.
 //
 // This module is browser-only (localStorage pointer cache; reads via fetch,
 // writes via POST /api/save). It is never imported by the API server routes.
 
 import { downloadByRootHashAPI } from '@/lib/0g/downloader';
 import { getNetworkConfig } from '@/lib/0g/network';
+import { getRegistryAddress, readRootOnchain, writeRootOnchain } from '@/lib/registry/registry';
 import type { NetworkType } from '@/app/providers';
 import {
   type MemoryBundle,
@@ -45,6 +46,17 @@ export function getBundleRoot(wallet: string): string | null {
 function setBundleRoot(wallet: string, rootHash: string): void {
   if (typeof window === 'undefined') return;
   window.localStorage.setItem(pointerKey(wallet), rootHash);
+}
+
+async function resolveBundleRoot(wallet: string, networkType: NetworkType): Promise<string | null> {
+  const { l1Rpc } = getNetworkConfig(networkType);
+  const onchainRoot = await readRootOnchain(wallet, l1Rpc);
+  if (onchainRoot) {
+    setBundleRoot(wallet, onchainRoot);
+    return onchainRoot;
+  }
+
+  return getBundleRoot(wallet);
 }
 
 // ─── bundle helpers ───────────────────────────────────────────────────────────
@@ -87,6 +99,10 @@ function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n));
 }
 
+function sameNpcMemory(a: NPCMemory, b: NPCMemory): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 // ─── reads (no signature, just an HTTP fetch from 0G) ─────────────────────────
 
 /**
@@ -97,9 +113,17 @@ export async function readBundle(
   wallet: string,
   networkType: NetworkType
 ): Promise<MemoryBundle | null> {
-  const root = getBundleRoot(wallet);
+  const root = await resolveBundleRoot(wallet, networkType);
   if (!root) return null;
 
+  return downloadBundle(root, wallet, networkType);
+}
+
+async function downloadBundle(
+  root: string,
+  wallet: string,
+  networkType: NetworkType
+): Promise<MemoryBundle | null> {
   const { storageRpc } = getNetworkConfig(networkType);
   const [data, err] = await downloadByRootHashAPI(root, storageRpc);
   if (err || !data) {
@@ -143,6 +167,7 @@ export async function readAllMemories(
 export interface WriteResult {
   rootHash: string;
   txHash: string;
+  registryTxHash?: string;
 }
 
 /**
@@ -153,7 +178,8 @@ export interface WriteResult {
  * The 0G storage indexer/nodes don't send CORS headers, so the SDK can't run in
  * the browser. The server uploads with a sponsor wallet; the memory is still
  * keyed to the player's wallet address and content-addressed on 0G. We cache the
- * returned rootHash pointer so this bundle can be read back next session.
+ * returned rootHash pointer and then best-effort anchor it in EngramRegistry for
+ * cross-device recall.
  */
 export async function writeMemory(
   wallet: string,
@@ -162,11 +188,15 @@ export async function writeMemory(
   networkType: NetworkType
 ): Promise<WriteResult> {
   // Start from the current bundle (or a fresh one) and patch this NPC.
-  const bundle = (await readBundle(wallet, networkType)) ?? emptyBundle(wallet);
+  const previousRoot = await resolveBundleRoot(wallet, networkType);
+  const bundle = previousRoot
+    ? (await downloadBundle(previousRoot, wallet, networkType)) ?? emptyBundle(wallet)
+    : emptyBundle(wallet);
+  const memoryChanged = !sameNpcMemory(bundle.npcs[npcName], memory);
   bundle.npcs[npcName] = memory;
   bundle.wallet = wallet.toLowerCase();
   bundle.version = BUNDLE_VERSION;
-  bundle.updatedAt = Date.now();
+  if (memoryChanged) bundle.updatedAt = Date.now();
 
   // Hand the full bundle to the server, which writes it to 0G (no CORS in Node).
   const res = await fetch('/api/save', {
@@ -180,5 +210,18 @@ export async function writeMemory(
   }
 
   setBundleRoot(wallet, data.rootHash);
-  return { rootHash: data.rootHash, txHash: data.txHash || data.rootHash };
+
+  let registryTxHash: string | undefined;
+  if (getRegistryAddress() && previousRoot?.toLowerCase() !== data.rootHash.toLowerCase()) {
+    try {
+      // Future: if storage writes stop being sponsored, collapse storage + registry
+      // into one user confirmation via relayer/meta-tx or a unified 0G flow.
+      const registryTx = await writeRootOnchain(wallet, data.rootHash);
+      registryTxHash = registryTx.txHash;
+    } catch (error) {
+      console.warn('[engram] memory saved to 0G, but registry anchor failed:', error);
+    }
+  }
+
+  return { rootHash: data.rootHash, txHash: data.txHash || data.rootHash, registryTxHash };
 }
