@@ -47,6 +47,14 @@ const NPC_POS: Record<NPCName, [number, number, number]> = {
   sable: [3.4, 0, 0.4],
 };
 
+export const dynamicNpcState: Record<NPCName, { x: number; z: number; targetX: number; targetZ: number; timer: number; speed: number }> = {
+  aldric: { x: NPC_POS.aldric[0], z: NPC_POS.aldric[2], targetX: NPC_POS.aldric[0], targetZ: NPC_POS.aldric[2], timer: 0, speed: 0.8 },
+  maren: { x: NPC_POS.maren[0], z: NPC_POS.maren[2], targetX: NPC_POS.maren[0], targetZ: NPC_POS.maren[2], timer: 0, speed: 1.2 },
+  sable: { x: NPC_POS.sable[0], z: NPC_POS.sable[2], targetX: NPC_POS.sable[0], targetZ: NPC_POS.sable[2], timer: 0, speed: 0.7 },
+};
+
+export const dynamicEnemyState: Record<string, { x: number; z: number; speed: number; dead: boolean }> = {};
+
 // ─── First-person walking constants ───────────────────────────────────────────
 const EYE_HEIGHT = 1.7;
 const PLAYER_RADIUS = 0.45;
@@ -71,7 +79,8 @@ function resolveCollision(x: number, z: number): [number, number] {
   }
   const obstacles = [
     ...COLLIDERS,
-    ...(Object.values(NPC_POS) as [number, number, number][]).map((p) => ({ x: p[0], z: p[2], r: 0.6 })),
+    ...(Object.values(dynamicNpcState)).map((state) => ({ x: state.x, z: state.z, r: 0.6 })),
+    ...(Object.values(dynamicEnemyState)).filter((s) => !s.dead).map((s) => ({ x: s.x, z: s.z, r: 0.5 })),
   ];
   for (const c of obstacles) {
     const dx = x - c.x;
@@ -107,7 +116,7 @@ function CameraRig({ active }: { active: NPCName | null }) {
     if (active) {
       // Dolly in: sit almost in front of this NPC and frame their face — a real
       // zoom toward them, not just a lateral pan.
-      const [x, , z] = NPC_POS[active];
+      const { x, z } = dynamicNpcState[active];
       tmpPos.set(x * 0.9, 1.7, z + 2.6);
       tmpLook.set(x, 1.4, z);
     } else {
@@ -203,8 +212,8 @@ function Player({
     let best: NPCName | null = null;
     let bestD = Infinity;
     for (const npc of NPC_LIST) {
-      const p = NPC_POS[npc.id];
-      const dd = Math.hypot(camera.position.x - p[0], camera.position.z - p[2]);
+      const dyn = dynamicNpcState[npc.id];
+      const dd = Math.hypot(camera.position.x - dyn.x, camera.position.z - dyn.z);
       if (dd < TALK_RANGE && dd < bestD) {
         bestD = dd;
         best = npc.id;
@@ -246,7 +255,7 @@ function TalkFraming({ active }: { active: NPCName | null }) {
 
   useFrame((_, dt) => {
     if (!active) return;
-    const [x, , z] = NPC_POS[active];
+    const { x, z } = dynamicNpcState[active];
     target.set(x, 1.5, z);
     const k = 1 - Math.pow(0.0025, Math.min(dt, 0.05));
     look.current.lerp(target, k);
@@ -715,6 +724,134 @@ function Campfire() {
   );
 }
 
+// ─── Enemy characters ─────────────────────────────────────────────────────────
+
+function EnemyBody() {
+  return (
+    <group>
+      {/* Abstract dark spiky figure */}
+      <mesh castShadow position={[0, 0.7, 0]}>
+        <coneGeometry args={[0.5, 1.4, 6]} />
+        <meshStandardMaterial color="#1a0f1c" flatShading roughness={0.8} />
+      </mesh>
+      {/* Shoulders / Spikes */}
+      <mesh castShadow position={[-0.3, 1.0, 0]} rotation={[0, 0, 0.5]}>
+        <coneGeometry args={[0.15, 0.6, 4]} />
+        <meshStandardMaterial color="#2d1a30" flatShading />
+      </mesh>
+      <mesh castShadow position={[0.3, 1.0, 0]} rotation={[0, 0, -0.5]}>
+        <coneGeometry args={[0.15, 0.6, 4]} />
+        <meshStandardMaterial color="#2d1a30" flatShading />
+      </mesh>
+      {/* Head */}
+      <mesh castShadow position={[0, 1.6, 0]}>
+        <sphereGeometry args={[0.25, 8, 8]} />
+        <meshStandardMaterial color="#1a0f1c" flatShading />
+      </mesh>
+      {/* Glowing red eyes */}
+      <mesh position={[-0.08, 1.65, 0.22]}>
+        <sphereGeometry args={[0.04, 8, 8]} />
+        <meshBasicMaterial color="#ff2a2a" />
+      </mesh>
+      <mesh position={[0.08, 1.65, 0.22]}>
+        <sphereGeometry args={[0.04, 8, 8]} />
+        <meshBasicMaterial color="#ff2a2a" />
+      </mesh>
+    </group>
+  );
+}
+
+function Enemy({ id }: { id: string }) {
+  const group = useRef<THREE.Group>(null);
+
+  useFrame((state, dtRaw) => {
+    if (!group.current) return;
+    const dt = Math.min(dtRaw, 0.05);
+    const t = state.clock.elapsedTime;
+    const dyn = dynamicEnemyState[id];
+    
+    if (!dyn || dyn.dead) return;
+
+    const dx = 0 - dyn.x;
+    const dz = 0 - dyn.z;
+    const dist = Math.hypot(dx, dz);
+
+    let isMoving = false;
+    
+    // Move towards campfire (0,0)
+    if (dist > 1.8) {
+      isMoving = true;
+      const step = dyn.speed * dt;
+      const moveRatio = step / dist;
+      dyn.x += dx * moveRatio;
+      dyn.z += dz * moveRatio;
+    }
+
+    const phase = dyn.x * 2.1;
+    const speed = isMoving ? 5 : 2;
+    const amp = isMoving ? 0.15 : 0.08;
+
+    group.current.position.set(
+      dyn.x,
+      getHeightAt(dyn.x, dyn.z) + Math.abs(Math.sin(t * speed + phase)) * amp,
+      dyn.z
+    );
+
+    if (isMoving) {
+      group.current.rotation.y = Math.atan2(dx, dz) + Math.sin(t * 2.5 + phase) * 0.1;
+    } else {
+      group.current.rotation.y = Math.atan2(dx, dz) + Math.sin(t * 1.2 + phase) * 0.05;
+    }
+    group.current.rotation.z = Math.sin(t * 1.8 + phase) * 0.06;
+  });
+
+  const dyn = dynamicEnemyState[id];
+  if (!dyn || dyn.dead) return null;
+
+  return (
+    <group ref={group} position={[dyn.x, 0, dyn.z]}>
+      <EnemyBody />
+    </group>
+  );
+}
+
+function EnemySpawner() {
+  const [enemyIds, setEnemyIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    // Spawn 1 enemy every 5 seconds, up to 15 max
+    const interval = setInterval(() => {
+      setEnemyIds((prev) => {
+        const alive = prev.filter(id => !dynamicEnemyState[id]?.dead);
+        if (alive.length >= 15) return prev;
+
+        const id = Math.random().toString(36).substring(7);
+        const angle = Math.random() * Math.PI * 2;
+        const radius = WORLD_RADIUS + 2; // Spawn just outside
+
+        dynamicEnemyState[id] = {
+          x: Math.cos(angle) * radius,
+          z: Math.sin(angle) * radius,
+          speed: 1.5 + Math.random() * 1.0,
+          dead: false,
+        };
+
+        return [...alive, id];
+      });
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <group>
+      {enemyIds.map((id) => (
+        <Enemy key={id} id={id} />
+      ))}
+    </group>
+  );
+}
+
 function Village() {
   return (
     <group>
@@ -925,29 +1062,85 @@ function Character({
 }) {
   const group = useRef<THREE.Group>(null);
   const [hovered, setHovered] = useState(false);
-  const pos = NPC_POS[npc];
   const tmpScale = useMemo(() => new THREE.Vector3(), []);
 
-  useFrame((state) => {
+  useFrame((state, dtRaw) => {
     if (!group.current) return;
+    const dt = Math.min(dtRaw, 0.05); // cap delta
     const t = state.clock.elapsedTime;
-    const phase = pos[0] * 1.7; // stagger each villager
-    const speed = talking ? 6 : 2.4;
-    const amp = talking ? 0.16 : 0.11;
-    // Bouncier vertical bob, anchored to the ground height under the villager.
-    group.current.position.y = getHeightAt(pos[0], pos[2]) + Math.abs(Math.sin(t * speed + phase)) * amp;
-    // …plus a gentle side-to-side sway and lean so they feel alive.
-    group.current.rotation.y = Math.sin(t * 0.9 + phase) * 0.16;
+    const dyn = dynamicNpcState[npc];
+    
+    let isMoving = false;
+    let targetRotY = group.current.rotation.y;
+    
+    // Only wander if not active (talking to someone)
+    if (!active) {
+      const dx = dyn.targetX - dyn.x;
+      const dz = dyn.targetZ - dyn.z;
+      const dist = Math.hypot(dx, dz);
+      
+      if (dist > 0.05) {
+        isMoving = true;
+        const step = dyn.speed * dt;
+        const moveRatio = Math.min(1, step / dist);
+        dyn.x += dx * moveRatio;
+        dyn.z += dz * moveRatio;
+        targetRotY = Math.atan2(dx, dz);
+        dyn.timer = 0;
+      } else {
+        dyn.timer -= dt;
+        if (dyn.timer <= 0) {
+          const spawn = NPC_POS[npc];
+          const angle = Math.random() * Math.PI * 2;
+          const radius = Math.random() * 3.5;
+          
+          let nx = spawn[0] + Math.cos(angle) * radius;
+          let nz = spawn[2] + Math.sin(angle) * radius;
+          
+          const d = Math.hypot(nx, nz);
+          if (d > WORLD_RADIUS) {
+            nx = (nx / d) * WORLD_RADIUS;
+            nz = (nz / d) * WORLD_RADIUS;
+          }
+          dyn.targetX = nx;
+          dyn.targetZ = nz;
+          
+          dyn.timer = 2 + Math.random() * 4;
+        }
+      }
+    }
+
+    const phase = dyn.x * 1.7; // stagger each villager
+    const speed = talking ? 6 : (isMoving ? 4.5 : 2.4);
+    const amp = talking ? 0.16 : (isMoving ? 0.14 : 0.11);
+    
+    // Update dynamic position and grounded Y
+    group.current.position.set(
+      dyn.x,
+      getHeightAt(dyn.x, dyn.z) + Math.abs(Math.sin(t * speed + phase)) * amp,
+      dyn.z
+    );
+    
+    if (isMoving) {
+      // Snap rotation to target direction and add extra walking sway
+      group.current.rotation.y = targetRotY + Math.sin(t * 2 + phase) * 0.08;
+    } else {
+      // Gentle side-to-side sway when idle
+      group.current.rotation.y = Math.sin(t * 0.9 + phase) * 0.16;
+    }
     group.current.rotation.z = Math.sin(t * 1.5 + phase) * 0.05;
-    const target = active ? 1.14 : hovered ? 1.07 : 1;
-    tmpScale.set(target, target, target);
+    
+    const targetScale = active ? 1.14 : hovered ? 1.07 : 1;
+    tmpScale.set(targetScale, targetScale, targetScale);
     group.current.scale.lerp(tmpScale, 0.12);
   });
 
   const canClick = interactive && !dim && !active;
+  // Initialize with current dynamic state so they don't pop from NPC_POS on first frame
+  const initialPos = [dynamicNpcState[npc].x, 0, dynamicNpcState[npc].z] as [number, number, number];
 
   return (
-    <group ref={group} position={pos}>
+    <group ref={group} position={initialPos}>
       {/* Invisible hit target — generous, so the whole figure is clickable. */}
       <mesh
         position={[0, 1, 0]}
@@ -1147,6 +1340,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
           {explorable && active && view === 'fp' && <TalkFraming active={active} />}
 
           <Village />
+          {explorable && <EnemySpawner />}
           {showTitle && <FloatingTitle />}
 
           <ContactShadows position={[0, 0.01, 0]} opacity={0.45} scale={20} blur={2.4} far={6} />
