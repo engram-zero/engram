@@ -129,13 +129,14 @@ function Player({
   const move = useMemo(() => new THREE.Vector3(), []);
   const up = useMemo(() => new THREE.Vector3(0, 1, 0), []);
 
-  // Drop the camera at the spawn point whenever we (re)enter explore mode.
+  // Spawn ONCE when explore mode begins. Must not re-run when movement is merely
+  // toggled off/on for a dialogue, or leaving an NPC would teleport you back to
+  // the spawn point instead of where you were standing.
   useEffect(() => {
-    if (!enabled) return;
     const [sx, sz] = SPAWN_XZ;
     camera.position.set(sx, getHeightAt(sx, sz) + EYE_HEIGHT, sz);
     camera.lookAt(0, 1.2, 0);
-  }, [enabled, camera]);
+  }, [camera]);
 
   useFrame((_, dtRaw) => {
     if (!enabled) return;
@@ -948,12 +949,10 @@ export default function Scene3D({ memories = null, active = null, talking = fals
           {/* Cinematic rig on the title/loading screen; first-person controls
               once Aldenmoor is explorable. */}
           {!explorable && <CameraRig active={active} />}
-          {exploring && (
-            <>
-              <Player enabled={exploring} onNearbyChange={setNearby} />
-              <PointerLockControls onLock={() => setLocked(true)} onUnlock={() => setLocked(false)} />
-            </>
-          )}
+          {/* Player stays mounted across dialogues (movement gated by `enabled`)
+              so leaving an NPC resumes where you stood, not at spawn. */}
+          {explorable && <Player enabled={exploring} onNearbyChange={setNearby} />}
+          {exploring && <PointerLockControls onLock={() => setLocked(true)} onUnlock={() => setLocked(false)} />}
           {explorable && active && <TalkFraming active={active} />}
 
           <Village />
