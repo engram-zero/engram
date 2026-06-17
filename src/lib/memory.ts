@@ -14,12 +14,9 @@
 // rootHash. True cross-device recall would replace this pointer cache with an
 // on-chain registry / 0G-KV lookup (documented as next step).
 //
-// This module is browser-only (it uses window.ethereum + localStorage). It is
-// never imported by the /api/npc server route.
+// This module is browser-only (localStorage pointer cache; reads via fetch,
+// writes via POST /api/save). It is never imported by the API server routes.
 
-import { createBlob, generateMerkleTree, getRootHash } from '@/lib/0g/blob';
-import { getProvider, getSigner } from '@/lib/0g/fees';
-import { uploadToStorage } from '@/lib/0g/uploader';
 import { downloadByRootHashAPI } from '@/lib/0g/downloader';
 import { getNetworkConfig } from '@/lib/0g/network';
 import type { NetworkType } from '@/app/providers';
@@ -141,7 +138,7 @@ export async function readAllMemories(
   return bundle.npcs;
 }
 
-// ─── write (one upload = one wallet signature) ────────────────────────────────
+// ─── write (sponsored server-side upload to 0G) ───────────────────────────────
 
 export interface WriteResult {
   rootHash: string;
@@ -150,12 +147,13 @@ export interface WriteResult {
 
 /**
  * Persists one NPC's updated memory to 0G Storage. Reads the current bundle,
- * replaces just this NPC's slice (preserving the others), uploads the whole
- * bundle as a single blob, and caches the new rootHash pointer.
+ * replaces just this NPC's slice (preserving the others), and POSTs the whole
+ * bundle to /api/save, which performs the actual 0G upload server-side.
  *
- * Runs the full proven upload pipeline directly (blob → merkle → submission →
- * fees → submit tx → upload), so it can be called from anywhere in the client
- * (e.g. when the player leaves a conversation). Triggers ONE MetaMask signature.
+ * The 0G storage indexer/nodes don't send CORS headers, so the SDK can't run in
+ * the browser. The server uploads with a sponsor wallet; the memory is still
+ * keyed to the player's wallet address and content-addressed on 0G. We cache the
+ * returned rootHash pointer so this bundle can be read back next session.
  */
 export async function writeMemory(
   wallet: string,
@@ -163,56 +161,24 @@ export async function writeMemory(
   memory: NPCMemory,
   networkType: NetworkType
 ): Promise<WriteResult> {
-  // 1. Start from the current bundle (or a fresh one) and patch this NPC.
+  // Start from the current bundle (or a fresh one) and patch this NPC.
   const bundle = (await readBundle(wallet, networkType)) ?? emptyBundle(wallet);
   bundle.npcs[npcName] = memory;
   bundle.wallet = wallet.toLowerCase();
   bundle.version = BUNDLE_VERSION;
   bundle.updatedAt = Date.now();
 
-  // 2. Serialize the bundle into a File and run the 0G upload pipeline.
-  const json = JSON.stringify(bundle);
-  const file = new File([json], `engram_${wallet.toLowerCase()}.json`, {
-    type: 'application/json',
+  // Hand the full bundle to the server, which writes it to 0G (no CORS in Node).
+  const res = await fetch('/api/save', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ walletAddress: wallet, networkType, bundle }),
   });
-
-  const blob = createBlob(file);
-
-  const [tree, treeErr] = await generateMerkleTree(blob);
-  if (!tree) throw new Error(`Merkle tree failed: ${treeErr?.message}`);
-
-  const [rootHash, hashErr] = getRootHash(tree);
-  if (!rootHash) throw new Error(`Root hash failed: ${hashErr?.message}`);
-
-  // 3. Wallet provider / signer (the signer is what triggers MetaMask).
-  const [provider, providerErr] = await getProvider();
-  if (!provider) throw new Error(`Provider error: ${providerErr?.message}`);
-
-  const [signer, signerErr] = await getSigner(provider);
-  if (!signer) throw new Error(`Signer error: ${signerErr?.message}`);
-
-  const network = getNetworkConfig(networkType);
-
-  // 0G Chain has no EIP-1559. Fetch a plain legacy gasPrice (eth_gasPrice, no
-  // EIP-1559 probing); the SDK builds a type-0 tx with it (avoids the
-  // eth_maxPriorityFeePerGas -32601 that aborts the save). x2 for inclusion.
-  let gasPrice: bigint | undefined;
-  try {
-    const gp = BigInt(await provider.send('eth_gasPrice', []));
-    if (gp > BigInt(0)) gasPrice = gp * BigInt(2);
-  } catch {
-    // Leave undefined; the SDK falls back to the wallet's own gas handling.
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.rootHash) {
+    throw new Error(data.error || 'Save to 0G failed.');
   }
 
-  // 4. Let the 0G SDK do the on-chain submit AND the segment upload in one call.
-  // It reads the correct Flow address from the storage node and computes the
-  // exact storage fee itself — our hand-rolled fee calc + manual submit were
-  // reverting the tx. Returns the submit txHash.
-  const [txHash, uploadErr] = await uploadToStorage(blob, network.storageRpc, network.l1Rpc, signer, gasPrice);
-  if (uploadErr) throw new Error(`Upload error: ${uploadErr.message}`);
-
-  // 5. Remember the new anchor so we can read this bundle back next session.
-  setBundleRoot(wallet, rootHash);
-
-  return { rootHash, txHash: txHash || rootHash };
+  setBundleRoot(wallet, data.rootHash);
+  return { rootHash: data.rootHash, txHash: data.txHash || data.rootHash };
 }

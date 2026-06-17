@@ -217,7 +217,7 @@ function Game() {
             background: 'rgba(20,16,10,0.92)',
             borderColor: save.status === 'error' ? '#7a3a2a' : '#5a4a28',
           }}>
-          {save.status === 'saving' && '⛓ Saving memory to 0G… confirm in your wallet.'}
+          {save.status === 'saving' && '⛓ Saving memory to 0G…'}
           {save.status === 'saved' && (
             <span>
               ✓ Saved to 0G · root <span className="font-mono text-[#d6b84a]">{short(save.root)}</span>

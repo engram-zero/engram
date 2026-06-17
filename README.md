@@ -31,8 +31,11 @@ All three live in a single **MemoryBundle** per wallet, stored on **0G Storage**
 2. **Speak** — your message + that NPC's memory go to `POST /api/npc`, which injects
    the memory into the NPC's persona system prompt and asks **Claude** for an
    in-character turn (`src/app/api/npc/route.ts`). The Claude key stays server-side.
-3. **Persist** — when you leave an NPC, the updated bundle is uploaded back to 0G
-   with **one wallet signature** (your wallet pays the storage fee — you own the memory).
+3. **Persist** — when you leave an NPC, the updated bundle is written back to 0G via
+   `POST /api/save`. The 0G storage SDK can't run in the browser (the storage nodes
+   send no CORS headers), so the write runs server-side with a **sponsor wallet**.
+   The memory is still **keyed to your wallet address** and content-addressed on 0G —
+   the storage fee is just sponsored for the demo.
 
 Open the 📜 **Memory** panel to audit exactly what each NPC remembers: trust as a
 0–100 bar, the interaction log, current mood, and pending debts — all sourced from 0G.
@@ -45,7 +48,8 @@ src/
 │  ├─ client-page.tsx     the game UI (village, JRPG dialogue, memory panel)
 │  └─ api/npc/route.ts    server-side Claude dialogue engine (holds ANTHROPIC_API_KEY)
 ├─ lib/
-│  ├─ memory.ts           read/write the MemoryBundle on 0G (client, wallet signs writes)
+│  ├─ memory.ts           read the MemoryBundle from 0G (client) + POST writes to /api/save
+├─ app/api/save/route.ts  server-side 0G upload (sponsor wallet; SDK can't run in browser)
 │  ├─ npcs.ts             the 3 personas + {MEMORY_JSON} / {CROSS_MEMORY} prompts
 │  ├─ types.ts            shared types + memory schema
 │  └─ 0g/                 0G Storage primitives (upload/download/blob/fees) — starter kit
@@ -59,16 +63,17 @@ and wallet/config layers are the kit's proven 0G integration (real testnet uploa
 
 ```bash
 npm install --legacy-peer-deps   # web3modal pins zod; this is the standard resolve
-cp .env.example .env.local       # then paste your ANTHROPIC_API_KEY into .env.local
+cp .env.example .env.local       # set ANTHROPIC_API_KEY and ENGRAM_SPONSOR_KEY
 npm run dev                      # http://localhost:3000
 ```
 
-Connect a wallet on **0G Galileo (16602)** with testnet funds, talk to an NPC, and
-hit **Leave & save** to persist the conversation to 0G. Close the tab, come back —
-the NPC remembers.
+`ENGRAM_SPONSOR_KEY` is a funded **0G Galileo (16602)** testnet private key (server-only)
+that pays for storage writes — fund it at [faucet.0g.ai](https://faucet.0g.ai). Connect
+any wallet (it's your identity), talk to an NPC, and hit **Leave & save** to persist the
+conversation to 0G. Close the tab, come back — the NPC remembers.
 
 > Without `ANTHROPIC_API_KEY`, NPCs use a deterministic fallback so the UI is still
-> clickable. Set the key for real Claude-powered dialogue.
+> clickable. Without `ENGRAM_SPONSOR_KEY`, dialogue works but saving to 0G is disabled.
 
 ## For AI assistants & contributors
 
