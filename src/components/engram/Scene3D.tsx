@@ -332,7 +332,7 @@ function AerialRig({ enabled, posRef }: { enabled: boolean; posRef: PlayerPosRef
   useEffect(() => {
     if (!enabled) return;
     const onWheel = (e: WheelEvent) => {
-      zoom.current = THREE.MathUtils.clamp(zoom.current - e.deltaY * 0.02, 14, 50);
+      zoom.current = THREE.MathUtils.clamp(zoom.current - e.deltaY * 0.02, 7, 55);
     };
     window.addEventListener('wheel', onWheel, { passive: true });
     return () => window.removeEventListener('wheel', onWheel);
@@ -1117,6 +1117,7 @@ function Character({
   dim,
   talking,
   interactive,
+  aerial,
   onSelect,
 }: {
   npc: NPCName;
@@ -1128,6 +1129,7 @@ function Character({
   dim: boolean;
   talking: boolean;
   interactive: boolean;
+  aerial: boolean;
   onSelect: (npc: NPCName) => void;
 }) {
   const group = useRef<THREE.Group>(null);
@@ -1339,18 +1341,23 @@ function Character({
         <CharacterBody npc={npc} accent={accent} />
       </DimGroup>
 
-      {/* Floating label + trust bar. */}
-      <Html position={[0, 2.15, 0]} center distanceFactor={9} pointerEvents="none" style={{ opacity: dim ? 0.3 : 1, transition: 'opacity 0.3s' }}>
-        <div ref={htmlRef} style={{ textAlign: 'center', fontFamily: 'var(--engram-serif, serif)', color: '#f4e8d0', textShadow: '0 2px 6px #000', userSelect: 'none', width: 120 }}>
-          <div style={{ fontWeight: 700, fontSize: 16, color: accent }}>{name}</div>
-          <div style={{ fontSize: 11, fontStyle: 'italic', opacity: 0.8, marginTop: -2 }}>{role}</div>
-          {memory && (
-            <div style={{ width: 70, height: 5, margin: '4px auto 0', background: 'rgba(0,0,0,0.5)', borderRadius: 3, overflow: 'hidden' }} title={`trust ${memory.trust_level}`}>
-              <div style={{ width: `${memory.trust_level}%`, height: '100%', background: trustColor(memory.trust_level) }} />
-            </div>
-          )}
-        </div>
-      </Html>
+      {/* Floating label + trust bar. Hidden in the aerial view: drei <Html>
+          distanceFactor scales by the camera zoom, and under the high-zoom
+          orthographic aerial camera it blows the labels up to giant overlapping
+          text across the screen (the "stray letters"). */}
+      {!aerial && (
+        <Html position={[0, 2.15, 0]} center distanceFactor={9} pointerEvents="none" style={{ opacity: dim ? 0.3 : 1, transition: 'opacity 0.3s' }}>
+          <div ref={htmlRef} style={{ textAlign: 'center', fontFamily: 'var(--engram-serif, serif)', color: '#f4e8d0', textShadow: '0 2px 6px #000', userSelect: 'none', width: 120 }}>
+            <div style={{ fontWeight: 700, fontSize: 16, color: accent }}>{name}</div>
+            <div style={{ fontSize: 11, fontStyle: 'italic', opacity: 0.8, marginTop: -2 }}>{role}</div>
+            {memory && (
+              <div style={{ width: 70, height: 5, margin: '4px auto 0', background: 'rgba(0,0,0,0.5)', borderRadius: 3, overflow: 'hidden' }} title={`trust ${memory.trust_level}`}>
+                <div style={{ width: `${memory.trust_level}%`, height: '100%', background: trustColor(memory.trust_level) }} />
+              </div>
+            )}
+          </div>
+        </Html>
+      )}
     </group>
   );
 }
@@ -1577,6 +1584,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
               dim={!!active && active !== npc.id}
               talking={talking && active === npc.id}
               interactive={interactive && !explorable}
+              aerial={view === 'aerial'}
               onSelect={onSelect}
             />
           ))}
