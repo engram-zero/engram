@@ -9,12 +9,26 @@ import { Contract } from 'ethers';
  * @returns A promise that resolves to the transaction result and any error
  */
 export async function submitTransaction(
-  flowContract: Contract, 
-  submission: any, 
+  flowContract: Contract,
+  submission: any,
   value: bigint
 ): Promise<[any | null, Error | null]> {
   try {
-    const tx = await flowContract.submit(submission, { value });
+    // 0G Chain is a legacy (non-EIP-1559) chain. Without an explicit gasPrice,
+    // ethers/MetaMask try the EIP-1559 path and call eth_maxPriorityFeePerGas,
+    // which the RPC doesn't implement (-32601) → the tx fails with an Internal
+    // JSON-RPC error (-32603). Fetch the legacy gasPrice and pass it so the tx
+    // is built as type-0 and skips the priority-fee call entirely.
+    const overrides: { value: bigint; gasPrice?: bigint } = { value };
+    try {
+      const provider = (flowContract.runner as { provider?: { getFeeData: () => Promise<{ gasPrice: bigint | null }> } })?.provider;
+      const feeData = provider ? await provider.getFeeData() : null;
+      if (feeData?.gasPrice) overrides.gasPrice = feeData.gasPrice;
+    } catch {
+      // No gasPrice available — fall through and let the wallet decide.
+    }
+
+    const tx = await flowContract.submit(submission, overrides);
     const receipt = await tx.wait();
     return [{ tx, receipt }, null];
   } catch (error) {
