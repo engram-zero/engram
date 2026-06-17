@@ -17,6 +17,7 @@
 5. [Texturas PNG en lugar de materiales planos](#prompt-5--texturas-png) — ⏳ pendiente
 6. [Audio ambiental (fogata, pasos, noche)](#prompt-6--audio-ambiental) — ⏳ pendiente
 7. [Verificar end-to-end la UX del 429 en el cliente](#prompt-7--verificación-diferida-ux-del-429) — ⏳ diferida (ver precondición)
+8. [Visión: gameplay loop, doble vista y mundo persistente en 0G](#prompt-8--visión-gameplay-loop--doble-vista) — 🔭 roadmap (post-MVP)
 
 > **Tareas no-código (ADMIN):** ✅ deploy a Vercel + env vars · ✅ save a 0G end-to-end ·
 > ⏳ actualizar la Description del dashboard 0g.ai (versión honesta) ·
@@ -408,6 +409,61 @@ Confirmar, conduciendo la app real, que el cruce client↔servidor del 429 funci
   2. Salir del diálogo cancela el reintento (sin efectos colaterales).
   3. Esperas largas no auto-reintentan.
 ```
+
+---
+
+## Prompt 8 — Visión: gameplay loop + doble vista
+
+> 🔭 **Roadmap post-MVP, NO para el deadline del 23.** No construir antes del video.
+> Esto es una visión por fases, no un prompt único; cada fase puede volverse su propio
+> prompt. Origen: queremos una mecánica REAL de ganar monedas (hoy las monedas/“comprar
+> información” son solo narrativa del LLM, no un sistema real).
+
+### Principio rector (no negociable)
+El diferenciador de Engram es **IA + memoria propiedad del jugador en 0G**. Todo lo que se
+construya aquí debe ser **vehículo de esa tesis**, no un clon de Age of Empires:
+- **El estado del mundo (lo plantado/construido/explorado) se persiste en 0G, indexado a la
+  wallet del jugador** — exactamente como la memoria de los NPCs hoy. Eso lo vuelve
+  "real-real" y on-theme: un mundo persistente y propiedad del jugador.
+- La IA gobierna la simulación (agentes de naturaleza), no solo el diálogo.
+- El token/monedas viene AL FINAL y se ancla a actividad real (ver `docs/ENGRAM_ECONOMY.md`);
+  nada de "play-to-earn" hueco.
+
+### Fase 8a — Doble cámara: primera persona ↔ cenital (tipo AoE)  ← empezar por aquí
+Quick win, alto valor, bajo riesgo. En `src/components/engram/Scene3D.tsx`:
+- Toggle de cámara: la actual **perspectiva en primera persona** ↔ una **ortográfica
+  cenital** (RTS) que sobrevuela el terreno (`map.ts` ya da alturas y props).
+- En vista cenital: paneo (WASD/drag), zoom (rueda), límites del mundo; sin pointer-lock.
+- Objetivo de experiencia: "explora con tu avatar / admira desde el aire lo explorado y lo
+  que falta". No romper el flujo de diálogo ni el HUD de primera persona.
+- Criterio: alternar vista con una tecla/botón; ambas fluidas a 60 fps; NPCs y props
+  visibles en ambas. `tsc` limpio.
+
+### Fase 8b — Construir + recursos, persistido en 0G
+- Acciones básicas: **plantar árboles** (semilla → crecimiento con el tiempo) y **talar**
+  para obtener **madera**; un inventario simple de recursos.
+- Construir estructuras con recursos; si el mapa crece, agrupar en **aldeas**.
+- CLAVE: el **estado del mundo del jugador** (árboles plantados, edificios, recursos) se
+  serializa y **se guarda en 0G** vía el mismo patrón que la memoria (`/api/save` + bundle
+  por wallet). Reusar `src/lib/memory.ts` / `src/app/api/save/route.ts` como modelo.
+- Las **monedas** se ganan por actividad real (talar/comerciar/construir), no de la nada.
+  Engancha con `debts`/economía ya existente en la memoria de los NPCs.
+
+### Fase 8c — Agentes de naturaleza (IA gobernando la sim)
+- **Agente Tierra**: por zona del mapa, dice qué tan rápido crecen los árboles (fertilidad).
+- **Agente Fauna**: comportamiento de animales (hostil/neutral), dónde proliferan, etc.
+- Reusar el patrón server-side de `/api/npc` (un endpoint por agente que devuelve parámetros
+  de la sim). Estos agentes también pueden tener **memoria en 0G** (estado del ecosistema).
+- Esto es lo que evita el "se siente como AoE": el mundo está vivo y **dirigido por IA**.
+
+### Fase 8d — Economía/token
+- Solo cuando 8a–8c den un juego que la gente quiera jugar. Anclar a actividad real y a la
+  reputación persistente. Detalle en `docs/ENGRAM_ECONOMY.md`.
+
+### Recordatorio de alcance
+Cada fase es semanas de trabajo. Prioriza **8a** (barato, diferenciador) y mantén la IA +
+0G en el centro. No dejes que la parte de "construir/RTS" canibalice lo único que te
+distingue: NPCs/mundo con memoria persistente y propiedad del jugador en 0G.
 
 ---
 
