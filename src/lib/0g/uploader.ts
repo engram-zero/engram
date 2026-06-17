@@ -59,7 +59,7 @@ export async function submitTransaction(
  * @param storageRpc The storage RPC URL
  * @param l1Rpc The L1 RPC URL
  * @param signer The signer
- * @returns A promise that resolves to a success flag and any error
+ * @returns A promise that resolves to the submit txHash and any error
  */
 export async function uploadToStorage(
   blob: Blob,
@@ -67,10 +67,12 @@ export async function uploadToStorage(
   l1Rpc: string,
   signer: any,
   gasPrice?: bigint
-): Promise<[boolean, Error | null]> {
+): Promise<[string, Error | null]> {
   try {
     const indexer = new Indexer(storageRpc);
 
+    // skipTx:false → the SDK does the on-chain flow.submit (with the correct
+    // fee, read from the node) AND uploads the segments, then returns the txHash.
     const uploadOptions = {
       taskSize: 10,
       expectedReplica: 1,
@@ -80,12 +82,17 @@ export async function uploadToStorage(
       fee: BigInt(0)
     };
 
-    // Force the SDK's internal flow tx to legacy gas too (same 0G no-EIP-1559
-    // issue). The 6th arg is TransactionOptions { gasPrice, gasLimit }.
+    // Force the SDK's flow tx to legacy gas (0G has no EIP-1559). The 6th arg is
+    // TransactionOptions { gasPrice, gasLimit }.
     const txOpts = gasPrice ? { gasPrice } : undefined;
-    await indexer.upload(blob, l1Rpc, signer, uploadOptions, undefined, txOpts);
-    return [true, null];
+    const [txHash, err] = await indexer.upload(blob, l1Rpc, signer, uploadOptions, undefined, txOpts);
+    if (err) {
+      const e = err as { reason?: string; shortMessage?: string; info?: { error?: { message?: string } }; message?: string };
+      return ['', new Error(e.reason || e.info?.error?.message || e.shortMessage || e.message || String(err))];
+    }
+    return [txHash, null];
   } catch (error) {
-    return [false, error instanceof Error ? error : new Error(String(error))];
+    const e = error as { reason?: string; shortMessage?: string; info?: { error?: { message?: string } }; message?: string };
+    return ['', new Error(e.reason || e.info?.error?.message || e.shortMessage || e.message || String(error))];
   }
 } 

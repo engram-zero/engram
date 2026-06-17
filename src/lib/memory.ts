@@ -17,9 +17,9 @@
 // This module is browser-only (it uses window.ethereum + localStorage). It is
 // never imported by the /api/npc server route.
 
-import { createBlob, generateMerkleTree, getRootHash, createSubmission } from '@/lib/0g/blob';
-import { getProvider, getSigner, getFlowContract, calculateFees } from '@/lib/0g/fees';
-import { submitTransaction, uploadToStorage } from '@/lib/0g/uploader';
+import { createBlob, generateMerkleTree, getRootHash } from '@/lib/0g/blob';
+import { getProvider, getSigner } from '@/lib/0g/fees';
+import { uploadToStorage } from '@/lib/0g/uploader';
 import { downloadByRootHashAPI } from '@/lib/0g/downloader';
 import { getNetworkConfig } from '@/lib/0g/network';
 import type { NetworkType } from '@/app/providers';
@@ -184,10 +184,7 @@ export async function writeMemory(
   const [rootHash, hashErr] = getRootHash(tree);
   if (!rootHash) throw new Error(`Root hash failed: ${hashErr?.message}`);
 
-  const [submission, submissionErr] = await createSubmission(blob);
-  if (!submission) throw new Error(`Submission failed: ${submissionErr?.message}`);
-
-  // 3. Wallet provider / signer (this is what triggers MetaMask).
+  // 3. Wallet provider / signer (the signer is what triggers MetaMask).
   const [provider, providerErr] = await getProvider();
   if (!provider) throw new Error(`Provider error: ${providerErr?.message}`);
 
@@ -195,33 +192,27 @@ export async function writeMemory(
   if (!signer) throw new Error(`Signer error: ${signerErr?.message}`);
 
   const network = getNetworkConfig(networkType);
-  const flowContract = getFlowContract(network.flowAddress, signer);
-
-  const [fees, feeErr] = await calculateFees(submission, flowContract, provider);
-  if (!fees) throw new Error(`Fee calc error: ${feeErr?.message}`);
 
   // 0G Chain has no EIP-1559. Fetch a plain legacy gasPrice (eth_gasPrice, no
-  // EIP-1559 probing) and force BOTH on-chain txs (our submit + the SDK's
-  // internal upload tx) to type-0. Otherwise ethers/MetaMask call
-  // eth_maxPriorityFeePerGas — unsupported on 0G (-32601) — and the save fails
-  // with an Internal JSON-RPC error (-32603). Bump x2 for reliable inclusion.
+  // EIP-1559 probing); the SDK builds a type-0 tx with it (avoids the
+  // eth_maxPriorityFeePerGas -32601 that aborts the save). x2 for inclusion.
   let gasPrice: bigint | undefined;
   try {
     const gp = BigInt(await provider.send('eth_gasPrice', []));
     if (gp > BigInt(0)) gasPrice = gp * BigInt(2);
   } catch {
-    // Leave undefined; the helpers fall back to the wallet's own gas handling.
+    // Leave undefined; the SDK falls back to the wallet's own gas handling.
   }
 
-  // 4. Submit the flow-contract tx (signature + storage fee), then upload bytes.
-  const [txResult, txErr] = await submitTransaction(flowContract, submission, fees.rawTotalFee, gasPrice);
-  if (!txResult) throw new Error(`Transaction error: ${txErr?.message}`);
-
-  const [ok, uploadErr] = await uploadToStorage(blob, network.storageRpc, network.l1Rpc, signer, gasPrice);
-  if (!ok) throw new Error(`Upload error: ${uploadErr?.message}`);
+  // 4. Let the 0G SDK do the on-chain submit AND the segment upload in one call.
+  // It reads the correct Flow address from the storage node and computes the
+  // exact storage fee itself — our hand-rolled fee calc + manual submit were
+  // reverting the tx. Returns the submit txHash.
+  const [txHash, uploadErr] = await uploadToStorage(blob, network.storageRpc, network.l1Rpc, signer, gasPrice);
+  if (uploadErr) throw new Error(`Upload error: ${uploadErr.message}`);
 
   // 5. Remember the new anchor so we can read this bundle back next session.
   setBundleRoot(wallet, rootHash);
 
-  return { rootHash, txHash: txResult.tx.hash };
+  return { rootHash, txHash: txHash || rootHash };
 }
