@@ -47,13 +47,15 @@ const NPC_POS: Record<NPCName, [number, number, number]> = {
   sable: [3.4, 0, 0.4],
 };
 
-export const dynamicNpcState: Record<NPCName, { x: number; z: number; targetX: number; targetZ: number; timer: number; speed: number }> = {
-  aldric: { x: NPC_POS.aldric[0], z: NPC_POS.aldric[2], targetX: NPC_POS.aldric[0], targetZ: NPC_POS.aldric[2], timer: 0, speed: 0.8 },
-  maren: { x: NPC_POS.maren[0], z: NPC_POS.maren[2], targetX: NPC_POS.maren[0], targetZ: NPC_POS.maren[2], timer: 0, speed: 1.2 },
-  sable: { x: NPC_POS.sable[0], z: NPC_POS.sable[2], targetX: NPC_POS.sable[0], targetZ: NPC_POS.sable[2], timer: 0, speed: 0.7 },
+export const dynamicNpcState: Record<NPCName, { x: number; z: number; targetX: number; targetZ: number; timer: number; speed: number; hp: number; maxHp: number; knockedOut: boolean; reviveTimer: number; attackTimer: number }> = {
+  aldric: { x: NPC_POS.aldric[0], z: NPC_POS.aldric[2], targetX: NPC_POS.aldric[0], targetZ: NPC_POS.aldric[2], timer: 0, speed: 0.8, hp: 100, maxHp: 100, knockedOut: false, reviveTimer: 0, attackTimer: 0 },
+  maren: { x: NPC_POS.maren[0], z: NPC_POS.maren[2], targetX: NPC_POS.maren[0], targetZ: NPC_POS.maren[2], timer: 0, speed: 1.2, hp: 150, maxHp: 150, knockedOut: false, reviveTimer: 0, attackTimer: 0 },
+  sable: { x: NPC_POS.sable[0], z: NPC_POS.sable[2], targetX: NPC_POS.sable[0], targetZ: NPC_POS.sable[2], timer: 0, speed: 0.7, hp: 100, maxHp: 100, knockedOut: false, reviveTimer: 0, attackTimer: 0 },
 };
 
-export const dynamicEnemyState: Record<string, { x: number; z: number; speed: number; dead: boolean }> = {};
+export const dynamicEnemyState: Record<string, { x: number; z: number; speed: number; dead: boolean; hp: number; maxHp: number; attackTimer: number }> = {};
+
+export const dynamicPlayerState = { x: 0, z: 0, hp: 100, maxHp: 100, dead: false, attackTimer: 0 };
 
 // ─── First-person walking constants ───────────────────────────────────────────
 const EYE_HEIGHT = 1.7;
@@ -143,17 +145,20 @@ function Player({
   posRef,
   onNearbyChange,
   onNearbyTreeChange,
+  onNearbyEnemyChange,
 }: {
   enabled: boolean;
   posRef: PlayerPosRef;
   onNearbyChange: (npc: NPCName | null) => void;
   onNearbyTreeChange?: (treeIdx: number | null) => void;
+  onNearbyEnemyChange?: (enemyId: string | null) => void;
 }) {
   const { camera } = useThree();
   const [, getKeys] = useKeyboardControls();
   const bob = useRef({ t: 0, off: 0 });
   const nearbyRef = useRef<NPCName | null>(null);
   const treeRef = useRef<number | null>(null);
+  const nearbyEnemyRef = useRef<string | null>(null);
   const didLook = useRef(false);
   const forward = useMemo(() => new THREE.Vector3(), []);
   const right = useMemo(() => new THREE.Vector3(), []);
@@ -207,12 +212,17 @@ function Player({
     posRef.current.x = camera.position.x;
     posRef.current.z = camera.position.z;
     posRef.current.heading = Math.atan2(forward.x, forward.z);
+    
+    // Publish to dynamic state for Enemy targeting
+    dynamicPlayerState.x = camera.position.x;
+    dynamicPlayerState.z = camera.position.z;
 
     // Nearest villager within talking range.
     let best: NPCName | null = null;
     let bestD = Infinity;
     for (const npc of NPC_LIST) {
       const dyn = dynamicNpcState[npc.id];
+      if (dyn.knockedOut) continue;
       const dd = Math.hypot(camera.position.x - dyn.x, camera.position.z - dyn.z);
       if (dd < TALK_RANGE && dd < bestD) {
         bestD = dd;
@@ -240,6 +250,22 @@ function Player({
     if (treeIdx !== treeRef.current) {
       treeRef.current = treeIdx;
       onNearbyTreeChange?.(treeIdx);
+    }
+    
+    // Nearest enemy within attack range.
+    let bestEnemy: string | null = null;
+    let bestEd = Infinity;
+    for (const [id, enemy] of Object.entries(dynamicEnemyState)) {
+      if (enemy.dead) continue;
+      const dd = Math.hypot(camera.position.x - enemy.x, camera.position.z - enemy.z);
+      if (dd < 4.0 && dd < bestEd) {
+        bestEd = dd;
+        bestEnemy = id;
+      }
+    }
+    if (onNearbyEnemyChange && bestEnemy !== nearbyEnemyRef.current) {
+      nearbyEnemyRef.current = bestEnemy;
+      onNearbyEnemyChange(bestEnemy);
     }
   });
 
@@ -775,17 +801,82 @@ function Enemy({ id }: { id: string }) {
     
     if (!dyn || dyn.dead) return;
 
-    const dx = 0 - dyn.x;
-    const dz = 0 - dyn.z;
-    const dist = Math.hypot(dx, dz);
-
-    let isMoving = false;
+    // Find closest alive NPC
+    let closestNpcId: NPCName | null = null;
+    let closestDist = Infinity;
+    for (const [id, npcState] of Object.entries(dynamicNpcState)) {
+      if (npcState.knockedOut) continue;
+      const d = Math.hypot(npcState.x - dyn.x, npcState.z - dyn.z);
+      if (d < closestDist) {
+        closestDist = d;
+        closestNpcId = id as NPCName;
+      }
+    }
     
-    // Move towards campfire (0,0)
-    if (dist > 1.8) {
-      isMoving = true;
+    // Check distance to player
+    if (!dynamicPlayerState.dead) {
+      const pDist = Math.hypot(dynamicPlayerState.x - dyn.x, dynamicPlayerState.z - dyn.z);
+      if (pDist < closestDist) {
+        closestDist = pDist;
+        closestNpcId = 'player' as any;
+      }
+    }
+
+    let targetX = 0;
+    let targetZ = 0;
+    let isMoving = false;
+
+    if (closestNpcId && closestDist < 12) {
+      // Chase target
+      if (closestNpcId === ('player' as any)) {
+        targetX = dynamicPlayerState.x;
+        targetZ = dynamicPlayerState.z;
+        if (closestDist < 1.4) {
+          dyn.attackTimer -= dt;
+          if (dyn.attackTimer <= 0) {
+            dynamicPlayerState.hp -= 15; // Enemy DPS
+            dyn.attackTimer = 1.0;
+            if (dynamicPlayerState.hp <= 0) {
+              dynamicPlayerState.dead = true;
+            }
+          }
+        } else {
+          isMoving = true;
+        }
+      } else {
+        const npcState = dynamicNpcState[closestNpcId];
+        targetX = npcState.x;
+        targetZ = npcState.z;
+        if (closestDist < 1.4) {
+          dyn.attackTimer -= dt;
+          if (dyn.attackTimer <= 0) {
+            npcState.hp -= 15; // Enemy DPS
+            dyn.attackTimer = 1.0;
+            if (npcState.hp <= 0) {
+              npcState.knockedOut = true;
+              npcState.reviveTimer = 20; // 20s to revive
+            }
+          }
+        } else {
+          isMoving = true;
+        }
+      }
+    } else {
+      // No NPC nearby or all dead, move towards campfire (0,0)
+      const distToCenter = Math.hypot(0 - dyn.x, 0 - dyn.z);
+      if (distToCenter > 1.8) {
+        targetX = 0;
+        targetZ = 0;
+        isMoving = true;
+      }
+    }
+
+    const dx = targetX - dyn.x;
+    const dz = targetZ - dyn.z;
+    
+    if (isMoving) {
       const step = dyn.speed * dt;
-      const moveRatio = step / dist;
+      const moveRatio = step / Math.hypot(dx, dz);
       dyn.x += dx * moveRatio;
       dyn.z += dz * moveRatio;
     }
@@ -837,6 +928,9 @@ function EnemySpawner() {
           z: Math.sin(angle) * radius,
           speed: 1.5 + Math.random() * 1.0,
           dead: false,
+          hp: 50,
+          maxHp: 50,
+          attackTimer: 0,
         };
 
         return [...alive, id];
@@ -1064,6 +1158,7 @@ function Character({
   onSelect: (npc: NPCName) => void;
 }) {
   const group = useRef<THREE.Group>(null);
+  const htmlRef = useRef<HTMLDivElement>(null);
   const [hovered, setHovered] = useState(false);
   const tmpScale = useMemo(() => new THREE.Vector3(), []);
 
@@ -1073,11 +1168,110 @@ function Character({
     const t = state.clock.elapsedTime;
     const dyn = dynamicNpcState[npc];
     
+    if (htmlRef.current) {
+      htmlRef.current.style.visibility = dyn.knockedOut ? 'hidden' : 'visible';
+    }
+
+    // Knockout logic
+    if (dyn.knockedOut) {
+      dyn.reviveTimer -= dt;
+      if (dyn.reviveTimer <= 0) {
+        dyn.knockedOut = false;
+        dyn.hp = dyn.maxHp;
+        group.current.rotation.x = 0; // stand up
+      } else {
+        // Lying down
+        group.current.rotation.x = Math.PI / 2;
+        group.current.position.set(dyn.x, getHeightAt(dyn.x, dyn.z) + 0.3, dyn.z);
+        // Dim knocked out characters
+        const targetScale = 1;
+        tmpScale.set(targetScale, targetScale, targetScale);
+        group.current.scale.lerp(tmpScale, 0.12);
+        return; // skip movement and swaying
+      }
+    }
+
     let isMoving = false;
     let targetRotY = group.current.rotation.y;
+    let combatEngaged = false;
     
-    // Only wander if not active (talking to someone)
-    if (!active) {
+    // Maren Guard AI
+    if (npc === 'maren' && !active) {
+      let closestEnemyId: string | null = null;
+      let closestDist = Infinity;
+      for (const [id, enemy] of Object.entries(dynamicEnemyState)) {
+        if (enemy.dead) continue;
+        const d = Math.hypot(enemy.x - dyn.x, enemy.z - dyn.z);
+        if (d < closestDist) {
+          closestDist = d;
+          closestEnemyId = id;
+        }
+      }
+
+      if (closestEnemyId && closestDist < 15) {
+        combatEngaged = true;
+        const enemy = dynamicEnemyState[closestEnemyId];
+        dyn.targetX = enemy.x;
+        dyn.targetZ = enemy.z;
+        
+        const dx = dyn.targetX - dyn.x;
+        const dz = dyn.targetZ - dyn.z;
+
+        if (closestDist < 1.4) {
+          // Attack
+          isMoving = false;
+          targetRotY = Math.atan2(dx, dz);
+          dyn.attackTimer -= dt;
+          if (dyn.attackTimer <= 0) {
+            enemy.hp -= 25; // Guard DPS
+            dyn.attackTimer = 1.0;
+            if (enemy.hp <= 0) enemy.dead = true;
+          }
+        } else {
+          isMoving = true;
+          const step = dyn.speed * 1.5 * dt; // run faster when in combat
+          const moveRatio = step / closestDist;
+          dyn.x += dx * moveRatio;
+          dyn.z += dz * moveRatio;
+          targetRotY = Math.atan2(dx, dz);
+        }
+      }
+    }
+    
+    // Only wander if not active (talking to someone) and not in combat
+    if (!active && !combatEngaged) {
+      // For non-Maren NPCs, flee if an enemy is nearby
+      if (npc !== 'maren') {
+        let closestEnemyDist = Infinity;
+        let closestEnemy: any = null;
+        for (const [id, enemy] of Object.entries(dynamicEnemyState)) {
+          if (enemy.dead) continue;
+          const d = Math.hypot(enemy.x - dyn.x, enemy.z - dyn.z);
+          if (d < closestEnemyDist) {
+            closestEnemyDist = d;
+            closestEnemy = enemy;
+          }
+        }
+        
+        if (closestEnemy && closestEnemyDist < 10) {
+          const dx = dyn.x - closestEnemy.x;
+          const dz = dyn.z - closestEnemy.z;
+          const angle = Math.atan2(dx, dz);
+          dyn.targetX = dyn.x + Math.sin(angle) * 5;
+          dyn.targetZ = dyn.z + Math.cos(angle) * 5;
+          
+          const distToCenter = Math.hypot(dyn.targetX, dyn.targetZ);
+          if (distToCenter > WORLD_RADIUS) {
+            dyn.targetX = (dyn.targetX / distToCenter) * WORLD_RADIUS;
+            dyn.targetZ = (dyn.targetZ / distToCenter) * WORLD_RADIUS;
+          }
+          dyn.speed = 2.5; // sprint away
+          dyn.timer = 0; // force move
+        } else {
+          dyn.speed = 0.8; // back to normal
+        }
+      }
+
       const dx = dyn.targetX - dyn.x;
       const dz = dyn.targetZ - dyn.z;
       const dist = Math.hypot(dx, dz);
@@ -1149,7 +1343,7 @@ function Character({
         position={[0, 1, 0]}
         visible={false}
         onPointerOver={(e) => {
-          if (!canClick) return;
+          if (!canClick || dynamicNpcState[npc].knockedOut) return;
           e.stopPropagation();
           setHovered(true);
           document.body.style.cursor = 'pointer';
@@ -1159,7 +1353,7 @@ function Character({
           document.body.style.cursor = 'default';
         }}
         onClick={(e) => {
-          if (!canClick) return;
+          if (!canClick || dynamicNpcState[npc].knockedOut) return;
           e.stopPropagation();
           onSelect(npc);
         }}
@@ -1174,7 +1368,7 @@ function Character({
 
       {/* Floating label + trust bar. */}
       <Html position={[0, 2.15, 0]} center distanceFactor={9} pointerEvents="none" style={{ opacity: dim ? 0.3 : 1, transition: 'opacity 0.3s' }}>
-        <div style={{ textAlign: 'center', fontFamily: 'var(--engram-serif, serif)', color: '#f4e8d0', textShadow: '0 2px 6px #000', userSelect: 'none', width: 120 }}>
+        <div ref={htmlRef} style={{ textAlign: 'center', fontFamily: 'var(--engram-serif, serif)', color: '#f4e8d0', textShadow: '0 2px 6px #000', userSelect: 'none', width: 120 }}>
           <div style={{ fontWeight: 700, fontSize: 16, color: accent }}>{name}</div>
           <div style={{ fontSize: 11, fontStyle: 'italic', opacity: 0.8, marginTop: -2 }}>{role}</div>
           {memory && (
@@ -1235,10 +1429,17 @@ export default function Scene3D({ memories = null, active = null, talking = fals
   const [nearbyTree, setNearbyTree] = useState<number | null>(null);
   const [locked, setLocked] = useState(false);
   const [view, setView] = useState<ViewMode>('fp');
+  const [flash, setFlash] = useState(false);
+  const [playerHp, setPlayerHp] = useState(100);
+  const [nearbyEnemy, setNearbyEnemy] = useState<string | null>(null);
+  
   const nearbyRef = useRef<NPCName | null>(null);
   nearbyRef.current = nearby;
   const nearbyTreeRef = useRef<number | null>(null);
   nearbyTreeRef.current = nearbyTree;
+  const nearbyEnemyRef = useRef<string | null>(null);
+  nearbyEnemyRef.current = nearbyEnemy;
+  
   const world = useWorld();
 
   // Shared player position (first-person camera ↔ aerial avatar).
@@ -1267,6 +1468,41 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [exploring, onSelect, view]);
+
+  // Player combat listener
+  useEffect(() => {
+    if (!exploring) return;
+    const onMouseDown = (e: MouseEvent) => {
+      // Only trigger if locked (first person) and left click
+      if (document.pointerLockElement && e.button === 0 && nearbyEnemyRef.current) {
+        const enemy = dynamicEnemyState[nearbyEnemyRef.current];
+        if (enemy && !enemy.dead) {
+          enemy.hp -= 25;
+          if (enemy.hp <= 0) enemy.dead = true;
+          setFlash(true);
+          setTimeout(() => setFlash(false), 80);
+        }
+      }
+    };
+    window.addEventListener('mousedown', onMouseDown);
+    return () => window.removeEventListener('mousedown', onMouseDown);
+  }, [exploring]);
+  
+  // Sync player HP to UI and handle death
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (playerHp !== dynamicPlayerState.hp) {
+        setPlayerHp(dynamicPlayerState.hp);
+      }
+      if (dynamicPlayerState.dead) {
+        dynamicPlayerState.hp = dynamicPlayerState.maxHp;
+        dynamicPlayerState.dead = false;
+        posRef.current = { x: SPAWN_XZ[0], z: SPAWN_XZ[1], heading: 0 };
+        setPlayerHp(dynamicPlayerState.maxHp);
+      }
+    }, 100);
+    return () => clearInterval(interval);
+  }, [playerHp]);
 
   // Clear the proximity prompt and lock state whenever we leave explore mode
   // (dialogue or a GUI opened), so the HUD is correct when control returns.
@@ -1330,8 +1566,14 @@ export default function Scene3D({ memories = null, active = null, talking = fals
           {!explorable && <CameraRig active={active} />}
           {/* Player stays mounted across dialogues/views (movement gated by
               `enabled`) so switching back resumes where you stood, not at spawn. */}
-          {explorable && (
-            <Player enabled={fpExploring} posRef={posRef} onNearbyChange={setNearby} onNearbyTreeChange={setNearbyTree} />
+          {fpExploring && (
+            <Player
+              posRef={posRef}
+              enabled={true}
+              onNearbyChange={setNearby}
+              onNearbyTreeChange={setNearbyTree}
+              onNearbyEnemyChange={setNearbyEnemy}
+            />
           )}
           {fpExploring && <PointerLockControls onLock={() => setLocked(true)} onUnlock={() => setLocked(false)} />}
           {explorable && view === 'aerial' && (
@@ -1389,6 +1631,15 @@ export default function Scene3D({ memories = null, active = null, talking = fals
             <div className="h-1.5 w-1.5 rounded-full bg-white/70 shadow-[0_0_4px_rgba(0,0,0,0.8)]" />
           </div>
 
+          {flash && <div className="absolute inset-0 pointer-events-none bg-white/20 mix-blend-overlay z-20" />}
+          
+          <div className="absolute bottom-[4.5rem] left-4 pointer-events-none select-none drop-shadow-md z-10">
+            <div className="text-white/80 text-sm mb-1 font-bold tracking-wide">HP: {Math.max(0, playerHp)}</div>
+            <div className="w-40 h-2.5 bg-black/60 rounded-full overflow-hidden border border-white/10">
+              <div className="h-full bg-red-500/90 transition-all duration-200" style={{ width: `${Math.max(0, playerHp)}%` }} />
+            </div>
+          </div>
+
           {!locked && (
             <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
               <div className="rounded-full bg-black/55 px-5 py-2 text-sm text-[#f4e8d0]/90">
@@ -1416,8 +1667,16 @@ export default function Scene3D({ memories = null, active = null, talking = fals
             </div>
           )}
 
+          {locked && nearbyEnemy && !nearbyNpc && !nearbyTree && (
+            <div className="pointer-events-none absolute bottom-28 left-1/2 z-10 -translate-x-1/2">
+              <div className="rounded-full border border-red-500/60 px-5 py-2 text-sm font-semibold text-red-100 shadow-lg" style={{ background: 'rgba(30,10,10,0.88)' }}>
+                <span className="text-red-400">Left Click</span> to attack Enemy
+              </div>
+            </div>
+          )}
+
           <div className="pointer-events-none absolute bottom-4 left-4 z-10 text-xs text-[#f4e8d0]/55">
-            WASD move · Mouse look · E talk · F chop · V aerial · Esc release cursor
+            WASD move · Mouse look · E talk · F chop · Click attack · V aerial · Esc release cursor
           </div>
         </>
       )}
