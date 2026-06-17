@@ -14,6 +14,7 @@ import { useWallet } from '@/hooks/useWallet';
 import { NPC_LIST } from '@/lib/npcs';
 import type { NPCName, NPCMemory } from '@/lib/types';
 import { readAllMemories, writeMemory, getBundleRoot } from '@/lib/memory';
+import { initWorld } from '@/lib/world';
 import { Portrait } from '@/components/engram/Art';
 import dynamic from 'next/dynamic';
 
@@ -95,6 +96,12 @@ function Game() {
       cancelled = true;
     };
   }, [address, isConnected, networkType]);
+
+  // Load the player's world state (resources + chopped trees) for this wallet.
+  useEffect(() => {
+    if (!isConnected || !address) return;
+    initWorld(address).catch(() => {});
+  }, [address, isConnected]);
 
   const crossFor = useCallback(
     (npc: NPCName): Partial<Record<NPCName, NPCMemory>> | undefined => {

@@ -14,7 +14,7 @@
 2. [World pass: terreno con alturas, cielo, casas, árboles y avatares](#prompt-2--world-pass-terreno-cielo-y-props) — ✅ done
 3. [Protección de coste/abuso en /api/npc (rate limit)](#prompt-3--rate-limit--anti-abuso-en-apinpc) — ✅ done
 4. [Controles móviles / táctiles (sin pointer lock)](#prompt-4--controles-móviles--táctiles) — ⏳ pendiente
-5. [Texturas PNG en lugar de materiales planos](#prompt-5--texturas-png) — ⏳ pendiente
+5. [Texturas PNG en lugar de materiales planos](#prompt-5--texturas-png) — 🟡 sistema listo (faltan PNGs; ver [`ART_ASSETS.md`](ART_ASSETS.md))
 6. [Audio ambiental (fogata, pasos, noche)](#prompt-6--audio-ambiental) — ⏳ pendiente
 7. [Verificar end-to-end la UX del 429 en el cliente](#prompt-7--verificación-diferida-ux-del-429) — ⏳ diferida (ver precondición)
 8. [Visión: gameplay loop, doble vista y mundo persistente en 0G](#prompt-8--visión-gameplay-loop--doble-vista) — 🔭 roadmap (post-MVP)

@@ -23,6 +23,11 @@ import {
   type TreeDef,
   type CottageDef,
 } from './map';
+import { getTexture } from './textures';
+import { useWorld, chopTree, isChopped } from '@/lib/world';
+
+// A tree carries its global index (into TREES) so chopping can target it.
+type TreeInst = TreeDef & { idx: number };
 
 // Where each villager stands (XZ). They live in the flat clearing, so ground
 // height is ~0; we still anchor their Y to the terrain for safety.
@@ -37,6 +42,7 @@ const EYE_HEIGHT = 1.7;
 const PLAYER_RADIUS = 0.45;
 const WALK_SPEED = 4.6;
 const TALK_RANGE = 3.2; // how close you must stand before "Press E" appears
+const CHOP_RANGE = 2.8; // how close to a tree before "Press F to chop"
 const SPAWN_XZ: [number, number] = [0, 9]; // y is sampled from the terrain
 
 const keyboardMap = [
@@ -116,14 +122,17 @@ function CameraRig({ active }: { active: NPCName | null }) {
 function Player({
   enabled,
   onNearbyChange,
+  onNearbyTreeChange,
 }: {
   enabled: boolean;
   onNearbyChange: (npc: NPCName | null) => void;
+  onNearbyTreeChange?: (treeIdx: number | null) => void;
 }) {
   const { camera } = useThree();
   const [, getKeys] = useKeyboardControls();
   const bob = useRef({ t: 0, off: 0 });
   const nearbyRef = useRef<NPCName | null>(null);
+  const treeRef = useRef<number | null>(null);
   const forward = useMemo(() => new THREE.Vector3(), []);
   const right = useMemo(() => new THREE.Vector3(), []);
   const move = useMemo(() => new THREE.Vector3(), []);
@@ -182,6 +191,24 @@ function Player({
     if (best !== nearbyRef.current) {
       nearbyRef.current = best;
       onNearbyChange(best);
+    }
+
+    // Nearest choppable (non-chopped) tree within reach.
+    let bestTree = -1;
+    let bestTd = Infinity;
+    for (let i = 0; i < TREES.length; i++) {
+      if (isChopped(i)) continue;
+      const t = TREES[i];
+      const dd = Math.hypot(camera.position.x - t.x, camera.position.z - t.z);
+      if (dd < CHOP_RANGE && dd < bestTd) {
+        bestTd = dd;
+        bestTree = i;
+      }
+    }
+    const treeIdx = bestTree >= 0 ? bestTree : null;
+    if (treeIdx !== treeRef.current) {
+      treeRef.current = treeIdx;
+      onNearbyTreeChange?.(treeIdx);
     }
   });
 
@@ -243,7 +270,7 @@ function Terrain() {
   }, []);
   return (
     <mesh geometry={geom} receiveShadow>
-      <meshStandardMaterial color="#3e4a32" roughness={1} />
+      <meshStandardMaterial color="#3e4a32" map={getTexture('terrain_grass', { repeat: Math.round(GROUND_RADIUS / 3) })} roughness={1} />
     </mesh>
   );
 }
@@ -305,12 +332,12 @@ function Cottage({ def }: { def: CottageDef }) {
       {/* stone plinth */}
       <mesh position={[0, 0.1, 0]} castShadow receiveShadow>
         <boxGeometry args={[2.7, 0.2, 2.3]} />
-        <meshStandardMaterial color="#5b5048" flatShading />
+        <meshStandardMaterial color="#5b5048" map={getTexture('stone')} flatShading />
       </mesh>
       {/* body */}
       <mesh position={[0, 1.05, 0]} castShadow receiveShadow>
         <boxGeometry args={[2.4, 1.8, 2.0]} />
-        <meshStandardMaterial color={def.body} flatShading />
+        <meshStandardMaterial color={def.body} map={getTexture('cottage_wood')} flatShading />
       </mesh>
       {/* corner beams */}
       {([[-1.2, -1.0], [1.2, -1.0], [-1.2, 1.0], [1.2, 1.0]] as [number, number][]).map(([x, z], i) => (
@@ -322,11 +349,11 @@ function Cottage({ def }: { def: CottageDef }) {
       {/* gable roof — two slopes meeting at a ridge running along X */}
       <mesh position={[0, 2.2, -0.66]} rotation={[0.62, 0, 0]} castShadow>
         <boxGeometry args={[2.8, 0.14, 1.6]} />
-        <meshStandardMaterial color={def.roof} flatShading />
+        <meshStandardMaterial color={def.roof} map={getTexture('cottage_roof')} flatShading />
       </mesh>
       <mesh position={[0, 2.2, 0.66]} rotation={[-0.62, 0, 0]} castShadow>
         <boxGeometry args={[2.8, 0.14, 1.6]} />
-        <meshStandardMaterial color={def.roof} flatShading />
+        <meshStandardMaterial color={def.roof} map={getTexture('cottage_roof')} flatShading />
       </mesh>
       <mesh position={[0, 2.62, 0]}>
         <boxGeometry args={[2.9, 0.12, 0.12]} />
@@ -357,7 +384,7 @@ function Cottage({ def }: { def: CottageDef }) {
       {/* chimney + smoke */}
       <mesh position={[0.8, 2.55, -0.25]} castShadow>
         <boxGeometry args={[0.34, 1.1, 0.34]} />
-        <meshStandardMaterial color="#5a4a40" flatShading />
+        <meshStandardMaterial color="#5a4a40" map={getTexture('stone')} flatShading />
       </mesh>
       <ChimneySmoke origin={[0.8, 3.15, -0.25]} />
     </group>
@@ -372,11 +399,13 @@ function TreePart({
   geometry,
   material,
   localY,
+  chopped,
 }: {
-  items: TreeDef[];
+  items: TreeInst[];
   geometry: THREE.BufferGeometry;
   material: THREE.Material;
   localY: number;
+  chopped: ReadonlySet<number>;
 }) {
   const ref = useRef<THREE.InstancedMesh>(null);
   useLayoutEffect(() => {
@@ -384,23 +413,35 @@ function TreePart({
     if (!mesh) return;
     const dummy = new THREE.Object3D();
     items.forEach((t, i) => {
-      dummy.position.set(t.x, getHeightAt(t.x, t.z) + localY * t.scale, t.z);
+      // A chopped tree collapses to zero scale (invisible) but keeps its slot.
+      if (chopped.has(t.idx)) {
+        dummy.position.set(t.x, -1000, t.z);
+        dummy.scale.setScalar(0);
+      } else {
+        dummy.position.set(t.x, getHeightAt(t.x, t.z) + localY * t.scale, t.z);
+        dummy.scale.setScalar(t.scale);
+      }
       dummy.rotation.set(0, t.rot, 0);
-      dummy.scale.setScalar(t.scale);
       dummy.updateMatrix();
       mesh.setMatrixAt(i, dummy.matrix);
     });
     mesh.instanceMatrix.needsUpdate = true;
     mesh.computeBoundingSphere();
-  }, [items, localY]);
+  }, [items, localY, chopped]);
   if (items.length === 0) return null;
   return <instancedMesh ref={ref} args={[geometry, material, items.length]} castShadow />;
 }
 
 function InstancedTrees() {
-  const pine = useMemo(() => TREES.filter((t) => t.species === 0), []);
-  const broad = useMemo(() => TREES.filter((t) => t.species === 1), []);
-  const bush = useMemo(() => TREES.filter((t) => t.species === 2), []);
+  // Carry each tree's global index so chopping can target individual trees.
+  const withIdx = useMemo<TreeInst[]>(() => TREES.map((t, idx) => ({ ...t, idx })), []);
+  const pine = useMemo(() => withIdx.filter((t) => t.species === 0), [withIdx]);
+  const broad = useMemo(() => withIdx.filter((t) => t.species === 1), [withIdx]);
+  const bush = useMemo(() => withIdx.filter((t) => t.species === 2), [withIdx]);
+
+  // Re-render instance matrices when the chopped set changes.
+  const world = useWorld();
+  const chopped = useMemo(() => new Set(world.choppedTrees), [world.choppedTrees]);
 
   const geo = useMemo(
     () => ({
@@ -415,12 +456,14 @@ function InstancedTrees() {
     }),
     []
   );
+  // Optional textures (bark / foliage) with flat-color fallback. The artist adds
+  // PNGs via src/components/engram/textures.ts; until then `map` is null = current look.
   const mat = useMemo(
     () => ({
-      bark: new THREE.MeshStandardMaterial({ color: '#5a3f28', flatShading: true, roughness: 1 }),
-      pine: new THREE.MeshStandardMaterial({ color: '#2f4a2c', flatShading: true, roughness: 1 }),
-      broad: new THREE.MeshStandardMaterial({ color: '#3b5a30', flatShading: true, roughness: 1 }),
-      bushLeaf: new THREE.MeshStandardMaterial({ color: '#45683a', flatShading: true, roughness: 1 }),
+      bark: new THREE.MeshStandardMaterial({ color: '#5a3f28', map: getTexture('bark', { repeat: 1 }), flatShading: !getTexture('bark'), roughness: 1 }),
+      pine: new THREE.MeshStandardMaterial({ color: '#2f4a2c', map: getTexture('foliage_pine'), flatShading: !getTexture('foliage_pine'), roughness: 1 }),
+      broad: new THREE.MeshStandardMaterial({ color: '#3b5a30', map: getTexture('foliage_broadleaf'), flatShading: !getTexture('foliage_broadleaf'), roughness: 1 }),
+      bushLeaf: new THREE.MeshStandardMaterial({ color: '#45683a', map: getTexture('foliage_bush'), flatShading: !getTexture('foliage_bush'), roughness: 1 }),
     }),
     []
   );
@@ -428,16 +471,16 @@ function InstancedTrees() {
   return (
     <group>
       {/* pines: trunk + three stacked cones */}
-      <TreePart items={pine} geometry={geo.trunk} material={mat.bark} localY={0.7} />
-      <TreePart items={pine} geometry={geo.pineA} material={mat.pine} localY={1.9} />
-      <TreePart items={pine} geometry={geo.pineB} material={mat.pine} localY={2.8} />
-      <TreePart items={pine} geometry={geo.pineC} material={mat.pine} localY={3.6} />
+      <TreePart items={pine} geometry={geo.trunk} material={mat.bark} localY={0.7} chopped={chopped} />
+      <TreePart items={pine} geometry={geo.pineA} material={mat.pine} localY={1.9} chopped={chopped} />
+      <TreePart items={pine} geometry={geo.pineB} material={mat.pine} localY={2.8} chopped={chopped} />
+      <TreePart items={pine} geometry={geo.pineC} material={mat.pine} localY={3.6} chopped={chopped} />
       {/* broadleaf: taller trunk + two foliage clumps */}
-      <TreePart items={broad} geometry={geo.broadTrunk} material={mat.bark} localY={0.8} />
-      <TreePart items={broad} geometry={geo.leaf} material={mat.broad} localY={2.3} />
-      <TreePart items={broad} geometry={geo.leafS} material={mat.broad} localY={3.0} />
+      <TreePart items={broad} geometry={geo.broadTrunk} material={mat.bark} localY={0.8} chopped={chopped} />
+      <TreePart items={broad} geometry={geo.leaf} material={mat.broad} localY={2.3} chopped={chopped} />
+      <TreePart items={broad} geometry={geo.leafS} material={mat.broad} localY={3.0} chopped={chopped} />
       {/* bushes: a single low clump */}
-      <TreePart items={bush} geometry={geo.bush} material={mat.bushLeaf} localY={0.55} />
+      <TreePart items={bush} geometry={geo.bush} material={mat.bushLeaf} localY={0.55} chopped={chopped} />
     </group>
   );
 }
@@ -873,18 +916,25 @@ export default function Scene3D({ memories = null, active = null, talking = fals
   const exploring = explorable && !active && !uiOpen;
 
   const [nearby, setNearby] = useState<NPCName | null>(null);
+  const [nearbyTree, setNearbyTree] = useState<number | null>(null);
   const [locked, setLocked] = useState(false);
   const nearbyRef = useRef<NPCName | null>(null);
   nearbyRef.current = nearby;
+  const nearbyTreeRef = useRef<number | null>(null);
+  nearbyTreeRef.current = nearbyTree;
+  const world = useWorld();
 
-  // Press E to talk to whoever is in range.
+  // Press E to talk to whoever is in range; F to chop a nearby tree.
   useEffect(() => {
     if (!exploring) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.code !== 'KeyE') return;
       const tag = (document.activeElement as HTMLElement | null)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-      if (nearbyRef.current) onSelect(nearbyRef.current);
+      if (e.code === 'KeyE' && nearbyRef.current) onSelect(nearbyRef.current);
+      if (e.code === 'KeyF' && nearbyTreeRef.current !== null && !isChopped(nearbyTreeRef.current)) {
+        chopTree(nearbyTreeRef.current);
+        setNearbyTree(null); // it's gone now; Player will repick next frame
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -898,6 +948,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
   useEffect(() => {
     if (exploring) return;
     setNearby(null);
+    setNearbyTree(null);
     setLocked(false);
     if (typeof document === 'undefined') return;
     // Exit any lock already held, and any lock whose async grant lands after the
@@ -951,7 +1002,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
           {!explorable && <CameraRig active={active} />}
           {/* Player stays mounted across dialogues (movement gated by `enabled`)
               so leaving an NPC resumes where you stood, not at spawn. */}
-          {explorable && <Player enabled={exploring} onNearbyChange={setNearby} />}
+          {explorable && <Player enabled={exploring} onNearbyChange={setNearby} onNearbyTreeChange={setNearbyTree} />}
           {exploring && <PointerLockControls onLock={() => setLocked(true)} onUnlock={() => setLocked(false)} />}
           {explorable && active && <TalkFraming active={active} />}
 
@@ -1004,8 +1055,22 @@ export default function Scene3D({ memories = null, active = null, talking = fals
             </div>
           )}
 
+          {locked && nearbyTree !== null && (
+            <div className="pointer-events-none absolute bottom-28 left-1/2 z-10 -translate-x-1/2">
+              <div className="rounded-full border border-[#6a8a4a] px-5 py-2 text-sm font-semibold text-[#f4e8d0] shadow-lg" style={{ background: 'rgba(16,20,10,0.88)' }}>
+                Press <span className="text-[#8fd06a]">F</span> to chop this tree
+              </div>
+            </div>
+          )}
+
+          {/* Resource inventory */}
+          <div className="pointer-events-none absolute top-20 left-4 z-10 flex gap-3 text-sm text-[#f4e8d0]">
+            <span className="rounded-md bg-black/45 px-2.5 py-1" title="Wood">🪵 {world.inventory.wood}</span>
+            <span className="rounded-md bg-black/45 px-2.5 py-1" title="Coin">🪙 {world.inventory.coin}</span>
+          </div>
+
           <div className="pointer-events-none absolute bottom-4 left-4 z-10 text-xs text-[#f4e8d0]/55">
-            WASD move · Mouse look · E talk · Esc release cursor
+            WASD move · Mouse look · E talk · F chop · Esc release cursor
           </div>
         </>
       )}
