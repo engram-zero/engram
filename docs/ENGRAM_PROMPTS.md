@@ -16,6 +16,7 @@
 4. [Controles móviles / táctiles (sin pointer lock)](#prompt-4--controles-móviles--táctiles) — ⏳ pendiente
 5. [Texturas PNG en lugar de materiales planos](#prompt-5--texturas-png) — ⏳ pendiente
 6. [Audio ambiental (fogata, pasos, noche)](#prompt-6--audio-ambiental) — ⏳ pendiente
+7. [Verificar end-to-end la UX del 429 en el cliente](#prompt-7--verificación-diferida-ux-del-429) — ⏳ diferida (ver precondición)
 
 > **Tareas no-código pendientes (ADMIN):** deploy a Vercel + env vars (en curso) ·
 > grabar video demo (2–3 min) · completar submission en 0g.ai/arena/zero-cup ·
@@ -358,6 +359,49 @@ primer gesto del usuario — el mismo clic que captura el pointer lock sirve).
   1. Al explorar se oye ambiente; acercarse a la fogata sube el crepitar.
   2. Caminar produce pasos; el botón de mute silencia todo.
   3. Sin errores de autoplay en consola.
+```
+
+---
+
+## Prompt 7 — Verificación diferida: UX del 429
+
+```
+# Tarea: verificar end-to-end el manejo del 429 en el cliente
+
+## Precondición (NO empezar antes)
+Hacer SOLO cuando ya exista un camino barato para ejercitar la UI sin montar
+andamiaje nuevo, es decir cuando se cumpla alguna de estas:
+  - ✅ Prompt 4 (controles móviles) hecho — ya habrá un arnés/flujo que mueve la UI, o
+  - ✅ la app está desplegada (Vercel) y se puede spamear el diálogo en vivo, o
+  - ✅ existe un mock reutilizable de wallet + lectura de 0G para tests de UI.
+Si nada de eso existe, esta tarea NO vale el coste: el lado servidor del rate limit
+(la defensa real de coste/abuso) ya está verificado por HTTP. Ver Prompt 3 (done).
+
+## Contexto
+La lógica de servidor (413 / 429 / retryAfter / header Retry-After) ya está
+verificada. Lo que falta observar corriendo es solo la UX del cliente en
+`src/app/client-page.tsx` → `runTurn()`: ante 429 muestra un aviso amable y hace
+UN reintento automático si la espera es corta (≤30s), con guard `activeRef` para
+no reintentar si el jugador ya salió del diálogo.
+
+## Objetivo
+Confirmar, conduciendo la app real, que el cruce client↔servidor del 429 funciona.
+
+## Pasos
+  1. Con la app corriendo y wallet conectada, abre un diálogo y envía >15 mensajes
+     en <1 min al mismo NPC para forzar el 429 (o baja temporalmente el límite en
+     src/lib/ratelimit.ts para no gastar IA — y revertir después).
+  2. Observa: el cuadro muestra "Aldenmoor needs a breath…(retrying in Ns…)" y,
+     pasado el retryAfter, reintenta solo una vez.
+  3. Repite pero ABANDONA el diálogo (Leave) antes de que dispare el reintento →
+     el guard activeRef debe impedir el reintento (no debe reabrir/escribir nada).
+  4. Caso de cap diario / espera larga (>30s): debe mostrar "try again in ~Ns" sin
+     reintento automático.
+
+## Criterios de aceptación
+  1. 429 produce aviso amable + un único reintento automático en cool-downs cortos.
+  2. Salir del diálogo cancela el reintento (sin efectos colaterales).
+  3. Esperas largas no auto-reintentan.
 ```
 
 ---
