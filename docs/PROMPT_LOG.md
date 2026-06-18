@@ -166,3 +166,17 @@ validación entre desktop y móvil. Verifica con `tsc`.
 **Qué se hizo:** `canPlaceBuilding`/`demolishNearest` extraídos; `BuildController` solo
 en desktop; `MobileBuildGhost` + botones Place/Rotate/Demolish en táctil; estado
 `buildRot`. **Commit:** `13d1419`
+
+### 18 jun 2026 · Pulido móvil: hint, talar duplicado, sin selección
+**Pedido (humano):** Quitar el texto "Drag to move…" en celular; frente a un árbol se
+duplica el talar ("Hold F to chop" con barra + botón "Hold to chop") — combinarlos; y
+que **nada** sea seleccionable como texto en celular.
+**Prompt sintetizado:** (1) No muestres el hint persistente "Drag to move" en táctil
+(déjalo solo en modo construir). (2) Unifica el talar en móvil: el prompt "Hold F to
+chop" con barra queda **solo en desktop** (`!isTouchDevice`) y el **botón táctil "Hold
+to chop"** incorpora la **barra de progreso** y el estado "Wood full". (3) En táctil,
+desactiva la selección de texto en toda la UI con `@media (pointer:coarse) { * {
+user-select:none } }`, dejando `input/textarea` usables; no toques desktop (para poder
+copiar hashes en el demo). Verifica con `tsc`.
+**Qué se hizo:** prompt de barra gateado a desktop; barra dentro del botón móvil +
+"Wood full"; hint solo en build; media query no-select. **Commit:** `91fe77c`
