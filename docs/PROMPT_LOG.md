@@ -78,3 +78,19 @@ workflow; este formato de log. **Commit:** `bffb428` (código) + este commit (do
 **Pedido (humano):** Revisar el proyecto, hacerlo jugable en celular además de computadora, registrar este pedido según `CLAUDE.md`, y diagnosticar por qué en móvil la pantalla inicial de conectar wallet no avanzaba y fallaba en silencio.
 **Prompt sintetizado:** Audita el arranque de Engram en móvil y corrige el flujo de conexión de wallet para que no falle en silencio: prioriza un conector móvil adecuado, muestra errores/ayuda visibles cuando no haya proveedor o WalletConnect no esté configurado, y conserva el comportamiento de escritorio. Además, adapta la experiencia jugable para pantallas táctiles sin romper desktop: añade `viewport` móvil, habilita una ruta de control táctil jugable (vista aérea por defecto en touch, pad virtual, botones de acción y selección táctil de NPCs), y reutiliza la lógica actual de proximidad/interacción para hablar, talar y combatir. Verifica con `npx tsc --noEmit` y deja registro en `docs/PROMPT_LOG.md`.
 **Qué se hizo:** Ajusté el contexto de wallet para preferir `walletConnect` en touch, exponer errores de conexión y dar ayuda visible; el botón ahora muestra esos mensajes. En la escena 3D añadí detección de dispositivos táctiles, vista aérea por defecto en móvil, controles virtuales de movimiento/acción y selección táctil de NPCs, manteniendo escritorio con pointer lock. También agregué `viewport` móvil en el layout, reemplacé los emojis rotos del inventario por iconos inline de madera/moneda y validé con `npx tsc --noEmit`. **Commit:** `31493e3`
+
+### 18 jun 2026 · Modo demo (sin wallet) + iluminación diurna + sol en pasos
+**Pedido (humano):** En móvil no se puede abrir si no es en el navegador de
+MetaMask — que se pueda explorar en "modo demo" sin wallet; además, de día el suelo
+se ve muy oscuro (mejorar iluminación); y que el sol se mueva en arco "cada 5 minutos
+del servidor" (:05, :10…).
+**Prompt sintetizado:** (1) Añade un **modo invitado**: botón "explore as a guest" en
+la pantalla de título que entra a Aldenmoor sin wallet (explorable, sin diálogo ni
+guardado); el header muestra "Demo" + botón Conectar; oculta UI de memoria/carga sin
+address. (2) Corrige el suelo oscuro de día (textura oscura × color base oscuro):
+aclara el color base del terreno y sube la luz ambiente/hemisférica diurna en
+`computeDayNight`. (3) Cuantiza la hora local a pasos de 5 min para que el sol salte a
+su siguiente posición en :00/:05/:10. Verifica con `tsc`.
+**Qué se hizo:** modo invitado en `client-page` (gate, botón, header y overlays
+condicionados a `address`); terreno aclarado + más luz de día; `quantHour` a 5 min.
+**Commit:** `874a134`
