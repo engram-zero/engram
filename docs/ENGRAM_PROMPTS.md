@@ -20,6 +20,8 @@
 8. [Visión: gameplay loop, doble vista y mundo persistente en 0G](#prompt-8--visión-gameplay-loop--doble-vista) — 🟡 partial: 8a done, 8b persistencia MVP done (martelaxe)
 9. [Construir edificios + persistir el mundo en 0G](#prompt-9--construir--persistir-el-mundo-en-0g) — 🟡 partial: 9a gameplay done · 9b extiende el adapter 0G actual
 10. [Mercado: vender recursos a los NPCs → reputación en 0G](#prompt-10--mercado-vender-recursos--reputación) — ⏳ pendiente
+11. [Construcción con IA + tokens (describir y que la IA edifique)](#prompt-11--construcción-con-ia--tokens) — ⏳ pendiente
+12. [Edificios habitables (entrar dentro)](#prompt-12--edificios-habitables-entrar) — ⏳ pendiente
 
 > **Tareas no-código (ADMIN):** ✅ deploy a Vercel + env vars · ✅ save a 0G end-to-end ·
 > ⏳ actualizar la Description del dashboard 0g.ai (versión honesta) ·
@@ -582,6 +584,65 @@ precios/diálogo**. Empezar simple; el regateo con LLM es v2.
 1. Vender madera a Aldric da coins, descuenta madera, y sube su `trust` (visible en 📜 Memory).
 2. Al recargar, Aldric recuerda la venta (persistido en 0G como cualquier interacción).
 3. (v2) Regatear caro → el modelo te trata de tramposo y baja trust.
+
+---
+
+## Prompt 11 — Construcción con IA + tokens
+
+> Idea de AriiBen: el jugador **describe** lo que quiere construir en un chat, y la IA
+> lo edifica. La **cantidad de tokens** que gasta determina lo elaborado/grande del
+> resultado (igual que el diálogo: pocos tokens → menos detalle; aquí además acota el
+> **tamaño**). Reusa la misma infraestructura LLM que `/api/npc`. Encaja con Prompt 9
+> (sistema de construcción) y Prompt 10 (economía/tokens).
+
+### Modelo
+- "Tokens" = el recurso `coin` del jugador (o un token on-chain más adelante). Construir
+  con IA **gasta coins**; más coins → presupuesto mayor → estructura más grande/detallada.
+- Mapear presupuesto → límites: `maxBuildings`, `maxFootprint` (tamaño), variedad de piezas.
+
+### Endpoint `/api/build` (server, igual patrón que /api/npc)
+- Input: `{ prompt: string, budget: number, origin: {x,z} }`.
+- El LLM devuelve **JSON estructurado** validado: `Building[]` (type/x/z/rot) relativo a
+  `origin`, acotado por el presupuesto (nº de piezas y extensión). Rechazar/clamp lo que
+  exceda. Mismas defensas que `/api/npc` (rate-limit, tamaño, fallback determinista).
+- Aplicar: validar colisiones (como Prompt 9) y `placeBuilding(...)` cada pieza; descontar
+  `coin`. Persiste en 0G por la costura existente.
+
+### UI
+- En modo construir (vista aérea): botón **"🤖 Build with AI"** → input de texto + costo
+  estimado en coins. Al confirmar, se coloca el preview del conjunto antes de pagar.
+
+### Criterios
+1. Describir "una pequeña empalizada con dos casas" gasta coins y aparece construido.
+2. Con pocos coins, la IA produce algo más pequeño/simple (presupuesto acota tamaño).
+3. `tsc` limpio; sin romper el build manual (Prompt 9) ni el diálogo.
+
+---
+
+## Prompt 12 — Edificios habitables (entrar)
+
+> Idea de AriiBen: poder **entrar** a los edificios, no que sean props sólidos.
+> **Recomendación (baja complejidad):** hacer las casas **huecas** — 4 muros + techo +
+> un **hueco de puerta** — en la MISMA escena, para caminar dentro sin teleport ni
+> escenas de interior. Evita complejidad innecesaria.
+
+### Enfoque recomendado (in-place, sin cambiar de escena)
+- Reemplazar la caja sólida de `house` por **paredes** (4 cajas finas) con un **gap de
+  puerta** en una cara, **suelo** y **techo a dos aguas** (ya tenemos el gable).
+- Colisión: en vez de un círculo, usar los muros como colliders (segmentos/AABB) con el
+  gap libre. Mantener el collider de pared del Prompt 9 para los muros sueltos.
+- El jugador entra por el hueco; dentro queda resguardado (útil si más tarde los enemigos
+  asedian la aldea).
+
+### Alternativa (más trabajo, NO recomendada para el plazo)
+- Interiores como escena/zona aparte con trigger de puerta y teleport. Mejor estética pero
+  añade gestión de estado/escenas; dejarlo post-torneo.
+
+### Criterios
+1. Entrar a una casa por la puerta y moverse dentro sin atravesar paredes.
+2. El techo no bloquea la cámara en primera persona de forma molesta (subir un poco o
+   recortar al entrar).
+3. `tsc` limpio.
 
 ---
 
