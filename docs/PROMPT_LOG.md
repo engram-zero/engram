@@ -210,3 +210,17 @@ absoluto alrededor del avatar, y coloca cada pieza con `canPlaceBuilding` +
 piezas y madera. Verifica con `tsc`.
 **Qué se hizo:** `src/app/api/build/route.ts`; estado/modal/`runAIBuild` en Scene3D;
 Prompt 11 → done. **Commit:** `99bbe6d`
+
+### 18 jun 2026 · IA: preview + costo USD + límite de gasto
+**Pedido (humano):** Para la construcción con IA: un **preview** antes de colocar, una
+**aproximación del costo en USD** (ej. $0.05), y poder **limitar** cuánto $ gastar
+(el usuario pone su key y un tope).
+**Prompt sintetizado:** En `/api/build` devuelve `usage` y un `costUsd` calculado con
+el precio de Claude Sonnet 4.6 ($3/M in, $15/M out, configurable por env). En el cliente
+cambia el flujo a **preview**: "Preview" pide a la IA, muestra los fantasmas (morado=va,
+rojo=bloqueado) en el sitio generado, y un botón **Place/Discard** confirma (paga madera).
+Añade un **tope de gasto por sesión** (persistido en localStorage) que bloquea nuevas
+generaciones al alcanzarlo, y muestra costo + gasto acumulado. Verifica con `tsc`.
+**Qué se hizo:** `usdCost`/`costUsd` en el endpoint; `AIPreviewGhosts` + estado
+preview/budget/spent + `requestAIBuild`/`placeAIPreview` y modal con budget en Scene3D.
+**Commit:** `7ff2474`
