@@ -151,3 +151,18 @@ scrollear, y desactiva el zoom (`maximumScale:1`, `userScalable:false`) que tamb
 provoca pan. Verifica con `tsc`.
 **Qué se hizo:** `body { position:fixed; inset:0 }` en `globals.css` y viewport sin
 zoom en `layout.tsx`. **Commit:** `e3e9953`
+
+### 18 jun 2026 · Construir en móvil con botón "Place"
+**Pedido (humano):** En celular construir no funciona: al elegir un item no aparece
+porque el control de movimiento "secuestra" la pantalla. Propuesta: al elegir item,
+dejar de mover el personaje (o no competir) y colocar el item con un botón.
+**Prompt sintetizado:** En táctil el joystick (overlay) tapa el canvas, así que el
+`BuildController` por cursor no recibe el tap. Para móvil: no rendrices el
+`BuildController`; en su lugar muestra un **fantasma frente al avatar** (posición
+calculada de `posRef` cada frame, color por validez) y un botón **"Place"** (+ "Rotate"
+y "Demolish nearby") que confirma la colocación. El usuario maneja el avatar para
+apuntar y toca Place. Extrae `canPlaceBuilding()`/`demolishNearest()` para compartir la
+validación entre desktop y móvil. Verifica con `tsc`.
+**Qué se hizo:** `canPlaceBuilding`/`demolishNearest` extraídos; `BuildController` solo
+en desktop; `MobileBuildGhost` + botones Place/Rotate/Demolish en táctil; estado
+`buildRot`. **Commit:** `13d1419`
