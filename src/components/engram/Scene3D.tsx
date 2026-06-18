@@ -47,10 +47,12 @@ type TreeInst = TreeDef & { idx: number };
 type PlayerPos = { x: number; z: number; heading: number };
 type PlayerPosRef = React.MutableRefObject<PlayerPos>;
 type ViewMode = 'fp' | 'aerial';
+type MovementInput = { forward: boolean; backward: boolean; left: boolean; right: boolean };
 
 // How many texture-variant groups the forest is split into (cycles through the
 // PNGs registered per slot, so the woods don't look uniform).
 const TREE_BUCKETS = 4;
+const IDLE_MOVEMENT: MovementInput = { forward: false, backward: false, left: false, right: false };
 
 // Where each villager stands (XZ). They live in the flat clearing, so ground
 // height is ~0; we still anchor their Y to the terrain for safety.
@@ -133,6 +135,38 @@ function trustColor(t: number) {
   if (t >= 70) return '#5fb86a';
   if (t >= 40) return '#d6b84a';
   return '#cc5a4a';
+}
+
+function mergeMovement(keyboard: MovementInput, touch: MovementInput) {
+  return {
+    forward: keyboard.forward || touch.forward,
+    backward: keyboard.backward || touch.backward,
+    left: keyboard.left || touch.left,
+    right: keyboard.right || touch.right,
+  };
+}
+
+function WoodIcon() {
+  return (
+    <span className="engram-resource-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none">
+        <rect x="4" y="8" width="16" height="8" rx="4" fill="#8b5a2b" stroke="#d7b17a" strokeWidth="1.4" />
+        <circle cx="8" cy="12" r="2.2" fill="none" stroke="#f0d3a0" strokeWidth="1.2" />
+        <path d="M15 9.5c1.8 1 1.8 4 0 5" stroke="#f0d3a0" strokeWidth="1.2" strokeLinecap="round" />
+      </svg>
+    </span>
+  );
+}
+
+function CoinIcon() {
+  return (
+    <span className="engram-resource-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none">
+        <circle cx="12" cy="12" r="7" fill="#d6b84a" stroke="#f6e08a" strokeWidth="1.4" />
+        <circle cx="12" cy="12" r="4.2" fill="none" stroke="#8f6f1d" strokeWidth="1.2" />
+      </svg>
+    </span>
+  );
 }
 
 // ─── Camera rig ───────────────────────────────────────────────────────────────
@@ -353,10 +387,27 @@ function Avatar({ posRef }: { posRef: PlayerPosRef }) {
   );
 }
 
-function AerialRig({ enabled, posRef }: { enabled: boolean; posRef: PlayerPosRef }) {
+function AerialRig({
+  enabled,
+  posRef,
+  touchMove = IDLE_MOVEMENT,
+  onNearbyChange,
+  onNearbyTreeChange,
+  onNearbyEnemyChange,
+}: {
+  enabled: boolean;
+  posRef: PlayerPosRef;
+  touchMove?: MovementInput;
+  onNearbyChange?: (npc: NPCName | null) => void;
+  onNearbyTreeChange?: (treeIdx: number | null) => void;
+  onNearbyEnemyChange?: (enemyId: string | null) => void;
+}) {
   const camRef = useRef<THREE.OrthographicCamera>(null);
   const [, getKeys] = useKeyboardControls();
   const zoom = useRef(22);
+  const nearbyRef = useRef<NPCName | null>(null);
+  const treeRef = useRef<number | null>(null);
+  const enemyRef = useRef<string | null>(null);
 
   // Mouse-wheel zoom while in aerial view (min raised so you can't zoom out past
   // the world into the sky).
@@ -375,7 +426,7 @@ function AerialRig({ enabled, posRef }: { enabled: boolean; posRef: PlayerPosRef
     const cam = camRef.current;
     if (!enabled || !cam) return;
     const dt = Math.min(dtRaw, 0.05);
-    const k = getKeys();
+    const k = mergeMovement(getKeys() as MovementInput, touchMove);
 
     // MAP-aligned movement: the camera sits due south looking north, so world
     // axes line up with the screen — W=up(north −Z), S=down(+Z), A=left(−X), D=right(+X).
@@ -393,6 +444,57 @@ function AerialRig({ enabled, posRef }: { enabled: boolean; posRef: PlayerPosRef
       posRef.current.x = rx;
       posRef.current.z = rz;
       posRef.current.heading = Math.atan2(dx, dz); // face the move direction
+    }
+
+    dynamicPlayerState.x = posRef.current.x;
+    dynamicPlayerState.z = posRef.current.z;
+
+    let bestNpc: NPCName | null = null;
+    let bestNpcDistance = Infinity;
+    for (const npc of NPC_LIST) {
+      const dyn = dynamicNpcState[npc.id];
+      if (dyn.knockedOut) continue;
+      const dd = Math.hypot(posRef.current.x - dyn.x, posRef.current.z - dyn.z);
+      if (dd < TALK_RANGE && dd < bestNpcDistance) {
+        bestNpcDistance = dd;
+        bestNpc = npc.id;
+      }
+    }
+    if (bestNpc !== nearbyRef.current) {
+      nearbyRef.current = bestNpc;
+      onNearbyChange?.(bestNpc);
+    }
+
+    let bestTree = -1;
+    let bestTreeDistance = Infinity;
+    for (let i = 0; i < TREES.length; i++) {
+      if (isChopped(i)) continue;
+      const tree = TREES[i];
+      const dd = Math.hypot(posRef.current.x - tree.x, posRef.current.z - tree.z);
+      if (dd < CHOP_RANGE && dd < bestTreeDistance) {
+        bestTreeDistance = dd;
+        bestTree = i;
+      }
+    }
+    const treeIdx = bestTree >= 0 ? bestTree : null;
+    if (treeIdx !== treeRef.current) {
+      treeRef.current = treeIdx;
+      onNearbyTreeChange?.(treeIdx);
+    }
+
+    let bestEnemy: string | null = null;
+    let bestEnemyDistance = Infinity;
+    for (const [id, enemy] of Object.entries(dynamicEnemyState)) {
+      if (enemy.dead) continue;
+      const dd = Math.hypot(posRef.current.x - enemy.x, posRef.current.z - enemy.z);
+      if (dd < 4.0 && dd < bestEnemyDistance) {
+        bestEnemyDistance = dd;
+        bestEnemy = id;
+      }
+    }
+    if (bestEnemy !== enemyRef.current) {
+      enemyRef.current = bestEnemy;
+      onNearbyEnemyChange?.(bestEnemy);
     }
 
     // Overhead follow from due south (no X offset → screen axes match world axes).
@@ -1707,6 +1809,8 @@ export default function Scene3D({ memories = null, active = null, talking = fals
   const [nearbyTree, setNearbyTree] = useState<number | null>(null);
   const [locked, setLocked] = useState(false);
   const [view, setView] = useState<ViewMode>('fp');
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
+  const [touchMove, setTouchMove] = useState<MovementInput>(IDLE_MOVEMENT);
   const [buildMode, setBuildMode] = useState<BuildingType | 'demolish' | null>(null);
   // Building is aerial-only (needs the free cursor); leave it when not in aerial.
   useEffect(() => {
@@ -1733,8 +1837,52 @@ export default function Scene3D({ memories = null, active = null, talking = fals
   // Shared player position (first-person camera ↔ aerial avatar).
   const posRef = useRef<PlayerPos>({ x: SPAWN_XZ[0], z: SPAWN_XZ[1], heading: 0 });
 
-  const fpExploring = exploring && view === 'fp';
-  const aerialExploring = exploring && view === 'aerial';
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(pointer: coarse)');
+    const sync = () => setIsTouchDevice(mq.matches || 'ontouchstart' in window);
+    sync();
+    mq.addEventListener?.('change', sync);
+    return () => mq.removeEventListener?.('change', sync);
+  }, []);
+
+  useEffect(() => {
+    if (explorable && isTouchDevice) {
+      setView('aerial');
+    }
+  }, [explorable, isTouchDevice]);
+
+  useEffect(() => {
+    if (exploring) return;
+    setTouchMove(IDLE_MOVEMENT);
+    fHeldRef.current = false;
+  }, [exploring]);
+
+  const fpExploring = exploring && view === 'fp' && !isTouchDevice;
+  const aerialExploring = exploring && (view === 'aerial' || isTouchDevice);
+  const controlsArmed = isTouchDevice ? exploring : locked;
+
+  const setTouchDirection = (direction: keyof MovementInput, pressed: boolean) => {
+    setTouchMove((current) => {
+      if (current[direction] === pressed) return current;
+      return { ...current, [direction]: pressed };
+    });
+  };
+
+  const activateNearbyNpc = () => {
+    if (nearbyRef.current) onSelect(nearbyRef.current);
+  };
+
+  const attackNearbyEnemy = () => {
+    const id = nearbyEnemyRef.current;
+    if (!id) return;
+    const enemy = dynamicEnemyState[id];
+    if (!enemy || enemy.dead) return;
+    enemy.hp -= 25;
+    if (enemy.hp <= 0) enemy.dead = true;
+    setFlash(true);
+    window.setTimeout(() => setFlash(false), 80);
+  };
 
   // V toggles first-person ↔ aerial; E talks; F is HELD to chop (handled below).
   useEffect(() => {
@@ -1920,12 +2068,19 @@ export default function Scene3D({ memories = null, active = null, talking = fals
               onNearbyEnemyChange={setNearbyEnemy}
             />
           )}
-          {fpExploring && <PointerLockControls onLock={() => setLocked(true)} onUnlock={() => setLocked(false)} />}
-          {explorable && view === 'aerial' && (
+          {fpExploring && !isTouchDevice && <PointerLockControls onLock={() => setLocked(true)} onUnlock={() => setLocked(false)} />}
+          {aerialExploring && (
             <>
-              <AerialRig enabled={aerialExploring} posRef={posRef} />
+              <AerialRig
+                enabled={aerialExploring}
+                posRef={posRef}
+                touchMove={touchMove}
+                onNearbyChange={setNearby}
+                onNearbyTreeChange={setNearbyTree}
+                onNearbyEnemyChange={setNearbyEnemy}
+              />
               <Avatar posRef={posRef} />
-              {buildMode && <BuildController mode={buildMode} />}
+              {explorable && buildMode && <BuildController mode={buildMode} />}
             </>
           )}
           {explorable && active && view === 'fp' && <TalkFraming active={active} />}
@@ -1950,7 +2105,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
               active={active === npc.id}
               dim={!!active && active !== npc.id}
               talking={talking && active === npc.id}
-              interactive={interactive && !explorable}
+              interactive={interactive && (!explorable || isTouchDevice)}
               aerial={view === 'aerial'}
               onSelect={onSelect}
             />
@@ -1962,18 +2117,20 @@ export default function Scene3D({ memories = null, active = null, talking = fals
       {exploring && (
         <>
           <div className="pointer-events-none absolute top-20 left-4 z-10 flex gap-3 text-sm text-[#f4e8d0]">
-            <span className="rounded-md bg-black/45 px-2.5 py-1" title="Wood">🪵 {world.inventory.wood}/{MAX_WOOD}</span>
-            <span className="rounded-md bg-black/45 px-2.5 py-1" title="Coin">🪙 {world.inventory.coin}</span>
+            <span className="rounded-md bg-black/45 px-2.5 py-1" title="Wood"><WoodIcon />{world.inventory.wood}/{MAX_WOOD}</span>
+            <span className="rounded-md bg-black/45 px-2.5 py-1" title="Coin"><CoinIcon />{world.inventory.coin}</span>
           </div>
-          <button
-            onClick={() => setView((v) => (v === 'fp' ? 'aerial' : 'fp'))}
-            className="absolute top-20 right-4 z-10 rounded-md border border-[#5a4a28] bg-black/50 px-3 py-1.5 text-sm text-[#f4e8d0] hover:border-[#d6b84a]"
-          >
-            {view === 'fp' ? '🦅 Aerial (V)' : '🚶 First person (V)'}
-          </button>
+          {!isTouchDevice && (
+            <button
+              onClick={() => setView((v) => (v === 'fp' ? 'aerial' : 'fp'))}
+              className="absolute top-20 right-4 z-10 rounded-md border border-[#5a4a28] bg-black/50 px-3 py-1.5 text-sm text-[#f4e8d0] hover:border-[#d6b84a]"
+            >
+              {view === 'fp' ? '🦅 Aerial (V)' : '🚶 First person (V)'}
+            </button>
+          )}
 
           {/* Build palette (aerial only). */}
-          {view === 'aerial' && (
+          {aerialExploring && (
             <div className="absolute top-32 right-4 z-10 flex flex-col items-end gap-1.5">
               {([
                 ['wall', `🧱 Wall (${BUILD_COST.wall}🪵)`],
@@ -1994,7 +2151,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
               ))}
               {buildMode && (
                 <span className="rounded bg-black/60 px-2 py-1 text-xs text-[#f4e8d0]/80">
-                  {buildMode === 'demolish' ? 'Click a building to demolish' : 'Click ground to place · R to rotate · click tool to cancel'}
+                  {buildMode === 'demolish' ? 'Tap a building to demolish' : 'Tap ground to place · tap tool to cancel'}
                 </span>
               )}
             </div>
@@ -2068,7 +2225,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
             </div>
           </div>
 
-          {!locked && (
+          {!controlsArmed && (
             <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
               <div className="rounded-full bg-black/55 px-5 py-2 text-sm text-[#f4e8d0]/90">
                 Click to look around · WASD to walk · V for aerial view
@@ -2076,7 +2233,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
             </div>
           )}
 
-          {locked && nearbyNpc && (
+          {controlsArmed && nearbyNpc && (
             <div className="pointer-events-none absolute bottom-28 left-1/2 z-10 -translate-x-1/2">
               <div
                 className="rounded-full border px-5 py-2 text-sm font-semibold text-[#f4e8d0] shadow-lg"
@@ -2087,11 +2244,11 @@ export default function Scene3D({ memories = null, active = null, talking = fals
             </div>
           )}
 
-          {locked && nearbyTree !== null && !nearbyNpc && (
+          {controlsArmed && nearbyTree !== null && !nearbyNpc && (
             <div className="pointer-events-none absolute bottom-28 left-1/2 z-10 -translate-x-1/2">
               {world.inventory.wood >= MAX_WOOD ? (
                 <div className="rounded-full border border-[#8a6a4a] px-5 py-2 text-sm font-semibold text-[#f4e8d0] shadow-lg" style={{ background: 'rgba(20,16,10,0.9)' }}>
-                  Wood full ({MAX_WOOD}) — can&apos;t carry more
+                  Wood full ({MAX_WOOD}) - can&apos;t carry more
                 </div>
               ) : (
                 <div className="rounded-2xl border border-[#6a8a4a] px-5 py-2.5 text-center text-sm font-semibold text-[#f4e8d0] shadow-lg" style={{ background: 'rgba(16,20,10,0.9)' }}>
@@ -2104,7 +2261,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
             </div>
           )}
 
-          {locked && nearbyEnemy && !nearbyNpc && !nearbyTree && (
+          {controlsArmed && nearbyEnemy && !nearbyNpc && !nearbyTree && (
             <div className="pointer-events-none absolute bottom-28 left-1/2 z-10 -translate-x-1/2">
               <div className="rounded-full border border-red-500/60 px-5 py-2 text-sm font-semibold text-red-100 shadow-lg" style={{ background: 'rgba(30,10,10,0.88)' }}>
                 <span className="text-red-400">Left Click</span> to attack Enemy
@@ -2123,6 +2280,94 @@ export default function Scene3D({ memories = null, active = null, talking = fals
         <div className="pointer-events-none absolute bottom-4 left-4 z-10 text-xs text-[#f4e8d0]/60">
           WASD move (W=north) · Scroll to zoom · V back to first person
         </div>
+      )}
+      {isTouchDevice && exploring && (
+        <>
+          <div className="absolute inset-x-0 bottom-0 z-20 flex items-end justify-between gap-3 px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+            <div className="grid grid-cols-3 gap-2">
+              <div />
+              <button
+                onPointerDown={() => setTouchDirection('forward', true)}
+                onPointerUp={() => setTouchDirection('forward', false)}
+                onPointerLeave={() => setTouchDirection('forward', false)}
+                onPointerCancel={() => setTouchDirection('forward', false)}
+                className="rounded-2xl border border-[#5a4a28] bg-black/60 px-4 py-3 text-sm text-[#f4e8d0]"
+              >
+                Up
+              </button>
+              <div />
+              <button
+                onPointerDown={() => setTouchDirection('left', true)}
+                onPointerUp={() => setTouchDirection('left', false)}
+                onPointerLeave={() => setTouchDirection('left', false)}
+                onPointerCancel={() => setTouchDirection('left', false)}
+                className="rounded-2xl border border-[#5a4a28] bg-black/60 px-4 py-3 text-sm text-[#f4e8d0]"
+              >
+                Left
+              </button>
+              <button
+                onPointerDown={() => setTouchDirection('backward', true)}
+                onPointerUp={() => setTouchDirection('backward', false)}
+                onPointerLeave={() => setTouchDirection('backward', false)}
+                onPointerCancel={() => setTouchDirection('backward', false)}
+                className="rounded-2xl border border-[#5a4a28] bg-black/60 px-4 py-3 text-sm text-[#f4e8d0]"
+              >
+                Down
+              </button>
+              <button
+                onPointerDown={() => setTouchDirection('right', true)}
+                onPointerUp={() => setTouchDirection('right', false)}
+                onPointerLeave={() => setTouchDirection('right', false)}
+                onPointerCancel={() => setTouchDirection('right', false)}
+                className="rounded-2xl border border-[#5a4a28] bg-black/60 px-4 py-3 text-sm text-[#f4e8d0]"
+              >
+                Right
+              </button>
+            </div>
+
+            <div className="flex flex-col items-end gap-2">
+              {nearbyNpc && (
+                <button
+                  onClick={activateNearbyNpc}
+                  className="rounded-2xl border px-4 py-3 text-sm font-semibold text-[#f4e8d0]"
+                  style={{ background: 'rgba(20,16,10,0.92)', borderColor: nearbyNpc.accent }}
+                >
+                  Talk to {nearbyNpc.name}
+                </button>
+              )}
+              {nearbyTree !== null && !nearbyNpc && (
+                <button
+                  onPointerDown={() => {
+                    fHeldRef.current = true;
+                  }}
+                  onPointerUp={() => {
+                    fHeldRef.current = false;
+                  }}
+                  onPointerLeave={() => {
+                    fHeldRef.current = false;
+                  }}
+                  onPointerCancel={() => {
+                    fHeldRef.current = false;
+                  }}
+                  className="rounded-2xl border border-[#6a8a4a] bg-[rgba(16,20,10,0.92)] px-4 py-3 text-sm font-semibold text-[#f4e8d0]"
+                >
+                  Hold to chop
+                </button>
+              )}
+              {nearbyEnemy && !nearbyNpc && nearbyTree === null && (
+                <button
+                  onClick={attackNearbyEnemy}
+                  className="rounded-2xl border border-red-500/60 bg-[rgba(30,10,10,0.92)] px-4 py-3 text-sm font-semibold text-red-100"
+                >
+                  Attack
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="pointer-events-none absolute top-20 left-1/2 z-20 -translate-x-1/2 rounded-full bg-black/55 px-4 py-2 text-center text-xs text-[#f4e8d0]/90">
+            Touch mode: move with the pad, tap NPCs or use action buttons.
+          </div>
+        </>
       )}
     </div>
   );

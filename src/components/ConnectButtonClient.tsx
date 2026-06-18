@@ -6,7 +6,7 @@ import { useWalletContext } from '@/context/WalletContext';
 // Client-side only component - no hydration issues since it's dynamically imported
 export function ConnectButtonClient() {
   const { networkType } = useNetwork();
-  const { address, isConnected, isConnecting, connect, isHydrated } = useWalletContext();
+  const { address, isConnected, isConnecting, connect, isHydrated, connectError, walletHelp, clearConnectError } = useWalletContext();
   const { disconnect } = useDisconnect();
   
   // Use ref for key to avoid state updates during render
@@ -65,9 +65,12 @@ export function ConnectButtonClient() {
   }
 
   return (
-    <div key={keyRef.current}>
+    <div key={keyRef.current} className="flex max-w-sm flex-col items-center gap-2">
       <button
-        onClick={() => connect()}
+        onClick={() => {
+          clearConnectError();
+          void connect();
+        }}
         className="px-4 py-2 font-semibold text-sm bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg shadow-sm 
           hover:from-blue-600 hover:to-blue-700 transition-all duration-200
           focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50
@@ -75,6 +78,16 @@ export function ConnectButtonClient() {
       >
         Connect Wallet
       </button>
+      {connectError && (
+        <p className="max-w-xs rounded-lg border border-red-300 bg-red-50/95 px-3 py-2 text-center text-xs text-red-700 shadow-sm">
+          {connectError}
+        </p>
+      )}
+      {walletHelp && (
+        <p className="max-w-xs text-center text-xs text-[#f4e8d0]/85">
+          {walletHelp}
+        </p>
+      )}
     </div>
   );
 } 
