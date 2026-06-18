@@ -47,6 +47,13 @@ export function setWorldPersistence(p: WorldPersistence): void; // register your
   `docs/ENGRAM_ECONOMY.md`).
 - Whatever you choose, expose it ONLY through `WorldPersistence` so gameplay stays decoupled.
 
+### Building system (Prompt 9) — heads up
+`WorldState` will gain a `buildings: Building[]` field (placed walls/houses). Split:
+**9a** placement gameplay = world-dev; **9b** persisting `WorldState` (incl. buildings)
+on 0G = **martelaxe**, via the SAME `WorldPersistence` seam (load/save unchanged). This
+is the planned **second real 0G use case** (the player's built world on 0G). Full spec:
+Prompt 9 in `docs/ENGRAM_PROMPTS.md`.
+
 ## ✅ Dual camera + avatar (Prompt 8a) — implemented (verify visually)
 Done in `Scene3D.tsx`: `view: 'fp' | 'aerial'` (toggle key **V** + HUD button); aerial
 uses a drei `<OrthographicCamera>` following a third-person **Avatar**; WASD moves the

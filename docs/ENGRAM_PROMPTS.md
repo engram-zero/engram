@@ -14,10 +14,11 @@
 2. [World pass: terreno con alturas, cielo, casas, árboles y avatares](#prompt-2--world-pass-terreno-cielo-y-props) — ✅ done
 3. [Protección de coste/abuso en /api/npc (rate limit)](#prompt-3--rate-limit--anti-abuso-en-apinpc) — ✅ done
 4. [Controles móviles / táctiles (sin pointer lock)](#prompt-4--controles-móviles--táctiles) — ⏳ pendiente
-5. [Texturas PNG en lugar de materiales planos](#prompt-5--texturas-png) — 🟡 sistema listo (faltan PNGs; ver [`ART_ASSETS.md`](ART_ASSETS.md))
+5. [Texturas PNG en lugar de materiales planos](#prompt-5--texturas-png) — ✅ done (22 texturas en webp; ver [`ART_ASSETS.md`](ART_ASSETS.md))
 6. [Audio ambiental (fogata, pasos, noche)](#prompt-6--audio-ambiental) — ⏳ pendiente
 7. [Verificar end-to-end la UX del 429 en el cliente](#prompt-7--verificación-diferida-ux-del-429) — ⏳ diferida (ver precondición)
 8. [Visión: gameplay loop, doble vista y mundo persistente en 0G](#prompt-8--visión-gameplay-loop--doble-vista) — 🟡 partial: 8a done, 8b persistence MVP done
+9. [Construir edificios + persistir el mundo en 0G](#prompt-9--construir--persistir-el-mundo-en-0g) — ⏳ pendiente (9a gameplay · 9b extends current 0G adapter)
 
 > **Tareas no-código (ADMIN):** ✅ deploy a Vercel + env vars · ✅ save a 0G end-to-end ·
 > ⏳ actualizar la Description del dashboard 0g.ai (versión honesta) ·
@@ -485,6 +486,60 @@ Quick win, alto valor, bajo riesgo. En `src/components/engram/Scene3D.tsx`:
 Cada fase es semanas de trabajo. Prioriza **8a** (barato, diferenciador) y mantén la IA +
 0G en el centro. No dejes que la parte de "construir/RTS" canibalice lo único que te
 distingue: NPCs/mundo con memoria persistente y propiedad del jugador en 0G.
+
+---
+
+## Prompt 9 — Construir + persistir el mundo en 0G
+
+> Concreta la Fase 8b del Prompt 8. Se divide en **9a (gameplay, world-dev)** y
+> **9b (persistencia 0G, martelaxe)**. La costura entre ambos ya existe:
+> `WorldPersistence` en [`src/lib/world.ts`](../src/lib/world.ts). Valor para el torneo:
+> un **segundo uso real de 0G** — no solo la memoria de NPCs, sino el **mundo construido
+> del jugador**, indexado a su wallet, auditable, que nadie puede borrar.
+
+### Modelo de datos compartido (acordar primero)
+Extender `WorldState` en `world.ts` con los edificios colocados:
+```ts
+export type BuildingType = 'wall' | 'house';
+export interface Building { type: BuildingType; x: number; z: number; rot: number }
+export interface WorldState {
+  inventory: Record<ResourceType, number>;
+  choppedTrees: number[];
+  buildings: Building[];   // ← nuevo
+}
+```
+Acciones en el store: `placeBuilding(b)` (descuenta madera), `removeBuilding(i)`
+(demoler). Costos: p.ej. muro = 2 madera, casa = 8. `buildings` se persiste vía la
+MISMA costura `WorldPersistence` (no cambia el contrato load/save).
+
+### 9a — Gameplay de colocación (world-dev) — ⏳
+- **Modo construir** (tecla B o botón), idealmente en **vista aérea** (ya existe).
+- **Preview fantasma** del edificio bajo el cursor/avatar (semitransparente, verde si
+  cabe / rojo si choca con colliders o no hay madera). Snap a una grilla simple.
+- **Clic = colocar** → `placeBuilding` (descuenta madera del inventario, tope MAX_WOOD).
+- Renderizar `world.buildings` (reusar geometrías de `Cottage`/cajas para muros) y
+  **añadir sus colliders** al set que usa `resolveCollision` (de una sola fuente).
+- **Demoler**: apuntar a un edificio + acción → `removeBuilding` (devuelve algo de madera).
+- No romper diálogo/memoria/combate. `tsc --noEmit` + `next build` deben pasar.
+
+### 9b — Persistencia en 0G (martelaxe) — 🟡 MVP listo, extender para edificios
+Ya existe un `WorldPersistence` respaldado por 0G en
+[`src/lib/world-0g.ts`](../src/lib/world-0g.ts), registrado con
+`setWorldPersistence(...)`: carga `MemoryBundle.world` desde el root del registry y
+usa localStorage como fallback instantáneo. [`src/lib/memory.ts`](../src/lib/memory.ts)
+incluye el `WorldState` actual en cada guardado normal de conversación, así que inventario
+y árboles talados ya viajan con la wallet.
+
+Cuando 9a añada `buildings: Building[]`, extender `WorldState` + `normalizeWorldState`
+para incluir edificios y el mismo adaptador los persistirá en 0G. **No tocar gameplay**
+desde esta parte — solo mantener la costura.
+
+### Criterios de aceptación
+1. Construir un muro/casa descuenta madera y aparece en el mundo con colisión.
+2. Demoler lo quita (y persiste el cambio).
+3. Con `WorldPersistence` de 0G activo: construir → recargar/otro dispositivo → el mundo
+   construido se recupera desde 0G.
+4. Sin 0G configurado, todo funciona en local (localStorage). `tsc` limpio.
 
 ---
 
