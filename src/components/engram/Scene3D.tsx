@@ -2047,6 +2047,51 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     if (canPlaceBuilding(buildMode, x, z)) placeBuilding({ type: buildMode, x, z, rot: buildRot }, buildCostAt(buildMode, x, z));
   };
 
+  // AI construction: describe a structure → /api/build returns pieces relative to
+  // the avatar → place each one that's valid and affordable.
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [aiKey, setAiKey] = useState('');
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiMsg, setAiMsg] = useState<string | null>(null);
+
+  const runAIBuild = async () => {
+    if (aiBusy || !aiPrompt.trim()) return;
+    setAiBusy(true);
+    setAiMsg('Designing…');
+    try {
+      const res = await fetch('/api/build', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: aiPrompt.trim(), apiKey: aiKey.trim() || undefined }),
+      });
+      const data = (await res.json()) as { buildings?: { type: BuildingType; dx: number; dz: number; rot: number }[]; error?: string };
+      if (data.error && !data.buildings) {
+        setAiMsg(data.error);
+        setAiBusy(false);
+        return;
+      }
+      const origin = posRef.current;
+      let placed = 0;
+      let spent = 0;
+      for (const b of data.buildings ?? []) {
+        const x = Math.round(origin.x + b.dx);
+        const z = Math.round(origin.z + b.dz);
+        if (canPlaceBuilding(b.type, x, z)) {
+          const cost = buildCostAt(b.type, x, z);
+          if (placeBuilding({ type: b.type, x, z, rot: b.rot }, cost)) {
+            placed += 1;
+            spent += cost;
+          }
+        }
+      }
+      setAiMsg(placed > 0 ? `Built ${placed} piece${placed === 1 ? '' : 's'} (−${spent}🪵).` : 'Nothing fit / not enough wood here. Try open ground.');
+    } catch {
+      setAiMsg('Build request failed.');
+    }
+    setAiBusy(false);
+  };
+
   const activateNearbyNpc = () => {
     if (nearbyRef.current) onSelect(nearbyRef.current);
   };
@@ -2330,11 +2375,68 @@ export default function Scene3D({ memories = null, active = null, talking = fals
                   {label}
                 </button>
               ))}
+              <button
+                onClick={() => {
+                  setBuildMode(null);
+                  setAiMsg(null);
+                  setAiOpen(true);
+                }}
+                className="rounded-md border border-[#7a6ad6] bg-black/50 px-3 py-1.5 text-sm text-[#f4e8d0] hover:border-[#b98bff]"
+              >
+                🤖 Build with AI
+              </button>
               {buildMode && (
                 <span className="rounded bg-black/60 px-2 py-1 text-xs text-[#f4e8d0]/80">
                   {buildMode === 'demolish' ? 'Tap a building to demolish' : 'Tap ground to place · tap tool to cancel'}
                 </span>
               )}
+            </div>
+          )}
+
+          {/* AI build modal: describe → /api/build → place around the avatar. */}
+          {aiOpen && (
+            <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/50 p-4" onClick={() => !aiBusy && setAiOpen(false)}>
+              <div
+                className="w-full max-w-md rounded-2xl border border-[#5a4a28] bg-[rgba(20,16,10,0.97)] p-5 text-[#f4e8d0] shadow-2xl"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="mb-1 text-lg font-bold text-[#b98bff]">🤖 Build with AI</div>
+                <p className="mb-3 text-xs text-[#f4e8d0]/70">
+                  Describe a structure. It&apos;s built around you (drive somewhere open, outside the village
+                  core). Costs wood — bigger ideas cost more.
+                </p>
+                <textarea
+                  value={aiPrompt}
+                  onChange={(e) => setAiPrompt(e.target.value)}
+                  maxLength={300}
+                  rows={3}
+                  placeholder="e.g. a small walled compound with two houses and a gate"
+                  className="w-full rounded-lg border border-[#5a4a28] bg-black/40 p-2 text-sm outline-none focus:border-[#b98bff]"
+                />
+                <details className="mt-2 text-xs text-[#f4e8d0]/70">
+                  <summary className="cursor-pointer">Use my own Anthropic key (optional)</summary>
+                  <input
+                    value={aiKey}
+                    onChange={(e) => setAiKey(e.target.value)}
+                    type="password"
+                    placeholder="sk-ant-…  (sent to the server for this request only, never stored)"
+                    className="mt-2 w-full rounded-lg border border-[#5a4a28] bg-black/40 p-2 text-sm outline-none focus:border-[#b98bff]"
+                  />
+                </details>
+                {aiMsg && <div className="mt-3 text-sm text-[#d6b84a]">{aiMsg}</div>}
+                <div className="mt-4 flex justify-end gap-2">
+                  <button onClick={() => setAiOpen(false)} disabled={aiBusy} className="rounded-lg border border-[#5a4a28] px-4 py-2 text-sm disabled:opacity-50">
+                    Close
+                  </button>
+                  <button
+                    onClick={runAIBuild}
+                    disabled={aiBusy || !aiPrompt.trim()}
+                    className="rounded-lg border border-[#b98bff] bg-[#3a2d5a] px-4 py-2 text-sm font-semibold disabled:opacity-50"
+                  >
+                    {aiBusy ? 'Building…' : 'Build'}
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </>
