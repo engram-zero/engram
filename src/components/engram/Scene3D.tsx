@@ -6,12 +6,14 @@
 // memories, which NPC is active, and a select callback — all game/memory/dialogue
 // logic still lives in client-page.tsx. The 2D dialogue box overlays this Canvas.
 
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Stars, Sky, Html, ContactShadows, PointerLockControls, OrthographicCamera, KeyboardControls, useKeyboardControls } from '@react-three/drei';
 import * as THREE from 'three';
+import { useNetwork } from '@/app/providers';
 import { NPC_LIST } from '@/lib/npcs';
 import type { NPCName, NPCMemory } from '@/lib/types';
+import { writeWorldState } from '@/lib/memory';
 import {
   getHeightAt,
   COLLIDERS,
@@ -27,6 +29,9 @@ import { getTexture, getTextureVariant, hasTexture } from './textures';
 import {
   useWorld,
   getWorld,
+  getWorldWallet,
+  cloneWorldState,
+  replaceWorldState,
   harvestTree,
   isChopped,
   woodIsFull,
@@ -35,9 +40,11 @@ import {
   removeBuilding,
   BUILD_COST,
   BUILD_RADIUS,
+  isLocalhostFreeBuildWallet,
   type BuildingType,
   type Building,
 } from '@/lib/world';
+import { usePublicWorld } from '@/lib/public-world';
 
 // A tree carries its global index (into TREES) so chopping can target it.
 type TreeInst = TreeDef & { idx: number };
@@ -1204,8 +1211,12 @@ function BuildingMesh({ b }: { b: Building }) {
 
 function Buildings() {
   const world = useWorld();
+  const publicWorld = usePublicWorld();
   return (
     <group>
+      {publicWorld.buildings.map((b, i) => (
+        <BuildingMesh key={`public-${b.owner}-${i}`} b={b} />
+      ))}
       {world.buildings.map((b, i) => (
         <BuildingMesh key={i} b={b} />
       ))}
@@ -1238,7 +1249,7 @@ function canPlaceBuilding(type: BuildingType, x: number, z: number): boolean {
   const d = Math.hypot(x, z);
   if (d < NO_BUILD_RADIUS) return false; // protected village core
   if (d > WORLD_RADIUS) return false;
-  if (w.inventory.wood < buildCostAt(type, x, z)) return false;
+  if (!isLocalhostFreeBuildWallet() && w.inventory.wood < buildCostAt(type, x, z)) return false;
   // Blocks are decorative voxels — they may overlap freely (no collision check).
   if (type === 'block') return true;
   const r = BUILD_RADIUS[type];
@@ -1273,7 +1284,7 @@ function demolishNearest(x: number, z: number, reach = 2): boolean {
   return false;
 }
 
-function BuildController({ mode }: { mode: BuildingType | 'demolish' }) {
+function BuildController({ mode, onDraftChange }: { mode: BuildingType | 'demolish'; onDraftChange: () => void }) {
   const [ghost, setGhost] = useState<[number, number] | null>(null);
   const [rot, setRot] = useState(0);
   const world = useWorld();
@@ -1307,9 +1318,12 @@ function BuildController({ mode }: { mode: BuildingType | 'demolish' }) {
           bi = i;
         }
       });
-      if (bi >= 0) removeBuilding(bi);
+      if (bi >= 0) {
+        removeBuilding(bi);
+        onDraftChange();
+      }
     } else if (valid) {
-      placeBuilding({ type: mode, x, z, rot }, buildCostAt(mode, x, z));
+      if (placeBuilding({ type: mode, x, z, rot }, buildCostAt(mode, x, z))) onDraftChange();
     }
   };
 
@@ -2012,6 +2026,7 @@ interface Scene3DProps {
 }
 
 export default function Scene3D({ memories = null, active = null, talking = false, onSelect = () => {}, interactive = true, showTitle = false, uiOpen = false }: Scene3DProps) {
+  const { networkType } = useNetwork();
   // Walk-around mode kicks in once the village is interactive (wallet connected
   // and memories loaded). The title screen stays cinematic.
   const explorable = interactive && !showTitle;
@@ -2053,6 +2068,10 @@ export default function Scene3D({ memories = null, active = null, talking = fals
   nearbyEnemyRef.current = nearbyEnemy;
   
   const world = useWorld();
+  const [publishStatus, setPublishStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [publishMsg, setPublishMsg] = useState<string | null>(null);
+  const [buildDraftDirty, setBuildDraftDirty] = useState(false);
+  const aerialDraftBaseRef = useRef(cloneWorldState());
   const fHeldRef = useRef(false); // is the chop key (F) held down
   const chopRef = useRef(0); // chop progress 0..100
   const [chopPct, setChopPct] = useState(0);
@@ -2075,6 +2094,8 @@ export default function Scene3D({ memories = null, active = null, talking = fals
   useEffect(() => {
     if (explorable && isTouchDevice && !didDefaultView.current) {
       didDefaultView.current = true;
+      aerialDraftBaseRef.current = cloneWorldState(getWorld());
+      setBuildDraftDirty(false);
       setView('aerial');
     }
   }, [explorable, isTouchDevice]);
@@ -2091,17 +2112,72 @@ export default function Scene3D({ memories = null, active = null, talking = fals
   const touchLookRef = useRef({ dx: 0, dy: 0 }); // first-person look (drag) on touch
   const [buildRot, setBuildRot] = useState(0); // rotation for touch placement
 
+  const markBuildDraftDirty = () => {
+    setBuildDraftDirty(true);
+    if (publishStatus !== 'saving') {
+      setPublishStatus('idle');
+      setPublishMsg('Unsaved changes. Save before leaving aerial view.');
+    }
+  };
+
+  const switchView = useCallback(() => {
+    if (view === 'fp') {
+      aerialDraftBaseRef.current = cloneWorldState(getWorld());
+      setBuildDraftDirty(false);
+      setPublishStatus('idle');
+      setPublishMsg(null);
+      setView('aerial');
+      return;
+    }
+
+    if (buildDraftDirty) {
+      const discard = window.confirm('You have unsaved building changes. If you leave aerial view now, those changes will be discarded. Leave without saving?');
+      if (!discard) return;
+      void replaceWorldState(aerialDraftBaseRef.current);
+      setBuildDraftDirty(false);
+      setPublishStatus('idle');
+      setPublishMsg('Unsaved changes discarded.');
+    }
+    setBuildMode(null);
+    setView('fp');
+  }, [buildDraftDirty, view]);
+
   // Touch placement: drop the building where the mobile ghost sits (in front of
   // the avatar), or demolish the nearest one.
   const placeMobileBuilding = () => {
     if (!buildMode) return;
     const p = posRef.current;
     if (buildMode === 'demolish') {
-      demolishNearest(p.x, p.z, 3);
+      if (demolishNearest(p.x, p.z, 3)) markBuildDraftDirty();
       return;
     }
     const [x, z] = mobileGhostXZ(p);
-    if (canPlaceBuilding(buildMode, x, z)) placeBuilding({ type: buildMode, x, z, rot: buildRot }, buildCostAt(buildMode, x, z));
+    if (canPlaceBuilding(buildMode, x, z) && placeBuilding({ type: buildMode, x, z, rot: buildRot }, buildCostAt(buildMode, x, z))) {
+      markBuildDraftDirty();
+    }
+  };
+
+  const publishWorld = async () => {
+    const wallet = getWorldWallet();
+    if (!wallet || publishStatus === 'saving') return;
+
+    setPublishStatus('saving');
+    setPublishMsg('Saving world...');
+    try {
+      const result = await writeWorldState(wallet, getWorld(), networkType);
+      setPublishStatus('saved');
+      setBuildDraftDirty(false);
+      aerialDraftBaseRef.current = cloneWorldState(getWorld());
+      setPublishMsg(result.skipped ? 'World already saved.' : `World saved (${result.rootHash.slice(0, 10)}...${result.rootHash.slice(-6)})`);
+      window.setTimeout(() => {
+        setPublishStatus('idle');
+        setPublishMsg(null);
+      }, 5000);
+    } catch (error) {
+      console.warn('[engram] publish world failed:', error);
+      setPublishStatus('error');
+      setPublishMsg((error as Error).message || 'Save failed.');
+    }
   };
 
   // AI construction: describe → /api/build returns pieces relative to the avatar
@@ -2186,6 +2262,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     }
     setAiPreview(null);
     setAiOrigin(null);
+    if (placed > 0) markBuildDraftDirty();
     setAiMsg(placed > 0 ? `Built ${placed} piece${placed === 1 ? '' : 's'} (−${wood}🪵).` : 'Nothing fit / not enough wood. Drive to open ground and re-generate.');
   };
 
@@ -2211,7 +2288,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
       const tag = (document.activeElement as HTMLElement | null)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
       if (e.code === 'KeyV') {
-        setView((v) => (v === 'fp' ? 'aerial' : 'fp'));
+        switchView();
         return;
       }
       if (view !== 'fp') return; // interactions are first-person only
@@ -2227,7 +2304,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
       window.removeEventListener('keydown', onDown);
       window.removeEventListener('keyup', onUp);
     };
-  }, [exploring, onSelect, view]);
+  }, [buildDraftDirty, exploring, onSelect, switchView, view]);
 
   // Chopping takes time: hold F near a tree to fill a progress bar, then it falls.
   useEffect(() => {
@@ -2402,7 +2479,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
                 onNearbyEnemyChange={setNearbyEnemy}
               />
               <Avatar posRef={posRef} />
-              {explorable && buildMode && !isTouchDevice && <BuildController mode={buildMode} />}
+              {explorable && buildMode && !isTouchDevice && <BuildController mode={buildMode} onDraftChange={markBuildDraftDirty} />}
               {explorable && buildMode && buildMode !== 'demolish' && isTouchDevice && (
                 <MobileBuildGhost mode={buildMode} posRef={posRef} rot={buildRot} />
               )}
@@ -2447,7 +2524,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
             <span className="inline-flex items-center rounded-md bg-black/45 px-2.5 py-1" title="Coin"><CoinIcon />{world.inventory.coin}</span>
           </div>
           <button
-            onClick={() => setView((v) => (v === 'fp' ? 'aerial' : 'fp'))}
+            onClick={switchView}
             className="absolute top-20 right-4 z-30 rounded-md border border-[#5a4a28] bg-black/50 px-3 py-1.5 text-sm text-[#f4e8d0] hover:border-[#d6b84a]"
           >
             {view === 'fp' ? (isTouchDevice ? '🦅 Aerial' : '🦅 Aerial (V)') : isTouchDevice ? '🚶 First person' : '🚶 First person (V)'}
@@ -2483,6 +2560,17 @@ export default function Scene3D({ memories = null, active = null, talking = fals
               >
                 🤖 Build with AI
               </button>
+              <button
+                onClick={publishWorld}
+                disabled={publishStatus === 'saving'}
+                className="rounded-md border bg-black/50 px-3 py-1.5 text-sm text-[#f4e8d0] hover:border-[#70d6ff] disabled:cursor-wait disabled:opacity-70"
+                style={{ borderColor: publishStatus === 'saved' ? '#8fd06a' : publishStatus === 'error' ? '#d06a5f' : '#4a8aa8' }}
+              >
+                {publishStatus === 'saving' ? 'Saving...' : 'Save World'}
+              </button>
+              <span className="max-w-[15rem] rounded bg-black/60 px-2 py-1 text-right text-xs text-[#f4e8d0]/75">
+                {publishMsg ?? (buildDraftDirty ? 'Unsaved changes.' : 'Save before leaving aerial view.')}
+              </span>
               {buildMode && (
                 <span className="rounded bg-black/60 px-2 py-1 text-xs text-[#f4e8d0]/80">
                   {buildMode === 'demolish' ? 'Tap a building to demolish' : 'Tap ground to place · tap tool to cancel'}

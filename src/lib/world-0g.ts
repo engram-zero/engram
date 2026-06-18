@@ -12,10 +12,9 @@ import {
  * World persistence backed by the same 0G MemoryBundle root as NPC memory.
  *
  * Loading is truly cross-device: registry -> rootHash -> MemoryBundle.world.
- * Saving gameplay actions stays local immediately; the next conversation save
- * commits the latest WorldState into the bundle in `writeMemory`. This preserves
- * the "no extra MetaMask prompt per chop" UX while still making the world portable
- * once the player performs the normal Engram save.
+ * Saving gameplay actions here only writes a local draft. The player must click
+ * "Save World" in aerial mode to upload the draft world bundle and anchor the
+ * root in EngramRegistry. That keeps the blockchain step explicit and testable.
  */
 export function createBundleWorldPersistence(networkType: NetworkType): WorldPersistence {
   return {
@@ -36,7 +35,12 @@ export function createBundleWorldPersistence(networkType: NetworkType): WorldPer
     },
 
     async save(wallet, state) {
-      await localWorldPersistence.save(wallet, normalizeWorldState(state));
+      const world = normalizeWorldState(state);
+      await localWorldPersistence.save(wallet, world);
+      console.info('[engram] world draft saved locally', {
+        wallet,
+        buildings: world.buildings.length,
+      });
     },
   };
 }

@@ -17,6 +17,7 @@ import type { NPCName, NPCMemory } from '@/lib/types';
 import { readAllMemories, writeMemory, getBundleRoot } from '@/lib/memory';
 import { initWorld, setWorldPersistence } from '@/lib/world';
 import { createBundleWorldPersistence } from '@/lib/world-0g';
+import { startPublicWorldPolling } from '@/lib/public-world';
 import { Portrait } from '@/components/engram/Art';
 import dynamic from 'next/dynamic';
 
@@ -107,6 +108,7 @@ function Game() {
     if (!isConnected || !address) return;
     setWorldPersistence(createBundleWorldPersistence(networkType));
     initWorld(address).catch(() => {});
+    return startPublicWorldPolling(networkType, address);
   }, [address, isConnected, networkType]);
 
   const crossFor = useCallback(

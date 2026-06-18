@@ -16,9 +16,9 @@ Keep changes on your side of a seam; don't change a seam's interface without a h
 - **EngramRegistry** deployed at `0xD142048BcA7fC224d557C12F8adbAc70D4EC4067`
   (`contracts/EngramRegistry.sol`, `src/lib/registry/`).
 - **WorldState → 0G bundle (MVP)**: inventory/chopped trees hydrate from
-  `MemoryBundle.world` via `src/lib/world-0g.ts` and are committed into the same 0G bundle
-  on normal conversation save. This keeps one registry pointer per wallet and avoids an
-  extra MetaMask prompt on every gameplay action.
+  `MemoryBundle.world` via `src/lib/world-0g.ts`. Building changes are local drafts until
+  the player clicks **Save World** in aerial mode; saving writes the same bundle and
+  updates the one registry pointer per wallet.
 
 ## 🔌 The seam for world-state persistence
 Gameplay resources/buildings still go through the seam defined in **`src/lib/world.ts`**:

@@ -32,6 +32,25 @@ export const BUILD_RADIUS: Record<BuildingType, number> = { wall: 0.9, house: 1.
 
 export const EMPTY_WORLD: WorldState = { inventory: { wood: 0, stone: 0, coin: 0 }, choppedTrees: [], buildings: [] };
 
+const LOCALHOST_FREE_BUILD_WALLETS = new Set([
+  '0xc77b3982d324c6e812119eea7dc94f0a856da59e',
+]);
+
+export function isLocalhostFreeBuildWallet(addr: string | null = wallet): boolean {
+  if (!addr || typeof window === 'undefined') return false;
+  const host = window.location.hostname;
+  const isLocalhost = host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0';
+  return isLocalhost && LOCALHOST_FREE_BUILD_WALLETS.has(addr.toLowerCase());
+}
+
+function applyLocalhostFreeBuild(state: WorldState, addr: string | null = wallet): WorldState {
+  if (!isLocalhostFreeBuildWallet(addr)) return state;
+  return {
+    ...state,
+    inventory: { ...state.inventory, wood: MAX_WOOD },
+  };
+}
+
 function normalizeBuildings(raw: unknown): Building[] {
   if (!Array.isArray(raw)) return [];
   return raw
@@ -66,7 +85,7 @@ export function normalizeWorldState(raw: unknown): WorldState {
   };
 }
 
-function cloneWorldState(value: WorldState = EMPTY_WORLD): WorldState {
+export function cloneWorldState(value: WorldState = EMPTY_WORLD): WorldState {
   return {
     inventory: { ...value.inventory },
     choppedTrees: [...value.choppedTrees],
@@ -126,7 +145,7 @@ function subscribe(l: () => void) {
 /** Load this wallet's world state through the persistence seam. */
 export async function initWorld(addr: string): Promise<void> {
   wallet = addr;
-  state = await persistence.load(addr);
+  state = applyLocalhostFreeBuild(await persistence.load(addr), addr);
   emit();
 }
 
@@ -139,15 +158,19 @@ export function getWorldWallet(): string | null {
 }
 
 async function commit(next: WorldState) {
-  state = next;
+  state = applyLocalhostFreeBuild(next);
   emit();
   if (wallet) {
     try {
-      await persistence.save(wallet, next);
+      await persistence.save(wallet, state);
     } catch (e) {
       console.warn('[engram] world save failed:', e);
     }
   }
+}
+
+export function replaceWorldState(next: WorldState) {
+  return commit(next);
 }
 
 export function addResource(type: ResourceType, amount: number) {
@@ -207,10 +230,11 @@ export function harvestTree(index: number): { depleted: boolean; gained: boolean
  * caller computes `cost` (it scales with distance to the centre); defaults to the
  * base cost. Returns success. */
 export function placeBuilding(b: Building, cost: number = BUILD_COST[b.type]): boolean {
-  if (state.inventory.wood < cost) return false;
+  const freeBuild = isLocalhostFreeBuildWallet();
+  if (!freeBuild && state.inventory.wood < cost) return false;
   commit({
     ...state,
-    inventory: { ...state.inventory, wood: state.inventory.wood - cost },
+    inventory: { ...state.inventory, wood: freeBuild ? MAX_WOOD : state.inventory.wood - cost },
     buildings: [...state.buildings, b],
   });
   return true;

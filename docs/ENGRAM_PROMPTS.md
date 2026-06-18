@@ -537,17 +537,17 @@ Para que nadie "ensucie" el centro y se formen **sub-aldeas** afuera:
 - **Demoler**: apuntar a un edificio + acción → `removeBuilding` (devuelve algo de madera).
 - No romper diálogo/memoria/combate. `tsc --noEmit` + `next build` deben pasar.
 
-### 9b — Persistencia en 0G (martelaxe) — 🟡 MVP listo, extender para edificios
+### 9b — Persistencia en 0G (martelaxe) — ✅ MVP listo
 Ya existe un `WorldPersistence` respaldado por 0G en
 [`src/lib/world-0g.ts`](../src/lib/world-0g.ts), registrado con
 `setWorldPersistence(...)`: carga `MemoryBundle.world` desde el root del registry y
 usa localStorage como fallback instantáneo. [`src/lib/memory.ts`](../src/lib/memory.ts)
-incluye el `WorldState` actual en cada guardado normal de conversación, así que inventario
-y árboles talados ya viajan con la wallet.
+expone `writeWorldState(...)`, que sube el bundle actualizado a 0G y ancla el nuevo root.
 
-Cuando 9a añada `buildings: Building[]`, extender `WorldState` + `normalizeWorldState`
-para incluir edificios y el mismo adaptador los persistirá en 0G. **No tocar gameplay**
-desde esta parte — solo mantener la costura.
+Las acciones de construir/demoler son **drafts locales**. En vista aérea, el jugador debe
+clickear **Save World** para subir el `WorldState` actual a 0G y anclar el root en
+`EngramRegistry`. Si no publica, otros wallets no ven esos edificios. Chopping/recolección
+simple queda local hasta publicar mundo.
 
 ### Criterios de aceptación
 1. Construir un muro/casa descuenta madera y aparece en el mundo con colisión.

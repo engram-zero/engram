@@ -1,6 +1,6 @@
 # Engram — Status & 0G integration notes
 
-_Last updated: 17 jun 2026. If you're an AI/contributor touching storage, read the
+_Last updated: 18 jun 2026. If you're an AI/contributor touching storage, read the
 "0G integration gotchas" section — it's hard-won and non-obvious._
 
 ## Current state — the core loop WORKS ✅
@@ -50,6 +50,8 @@ These cost a long debugging session; keep them in mind.
   deterministic stub.) Server-only.
 - `ENGRAM_SPONSOR_KEY` — funded 0G Galileo testnet private key the server writes 0G with.
   **Server-only, never `NEXT_PUBLIC_`.** The wallet must hold testnet OG (faucet.0g.ai).
+  Local dev may fall back to `PRIVATE_KEY` if `ENGRAM_SPONSOR_KEY` is missing; production
+  must set `ENGRAM_SPONSOR_KEY` explicitly.
 - `NEXT_PUBLIC_PROJECT_ID` — WalletConnect (optional for injected wallets).
 - `NEXT_PUBLIC_ENGRAM_REGISTRY` — optional override for redeploy/testing. The current
   Galileo registry is baked into the app as public infrastructure:
@@ -67,19 +69,25 @@ These cost a long debugging session; keep them in mind.
   0G (client GET), and `writeMemory()` POSTs the full bundle to `/api/save`. Caches the
   rootHash pointer in localStorage as fallback.
 - `src/lib/registry/*` — minimal ABI + client for `rootOf(wallet)` / `setRoot(rootHash)`.
-- `src/lib/world.ts` + `src/lib/world-0g.ts` — world inventory/chopped trees. Hydrates from
-  `MemoryBundle.world`; normal conversation saves commit the current world into the 0G
-  bundle without an extra gameplay-action tx.
+- `src/lib/world.ts` + `src/lib/world-0g.ts` — world inventory/chopped trees/buildings.
+  Hydrates from `MemoryBundle.world`. Building/demolition changes are local drafts until
+  the player clicks **Save World** in aerial mode; that writes the bundle to 0G and calls
+  `EngramRegistry.setRoot`.
+- `src/lib/public-world.ts` — scans `RootUpdated` events from EngramRegistry, downloads
+  other wallets' 0G bundles, and renders their `world.buildings` as a read-only public
+  overlay. This is discovery, not shared editing.
 - `src/app/api/save/route.ts` — server-side 0G upload with the sponsor wallet + legacy gas.
 - `src/lib/0g/uploader.ts` — `uploadToStorage()` wraps `indexer.upload`.
 - `src/lib/0g/{blob,downloader,fees,network}.ts` — 0G primitives + network config.
 - `src/app/providers.tsx` — default network (Turbo).
 
 ## Known limitation (next real feature)
-World persistence is an MVP: `WorldState` is included in the same 0G bundle as NPC memory
-and hydrates cross-device through the registry root, but gameplay actions are cached locally
-until the next normal conversation save. This avoids a MetaMask prompt per chop. The future
-version should add an explicit "save world" UX, batching/debounce, or a relayer/meta-tx flow.
+World persistence is an MVP: each wallet owns its editable `WorldState`, included in the
+same 0G bundle as NPC memory and hydrated cross-device through the registry root.
+Building/demolition changes are drafts until **Save World** is clicked and the registry
+tx is approved. Other wallets' builds are visible through the public-world overlay, but they
+are read-only and do not currently affect collision/pathing. The future version should add
+better pending/saved feedback or a relayer/meta-tx flow.
 
 ## Remaining for the Jun 23 submission
 - [x] Save to 0G working end-to-end (criterion #1). ✅

@@ -20,12 +20,13 @@
 import { downloadByRootHashAPI } from '@/lib/0g/downloader';
 import { getNetworkConfig } from '@/lib/0g/network';
 import { getRegistryAddress, readRootOnchain, writeRootOnchain } from '@/lib/registry/registry';
-import { getWorld, getWorldWallet, normalizeWorldState } from '@/lib/world';
+import { normalizeWorldState } from '@/lib/world';
 import type { NetworkType } from '@/app/providers';
 import {
   type MemoryBundle,
   type NPCMemory,
   type NPCName,
+  type WorldState,
   defaultMemory,
 } from '@/lib/types';
 
@@ -107,6 +108,10 @@ function sameNpcMemory(a: NPCMemory, b: NPCMemory): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
+function sameWorldState(a: WorldState | undefined, b: WorldState): boolean {
+  return JSON.stringify(normalizeWorldState(a)) === JSON.stringify(normalizeWorldState(b));
+}
+
 // ─── reads (no signature, just an HTTP fetch from 0G) ─────────────────────────
 
 /**
@@ -172,6 +177,7 @@ export interface WriteResult {
   rootHash: string;
   txHash: string;
   registryTxHash?: string;
+  skipped?: boolean;
 }
 
 /**
@@ -200,11 +206,61 @@ export async function writeMemory(
   bundle.npcs[npcName] = memory;
   bundle.wallet = wallet.toLowerCase();
   bundle.version = BUNDLE_VERSION;
-  if (getWorldWallet()?.toLowerCase() === wallet.toLowerCase()) {
-    bundle.world = normalizeWorldState(getWorld());
-  }
   if (memoryChanged) bundle.updatedAt = Date.now();
 
+  return uploadBundleAndAnchor(wallet, networkType, bundle, previousRoot);
+}
+
+/**
+ * Persists the gameplay world state to the same 0G bundle/root as NPC memory.
+ * This is used by the WorldPersistence adapter so placed buildings, inventory,
+ * and chopped trees become portable across browsers/devices without a separate
+ * registry contract.
+ */
+export async function writeWorldState(
+  wallet: string,
+  world: WorldState,
+  networkType: NetworkType
+): Promise<WriteResult> {
+  const nextWorld = normalizeWorldState(world);
+  console.info('[engram] writeWorldState start', {
+    wallet,
+    networkType,
+    buildings: nextWorld.buildings.length,
+    choppedTrees: nextWorld.choppedTrees.length,
+  });
+  const previousRoot = await resolveBundleRoot(wallet, networkType);
+  console.info('[engram] writeWorldState previous root', previousRoot);
+  const bundle = previousRoot
+    ? (await downloadBundle(previousRoot, wallet, networkType)) ?? emptyBundle(wallet)
+    : emptyBundle(wallet);
+
+  if (previousRoot && sameWorldState(bundle.world, nextWorld)) {
+    console.info('[engram] writeWorldState no-op; world unchanged');
+    return { rootHash: previousRoot, txHash: previousRoot, skipped: true };
+  }
+
+  bundle.wallet = wallet.toLowerCase();
+  bundle.version = BUNDLE_VERSION;
+  bundle.world = nextWorld;
+  bundle.updatedAt = Date.now();
+
+  return uploadBundleAndAnchor(wallet, networkType, bundle, previousRoot);
+}
+
+async function uploadBundleAndAnchor(
+  wallet: string,
+  networkType: NetworkType,
+  bundle: MemoryBundle,
+  previousRoot: string | null
+): Promise<WriteResult> {
+  console.info('[engram] uploadBundleAndAnchor POST /api/save', {
+    wallet,
+    networkType,
+    previousRoot,
+    hasWorld: !!bundle.world,
+    buildings: bundle.world?.buildings.length ?? 0,
+  });
   // Hand the full bundle to the server, which writes it to 0G (no CORS in Node).
   const res = await fetch('/api/save', {
     method: 'POST',
@@ -212,6 +268,14 @@ export async function writeMemory(
     body: JSON.stringify({ walletAddress: wallet, networkType, bundle }),
   });
   const data = await res.json().catch(() => ({}));
+  console.info('[engram] uploadBundleAndAnchor /api/save response', {
+    ok: res.ok,
+    status: res.status,
+    rootHash: data.rootHash,
+    txHash: data.txHash,
+    error: data.error,
+    debug: data.debug,
+  });
   if (!res.ok || !data.rootHash) {
     throw new Error(data.error || 'Save to 0G failed.');
   }
@@ -223,8 +287,10 @@ export async function writeMemory(
     try {
       // Future: if storage writes stop being sponsored, collapse storage + registry
       // into one user confirmation via relayer/meta-tx or a unified 0G flow.
+      console.info('[engram] anchoring root in EngramRegistry', data.rootHash);
       const registryTx = await writeRootOnchain(wallet, data.rootHash);
       registryTxHash = registryTx.txHash;
+      console.info('[engram] registry root anchored', registryTx);
     } catch (error) {
       console.warn('[engram] memory saved to 0G, but registry anchor failed:', error);
     }
