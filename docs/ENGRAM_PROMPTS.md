@@ -6,6 +6,9 @@
 >
 > Cada prompt es **autocontenido**: asume una IA que abre el repo en frío, así que
 > incluye contexto, archivos relevantes, restricciones y criterios de aceptación.
+>
+> 📜 Para la **evidencia de qué prompt produjo qué cambio** (con commits), ver
+> [`PROMPT_LOG.md`](PROMPT_LOG.md). Este archivo es el *backlog* (tareas futuras).
 
 **Repo:** `engram` — Next.js 15.1.5 + TypeScript · 0G Storage (Galileo testnet, chain `16602`) · ethers v6 · wagmi · Three.js / @react-three/fiber / @react-three/drei.
 
