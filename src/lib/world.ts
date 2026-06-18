@@ -19,11 +19,13 @@ import type { ResourceType, WorldState, Building, BuildingType } from '@/lib/typ
 
 export type { ResourceType, WorldState, Building, BuildingType } from '@/lib/types';
 
-/** How much wood the player can carry before they must use/drop some. */
-export const MAX_WOOD = 20;
+/** How much wood the player can carry before they must use/drop some. Raised to
+ * support AI-built structures and the pricier builds near the village centre. */
+export const MAX_WOOD = 100;
 
-/** Wood cost to place each building. */
-export const BUILD_COST: Record<BuildingType, number> = { wall: 2, house: 8 };
+/** BASE wood cost per building. The actual cost scales up the closer you build
+ * to the village centre (computed in the scene); persistence is unaffected. */
+export const BUILD_COST: Record<BuildingType, number> = { wall: 3, house: 10 };
 /** Collider radius for each building (kept in sync with the rendered footprint). */
 export const BUILD_RADIUS: Record<BuildingType, number> = { wall: 0.9, house: 1.8 };
 
@@ -192,9 +194,10 @@ export function harvestTree(index: number): { depleted: boolean; gained: boolean
 
 // ── Building ──────────────────────────────────────────────────────────────────
 
-/** Place a structure if the player can afford it (deducts wood). Returns success. */
-export function placeBuilding(b: Building): boolean {
-  const cost = BUILD_COST[b.type];
+/** Place a structure if the player can afford it (deducts `cost` wood). The
+ * caller computes `cost` (it scales with distance to the centre); defaults to the
+ * base cost. Returns success. */
+export function placeBuilding(b: Building, cost: number = BUILD_COST[b.type]): boolean {
   if (state.inventory.wood < cost) return false;
   commit({
     ...state,

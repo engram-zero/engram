@@ -1206,13 +1206,29 @@ function Buildings() {
 // Build/demolish controller — only mounted in the aerial view while a build tool
 // is selected. A big invisible ground plane reads the cursor; a ghost previews
 // the structure (green = valid, red = blocked / not enough wood); click places.
-// Whether a building of `type` may be placed at world (x,z): enough wood, inside
-// the world, and not overlapping a cottage, the campfire, a STANDING tree, an
-// existing building or an NPC. Terrain slope is intentionally NOT a blocker.
+// The village core is protected (no building), and the closer you build to the
+// centre the pricier it is — so nobody clutters the square, and players spread
+// out into sub-villages further out.
+const NO_BUILD_RADIUS = 12;
+
+/** Wood cost to build `type` at (x,z): base cost × a distance multiplier that
+ * ramps from 6× at the no-build edge down to 1× out at radius 45. */
+function buildCostAt(type: BuildingType, x: number, z: number): number {
+  const d = Math.hypot(x, z);
+  const mult = Math.max(1, Math.min(6, 6 - (d - NO_BUILD_RADIUS) * (5 / 33)));
+  return Math.round(BUILD_COST[type] * mult);
+}
+
+// Whether a building of `type` may be placed at world (x,z): outside the
+// protected core, inside the world, affordable at this spot, and not overlapping
+// a cottage, the campfire, a STANDING tree, an existing building or an NPC.
+// Terrain slope is intentionally NOT a blocker.
 function canPlaceBuilding(type: BuildingType, x: number, z: number): boolean {
   const w = getWorld();
-  if (w.inventory.wood < BUILD_COST[type]) return false;
-  if (Math.hypot(x, z) > WORLD_RADIUS) return false;
+  const d = Math.hypot(x, z);
+  if (d < NO_BUILD_RADIUS) return false; // protected village core
+  if (d > WORLD_RADIUS) return false;
+  if (w.inventory.wood < buildCostAt(type, x, z)) return false;
   const r = BUILD_RADIUS[type];
   const obstacles = [
     ...COTTAGES.map((c) => ({ x: c.x, z: c.z, r: c.scale * 1.5 })),
@@ -1281,7 +1297,7 @@ function BuildController({ mode }: { mode: BuildingType | 'demolish' }) {
       });
       if (bi >= 0) removeBuilding(bi);
     } else if (valid) {
-      placeBuilding({ type: mode, x, z, rot });
+      placeBuilding({ type: mode, x, z, rot }, buildCostAt(mode, x, z));
     }
   };
 
@@ -2028,7 +2044,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
       return;
     }
     const [x, z] = mobileGhostXZ(p);
-    if (canPlaceBuilding(buildMode, x, z)) placeBuilding({ type: buildMode, x, z, rot: buildRot });
+    if (canPlaceBuilding(buildMode, x, z)) placeBuilding({ type: buildMode, x, z, rot: buildRot }, buildCostAt(buildMode, x, z));
   };
 
   const activateNearbyNpc = () => {
@@ -2298,8 +2314,8 @@ export default function Scene3D({ memories = null, active = null, talking = fals
           {aerialExploring && (
             <div className="absolute top-32 right-4 z-10 flex flex-col items-end gap-1.5">
               {([
-                ['wall', `🧱 Wall (${BUILD_COST.wall}🪵)`],
-                ['house', `🏠 House (${BUILD_COST.house}🪵)`],
+                ['wall', `🧱 Wall (${BUILD_COST.wall}+🪵)`],
+                ['house', `🏠 House (${BUILD_COST.house}+🪵)`],
                 ['demolish', '🧨 Demolish'],
               ] as const).map(([m, label]) => (
                 <button
