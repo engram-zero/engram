@@ -269,3 +269,12 @@ registry ya ancla el puntero on-chain → cross-device SÍ funciona (mantén el 
 mobile/guest/public-world.
 **Qué se hizo:** reescribí `DEMO_SCRIPT.md` (narración de martelaxe + honestidad
 actualizada + beat opcional) y amplié `STATUS.md`.
+
+### 18 jun 2026 · Salto en primera persona (Space)
+**Pedido (humano):** Un control extra: que la tecla espacio haga un "salto".
+**Prompt sintetizado:** Agrega un binding `jump` (Space) a `keyboardMap` y física simple
+en `Player`: al presionar Space estando en el suelo, lanza con `JUMP_SPEED` y cae con
+`GRAVITY`, sumando un offset a la altura de cámara (sobre el follow del terreno); un salto
+por pulsación (sin rebote al mantener). Actualiza el hint de FP. Verifica con `tsc`.
+**Qué se hizo:** binding + refs `jump` + física en el frame del Player; hint "Space jump".
+**Commit:** `745a143`
