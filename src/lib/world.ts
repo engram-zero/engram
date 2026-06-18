@@ -18,6 +18,9 @@ import { useSyncExternalStore } from 'react';
 
 export type ResourceType = 'wood' | 'stone' | 'coin';
 
+/** How much wood the player can carry before they must use/drop some. */
+export const MAX_WOOD = 20;
+
 export interface WorldState {
   inventory: Record<ResourceType, number>;
   /** Indices (into map.ts TREES) of trees the player has chopped. */
@@ -110,17 +113,25 @@ export function addResource(type: ResourceType, amount: number) {
   return commit({ ...state, inventory: { ...state.inventory, [type]: Math.max(0, state.inventory[type] + amount) } });
 }
 
-/** Chop a tree (by its TREES index): mark it chopped + grant wood. No-op if already chopped. */
+/** Chop a tree (by its TREES index): mark it chopped + grant wood (capped at
+ * MAX_WOOD). No-op if already chopped or already carrying the max. */
 export function chopTree(index: number, woodYield = 3) {
   if (state.choppedTrees.includes(index)) return;
+  if (state.inventory.wood >= MAX_WOOD) return; // can't carry more
+  const wood = Math.min(MAX_WOOD, state.inventory.wood + woodYield);
   return commit({
-    inventory: { ...state.inventory, wood: state.inventory.wood + woodYield },
+    inventory: { ...state.inventory, wood },
     choppedTrees: [...state.choppedTrees, index],
   });
 }
 
 export function isChopped(index: number): boolean {
   return state.choppedTrees.includes(index);
+}
+
+/** True when the player can't carry any more wood. */
+export function woodIsFull(): boolean {
+  return state.inventory.wood >= MAX_WOOD;
 }
 
 // ── React hooks ───────────────────────────────────────────────────────────────

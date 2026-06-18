@@ -24,7 +24,7 @@ import {
   type CottageDef,
 } from './map';
 import { getTexture, getTextureVariant, hasTexture } from './textures';
-import { useWorld, chopTree, isChopped } from '@/lib/world';
+import { useWorld, chopTree, isChopped, woodIsFull, MAX_WOOD } from '@/lib/world';
 
 // A tree carries its global index (into TREES) so chopping can target it.
 type TreeInst = TreeDef & { idx: number };
@@ -951,6 +951,32 @@ function EnemySpawner() {
   );
 }
 
+// ── Torch ── a planted post with a flickering warm point light, for atmosphere
+// and local lighting around the village.
+function Torch({ position }: { position: [number, number, number] }) {
+  const light = useRef<THREE.PointLight>(null);
+  const seed = position[0] * 1.3 + position[2];
+  useFrame((s) => {
+    if (light.current) {
+      light.current.intensity = 2.1 + Math.sin(s.clock.elapsedTime * 9 + seed) * 0.4 + Math.random() * 0.12;
+    }
+  });
+  const y = getHeightAt(position[0], position[2]);
+  return (
+    <group position={[position[0], y, position[2]]}>
+      <mesh position={[0, 0.65, 0]} castShadow>
+        <cylinderGeometry args={[0.05, 0.07, 1.3, 6]} />
+        <meshStandardMaterial color="#4a3424" flatShading />
+      </mesh>
+      <mesh position={[0, 1.42, 0]}>
+        <coneGeometry args={[0.13, 0.4, 8]} />
+        <meshBasicMaterial color="#ffb347" />
+      </mesh>
+      <pointLight ref={light} color="#ff9a3c" intensity={2.1} distance={9} decay={2} position={[0, 1.45, 0]} />
+    </group>
+  );
+}
+
 function Village() {
   return (
     <group>
@@ -958,6 +984,10 @@ function Village() {
       <Moon />
       {COTTAGES.map((c, i) => (
         <Cottage key={i} def={c} seed={i} />
+      ))}
+      {/* A torch by each cottage door (door faces the cottage's +z, rotated). */}
+      {COTTAGES.map((c, i) => (
+        <Torch key={`torch${i}`} position={[c.x + 1.7 * c.scale * Math.sin(c.rot), 0, c.z + 1.7 * c.scale * Math.cos(c.rot)]} />
       ))}
       <InstancedTrees />
       <Campfire />
@@ -1425,6 +1455,9 @@ export default function Scene3D({ memories = null, active = null, talking = fals
   nearbyEnemyRef.current = nearbyEnemy;
   
   const world = useWorld();
+  const fHeldRef = useRef(false); // is the chop key (F) held down
+  const chopRef = useRef(0); // chop progress 0..100
+  const [chopPct, setChopPct] = useState(0);
 
   // Shared player position (first-person camera ↔ aerial avatar).
   const posRef = useRef<PlayerPos>({ x: SPAWN_XZ[0], z: SPAWN_XZ[1], heading: 0 });
@@ -1432,10 +1465,10 @@ export default function Scene3D({ memories = null, active = null, talking = fals
   const fpExploring = exploring && view === 'fp';
   const aerialExploring = exploring && view === 'aerial';
 
-  // V toggles first-person ↔ aerial; E talks / F chops (first-person only).
+  // V toggles first-person ↔ aerial; E talks; F is HELD to chop (handled below).
   useEffect(() => {
     if (!exploring) return;
-    const onKey = (e: KeyboardEvent) => {
+    const onDown = (e: KeyboardEvent) => {
       const tag = (document.activeElement as HTMLElement | null)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
       if (e.code === 'KeyV') {
@@ -1444,14 +1477,46 @@ export default function Scene3D({ memories = null, active = null, talking = fals
       }
       if (view !== 'fp') return; // interactions are first-person only
       if (e.code === 'KeyE' && nearbyRef.current) onSelect(nearbyRef.current);
-      if (e.code === 'KeyF' && nearbyTreeRef.current !== null && !isChopped(nearbyTreeRef.current)) {
-        chopTree(nearbyTreeRef.current);
-        setNearbyTree(null); // it's gone now; Player will repick next frame
-      }
+      if (e.code === 'KeyF') fHeldRef.current = true;
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    const onUp = (e: KeyboardEvent) => {
+      if (e.code === 'KeyF') fHeldRef.current = false;
+    };
+    window.addEventListener('keydown', onDown);
+    window.addEventListener('keyup', onUp);
+    return () => {
+      window.removeEventListener('keydown', onDown);
+      window.removeEventListener('keyup', onUp);
+    };
   }, [exploring, onSelect, view]);
+
+  // Chopping takes time: hold F near a tree to fill a progress bar, then it falls.
+  useEffect(() => {
+    if (!fpExploring) {
+      chopRef.current = 0;
+      setChopPct(0);
+      fHeldRef.current = false;
+      return;
+    }
+    const CHOP_MS = 1500;
+    const TICK = 80;
+    const id = window.setInterval(() => {
+      const tree = nearbyTreeRef.current;
+      const canChop = fHeldRef.current && tree !== null && !isChopped(tree) && !woodIsFull();
+      if (canChop) {
+        chopRef.current = Math.min(100, chopRef.current + (TICK / CHOP_MS) * 100);
+        if (chopRef.current >= 100) {
+          chopTree(tree!);
+          chopRef.current = 0;
+          setNearbyTree(null); // it's gone; Player repicks next frame
+        }
+      } else if (chopRef.current !== 0) {
+        chopRef.current = 0;
+      }
+      setChopPct(chopRef.current); // React skips re-render when unchanged
+    }, TICK);
+    return () => window.clearInterval(id);
+  }, [fpExploring]);
 
   // Player combat listener
   useEffect(() => {
@@ -1620,7 +1685,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
       {exploring && (
         <>
           <div className="pointer-events-none absolute top-20 left-4 z-10 flex gap-3 text-sm text-[#f4e8d0]">
-            <span className="rounded-md bg-black/45 px-2.5 py-1" title="Wood">🪵 {world.inventory.wood}</span>
+            <span className="rounded-md bg-black/45 px-2.5 py-1" title="Wood">🪵 {world.inventory.wood}/{MAX_WOOD}</span>
             <span className="rounded-md bg-black/45 px-2.5 py-1" title="Coin">🪙 {world.inventory.coin}</span>
           </div>
           <button
@@ -1719,9 +1784,18 @@ export default function Scene3D({ memories = null, active = null, talking = fals
 
           {locked && nearbyTree !== null && !nearbyNpc && (
             <div className="pointer-events-none absolute bottom-28 left-1/2 z-10 -translate-x-1/2">
-              <div className="rounded-full border border-[#6a8a4a] px-5 py-2 text-sm font-semibold text-[#f4e8d0] shadow-lg" style={{ background: 'rgba(16,20,10,0.88)' }}>
-                Press <span className="text-[#8fd06a]">F</span> to chop this tree
-              </div>
+              {world.inventory.wood >= MAX_WOOD ? (
+                <div className="rounded-full border border-[#8a6a4a] px-5 py-2 text-sm font-semibold text-[#f4e8d0] shadow-lg" style={{ background: 'rgba(20,16,10,0.9)' }}>
+                  Wood full ({MAX_WOOD}) — can&apos;t carry more
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-[#6a8a4a] px-5 py-2.5 text-center text-sm font-semibold text-[#f4e8d0] shadow-lg" style={{ background: 'rgba(16,20,10,0.9)' }}>
+                  Hold <span className="text-[#8fd06a]">F</span> to chop
+                  <div className="mt-1.5 h-2 w-40 overflow-hidden rounded-full bg-black/55">
+                    <div className="h-full rounded-full bg-[#8fd06a] transition-[width] duration-75" style={{ width: `${chopPct}%` }} />
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
