@@ -125,3 +125,20 @@ spawn cada ~9s y solo tras ~20s de calma. Verifica con `tsc`.
 `touchMove`/`touchYaw` (mezcla movimiento + aplica yaw); toggle visible en móvil;
 `EnemySpawner` con tope 6, intervalo 9s y delay inicial 20s; HUD apilado y hints
 ajustados. **Commit:** `0e315f6`
+
+### 18 jun 2026 · Móvil: sin scroll, mirar arriba/abajo, sin selección, 13 enemigos
+**Pedido (humano):** 13 enemigos y spawn cada ~2 min; el drag con el pulgar derecho
+falla por el scroll → que el juego en móvil no tenga scroll (que la pantalla abarque
+100% el render, sin que exista scrollbar); los botones con texto (p.ej. "chop") aún
+seleccionan el texto al presionar; no se ve cómo atacar; y se siente raro no poder
+mover el ángulo de cámara en 1ª persona (mirar al cielo/suelo).
+**Prompt sintetizado:** (1) Enemigos: tope 13, intervalo 120s. (2) Elimina la causa
+del scroll en móvil: `html,body { overflow:hidden; overscroll-behavior:none }` y
+contenedores a `100dvh` para que el render llene exacto el viewport. (3) Evita la
+selección de texto en botones globalmente (`user-select:none`, `-webkit-touch-callout`
+). (4) Permite mirar con pitch además de yaw en 1ª persona táctil: la zona de arrastre
+derecha acumula dx/dy y el `Player` aplica yaw + pitch clampeado vía un `Euler`
+sembrado de la cámara. Verifica con `tsc`. (Ataque: ya existe — botón rojo al acercar
+el avatar a un enemigo, radio 4.)
+**Qué se hizo:** `MAX_ENEMIES=13`/120s; CSS no-scroll + `100dvh`; regla global de
+botones; `TouchLook` ahora pasa `{dx,dy}` y `Player` hace yaw+pitch. **Commit:** `adbbe3a`
