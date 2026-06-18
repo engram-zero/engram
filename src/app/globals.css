@@ -29,6 +29,13 @@ body {
   overflow: hidden;
   overscroll-behavior: none;
 }
+/* iOS Safari/Chrome still rubber-band scrolls the body unless it's taken out of
+   the normal flow — pin it to the viewport so there is nothing to scroll. */
+body {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+}
 
 /* Don't let a long-press / drag select button labels (e.g. "Hold to chop"). */
 button {
