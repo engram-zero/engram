@@ -179,7 +179,7 @@ function Player({
   }, [enabled, camera, posRef]);
 
   useFrame((_, dtRaw) => {
-    if (!enabled) return;
+    if (!enabled || dynamicPlayerState.dead) return;
     const dt = Math.min(dtRaw, 0.05);
     const k = getKeys();
 
@@ -1413,6 +1413,8 @@ export default function Scene3D({ memories = null, active = null, talking = fals
   const [view, setView] = useState<ViewMode>('fp');
   const [flash, setFlash] = useState(false);
   const [playerHp, setPlayerHp] = useState(100);
+  const [playerDead, setPlayerDead] = useState(false);
+  const [respawnCountdown, setRespawnCountdown] = useState(5);
   const [nearbyEnemy, setNearbyEnemy] = useState<string | null>(null);
   
   const nearbyRef = useRef<NPCName | null>(null);
@@ -1470,21 +1472,41 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     return () => window.removeEventListener('mousedown', onMouseDown);
   }, [exploring]);
   
-  // Sync player HP to UI and handle death
+  // Sync player HP to UI and handle death / respawn
   useEffect(() => {
     const interval = setInterval(() => {
-      if (playerHp !== dynamicPlayerState.hp) {
-        setPlayerHp(dynamicPlayerState.hp);
+      // Sync HP display
+      if (dynamicPlayerState.hp !== playerHp && !dynamicPlayerState.dead) {
+        setPlayerHp(Math.max(0, dynamicPlayerState.hp));
       }
-      if (dynamicPlayerState.dead) {
-        dynamicPlayerState.hp = dynamicPlayerState.maxHp;
-        dynamicPlayerState.dead = false;
-        posRef.current = { x: SPAWN_XZ[0], z: SPAWN_XZ[1], heading: 0 };
-        setPlayerHp(dynamicPlayerState.maxHp);
+      // Trigger death state
+      if (dynamicPlayerState.dead && !playerDead) {
+        setPlayerDead(true);
+        setRespawnCountdown(5);
       }
     }, 100);
     return () => clearInterval(interval);
-  }, [playerHp]);
+  }, [playerHp, playerDead]);
+
+  // Respawn countdown tick
+  useEffect(() => {
+    if (!playerDead) return;
+    const tick = setInterval(() => {
+      setRespawnCountdown((c) => {
+        if (c <= 1) {
+          // Respawn
+          dynamicPlayerState.hp = dynamicPlayerState.maxHp;
+          dynamicPlayerState.dead = false;
+          posRef.current = { x: SPAWN_XZ[0], z: SPAWN_XZ[1], heading: 0 };
+          setPlayerHp(dynamicPlayerState.maxHp);
+          setPlayerDead(false);
+          return 5;
+        }
+        return c - 1;
+      });
+    }, 1000);
+    return () => clearInterval(tick);
+  }, [playerDead]);
 
   // Clear the proximity prompt and lock state whenever we leave explore mode
   // (dialogue or a GUI opened), so the HUD is correct when control returns.
@@ -1617,6 +1639,56 @@ export default function Scene3D({ memories = null, active = null, talking = fals
           </div>
 
           {flash && <div className="absolute inset-0 pointer-events-none bg-white/20 mix-blend-overlay z-20" />}
+
+          {/* ── Death / Respawn overlay ── */}
+          {playerDead && (
+            <div
+              className="absolute inset-0 z-50 flex flex-col items-center justify-center pointer-events-none"
+              style={{
+                background: 'radial-gradient(ellipse at center, rgba(80,0,0,0.75) 0%, rgba(0,0,0,0.92) 100%)',
+                animation: 'fadeInDeath 0.6s ease-out both',
+              }}
+            >
+              <style>{`
+                @keyframes fadeInDeath {
+                  from { opacity: 0; }
+                  to   { opacity: 1; }
+                }
+                @keyframes pulseRed {
+                  0%, 100% { text-shadow: 0 0 18px #ff2200, 0 0 40px #ff0000; }
+                  50%       { text-shadow: 0 0 40px #ff4400, 0 0 80px #ff2200; }
+                }
+              `}</style>
+              <div
+                style={{
+                  fontFamily: 'var(--engram-serif, serif)',
+                  fontSize: 'clamp(3rem, 10vw, 6rem)',
+                  fontWeight: 900,
+                  letterSpacing: '0.12em',
+                  color: '#cc2200',
+                  animation: 'pulseRed 1.4s ease-in-out infinite',
+                }}
+              >
+                YOU DIED
+              </div>
+              <div
+                style={{
+                  marginTop: '1.5rem',
+                  color: '#f4e8d0',
+                  fontSize: '1.2rem',
+                  opacity: 0.85,
+                  fontFamily: 'var(--engram-serif, serif)',
+                  letterSpacing: '0.05em',
+                }}
+              >
+                Respawning in{' '}
+                <span style={{ color: '#ffaa44', fontWeight: 700, fontSize: '1.4rem' }}>
+                  {respawnCountdown}
+                </span>
+                …
+              </div>
+            </div>
+          )}
           
           <div className="absolute bottom-[4.5rem] left-4 pointer-events-none select-none drop-shadow-md z-10">
             <div className="text-white/80 text-sm mb-1 font-bold tracking-wide">HP: {Math.max(0, playerHp)}</div>
