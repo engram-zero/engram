@@ -180,3 +180,19 @@ user-select:none } }`, dejando `input/textarea` usables; no toques desktop (para
 copiar hashes en el demo). Verifica con `tsc`.
 **Qué se hizo:** prompt de barra gateado a desktop; barra dentro del botón móvil +
 "Wood full"; hint solo en build; media query no-select. **Commit:** `91fe77c`
+
+### 18 jun 2026 · Núcleo protegido + precio de construcción por cercanía
+**Pedido (humano):** que el centro de la aldea no sea construible y que construir
+cueste más cuanto más cerca del centro (para no "ensuciar" la aldea y que se formen
+sub-aldeas); subir el límite de madera a 100; definir juntos los precios/zonas antes de
+documentarlo. (Aclaración: la persistencia en 0G ya estaba hecha por martelaxe.)
+**Prompt sintetizado:** Implementa zonas de construcción: núcleo `r<12` no construible;
+fuera, `costo = base × mult` con `mult = clamp(6−(d−12)·5/33, 1, 6)` (6× pegado al
+núcleo → 1× en r≥45); base muro 3 / casa 10; `MAX_WOOD=100`. Centraliza en
+`buildCostAt`/`canPlaceBuilding` y pasa el costo a `placeBuilding(b, cost)` (la
+persistencia no cambia). Actualiza la paleta (costo base con "+") y documenta el modelo
+de IA del Prompt 11 (costo en madera, cap de `max_tokens` + BYO key). Verifica con `tsc`.
+**Decisiones (vía AskUserQuestion):** núcleo 12, curva empinada 6×→1×, IA = cap+BYO.
+**Qué se hizo:** `NO_BUILD_RADIUS`/`buildCostAt` + `canPlaceBuilding` con núcleo y
+precio; `MAX_WOOD=100`, base 3/10; `placeBuilding(b,cost)`; Prompt 9/11 actualizados.
+**Commit:** `6af9958` (código) + este (docs).

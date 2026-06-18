@@ -21,7 +21,7 @@
 6. [Audio ambiental (fogata, pasos, noche)](#prompt-6--audio-ambiental) — ⏳ pendiente
 7. [Verificar end-to-end la UX del 429 en el cliente](#prompt-7--verificación-diferida-ux-del-429) — ⏳ diferida (ver precondición)
 8. [Visión: gameplay loop, doble vista y mundo persistente en 0G](#prompt-8--visión-gameplay-loop--doble-vista) — 🟡 partial: 8a done, 8b persistencia MVP done (martelaxe)
-9. [Construir edificios + persistir el mundo en 0G](#prompt-9--construir--persistir-el-mundo-en-0g) — 🟡 partial: 9a gameplay done · 9b extiende el adapter 0G actual
+9. [Construir edificios + persistir el mundo en 0G](#prompt-9--construir--persistir-el-mundo-en-0g) — ✅ 9a (gameplay + zonas/precios) y 9b (persistencia 0G, martelaxe) hechos
 10. [Mercado: vender recursos a los NPCs → reputación en 0G](#prompt-10--mercado-vender-recursos--reputación) — ⏳ pendiente
 11. [Construcción con IA + tokens (describir y que la IA edifique)](#prompt-11--construcción-con-ia--tokens) — ⏳ pendiente
 12. [Edificios habitables (entrar dentro)](#prompt-12--edificios-habitables-entrar) — ⏳ pendiente
@@ -514,11 +514,20 @@ export interface WorldState {
   buildings: Building[];   // ← nuevo
 }
 ```
-Acciones en el store: `placeBuilding(b)` (descuenta madera), `removeBuilding(i)`
-(demoler). Costos: p.ej. muro = 2 madera, casa = 8. `buildings` se persiste vía la
-MISMA costura `WorldPersistence` (no cambia el contrato load/save).
+Acciones en el store: `placeBuilding(b, cost)` (descuenta `cost` madera),
+`removeBuilding(i)` (demoler, reembolsa la mitad). `buildings` se persiste vía la MISMA
+costura `WorldPersistence` (no cambia el contrato load/save).
 
-### 9a — Gameplay de colocación (world-dev) — ⏳
+### Zonas y precios (acordado, ✅ implementado en gameplay)
+Para que nadie "ensucie" el centro y se formen **sub-aldeas** afuera:
+- **Núcleo protegido `r < 12`: NO se puede construir** (plaza, fogata, NPCs, casas).
+- **Precio por cercanía:** `costo = base × mult`, con `mult = clamp(6 − (d−12)·5/33, 1, 6)`
+  → **6×** pegado al núcleo, **1×** en `d ≥ 45`. Base: muro **3**, casa **10**.
+- `MAX_WOOD = 100` (para aguantar builds caros del centro y la IA del Prompt 11).
+- Implementado en `canPlaceBuilding` / `buildCostAt` (Scene3D); el costo se pasa a
+  `placeBuilding(b, cost)`. La persistencia no cambia (sólo guarda type/x/z/rot).
+
+### 9a — Gameplay de colocación (world-dev) — ✅ done (+ zonas/precios)
 - **Modo construir** (tecla B o botón), idealmente en **vista aérea** (ya existe).
 - **Preview fantasma** del edificio bajo el cursor/avatar (semitransparente, verde si
   cabe / rojo si choca con colliders o no hay madera). Snap a una grilla simple.
@@ -598,27 +607,40 @@ precios/diálogo**. Empezar simple; el regateo con LLM es v2.
 > **tamaño**). Reusa la misma infraestructura LLM que `/api/npc`. Encaja con Prompt 9
 > (sistema de construcción) y Prompt 10 (economía/tokens).
 
-### Modelo
-- "Tokens" = el recurso `coin` del jugador (o un token on-chain más adelante). Construir
-  con IA **gasta coins**; más coins → presupuesto mayor → estructura más grande/detallada.
-- Mapear presupuesto → límites: `maxBuildings`, `maxFootprint` (tamaño), variedad de piezas.
+### Modelo (acordado 18 jun)
+- El costo se paga en **madera**: cuanto más elaborada la estructura (más piezas/tokens),
+  **más madera** cuesta. `MAX_WOOD = 100` (ya subido). El costo de cada pieza usa
+  `buildCostAt(type,x,z)` (ya existe): **respeta el núcleo no-construible (r<12) y el
+  precio por cercanía** del Prompt 9.
+- "Más tokens → más unidades": el tamaño/detalle del resultado lo acota directamente el
+  **cap de `max_tokens`** de la respuesta del modelo.
+
+### Control de costo de la Anthropic key (acordado: **ambos**)
+- **Cap server-side:** en `/api/build`, fija un `max_tokens` bajo (p.ej. ~1000–1200) y
+  reúsa el **rate-limit** de `/api/npc`. Esto acota tanto el tamaño de lo construido como
+  el gasto contra la key del proyecto.
+- **BYO key:** permite que el usuario pegue **su propia** Anthropic key (guardada solo en
+  su navegador, enviada a `/api/build`); si no la pone, usa la del proyecto (capada).
 
 ### Endpoint `/api/build` (server, igual patrón que /api/npc)
-- Input: `{ prompt: string, budget: number, origin: {x,z} }`.
+- Input: `{ prompt: string, origin: {x,z}, apiKey?: string }`.
 - El LLM devuelve **JSON estructurado** validado: `Building[]` (type/x/z/rot) relativo a
-  `origin`, acotado por el presupuesto (nº de piezas y extensión). Rechazar/clamp lo que
-  exceda. Mismas defensas que `/api/npc` (rate-limit, tamaño, fallback determinista).
-- Aplicar: validar colisiones (como Prompt 9) y `placeBuilding(...)` cada pieza; descontar
-  `coin`. Persiste en 0G por la costura existente.
+  `origin`. Mismas defensas que `/api/npc` (rate-limit, tamaño, fallback determinista).
+- Aplicar en cliente: por cada pieza, `canPlaceBuilding` (núcleo/colisiones) y
+  `placeBuilding(b, buildCostAt(...))`; salta piezas inválidas o si no alcanza la madera.
+  Persiste en 0G por la costura existente.
 
 ### UI
-- En modo construir (vista aérea): botón **"🤖 Build with AI"** → input de texto + costo
-  estimado en coins. Al confirmar, se coloca el preview del conjunto antes de pagar.
+- En modo construir (vista aérea): botón **"🤖 Build with AI"** → input de texto (+ campo
+  opcional para la API key del usuario). Muestra el **preview + costo total en madera**
+  antes de confirmar.
 
 ### Criterios
-1. Describir "una pequeña empalizada con dos casas" gasta coins y aparece construido.
-2. Con pocos coins, la IA produce algo más pequeño/simple (presupuesto acota tamaño).
-3. `tsc` limpio; sin romper el build manual (Prompt 9) ni el diálogo.
+1. Describir "una pequeña empalizada con dos casas" gasta madera y aparece construido
+   (fuera del núcleo; más caro cerca del centro).
+2. El `max_tokens` acota el tamaño; con poco presupuesto la estructura es más simple.
+3. Con BYO key, las peticiones usan la key del usuario. `tsc` limpio; no rompe el build
+   manual (Prompt 9) ni el diálogo.
 
 ---
 
