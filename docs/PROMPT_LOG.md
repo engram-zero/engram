@@ -247,3 +247,13 @@ tareas pendientes para repartir entre partners.
 móvil = done; Prompt 11 = bloques voxel + preview + costo + budget) y deja claras las
 pendientes (6 audio, 7 429-UX, 10 mercado, 12 habitables, + ADMIN).
 **Qué se hizo:** actualicé el índice (4 y 11). Pendientes: 6, 7, 10, 12 + tareas ADMIN.
+
+### 18 jun 2026 · Aviso de costo de tokens en el modal de IA
+**Pedido (humano):** Confirmar que al descartar se devuelve la madera pero NO los tokens
+del agente, y agregar un pequeño aviso en la UI.
+**Prompt sintetizado:** En el modal "Build with AI" añade una nota: generar un diseño
+llama a la IA y **cuesta unos centavos de tokens aunque descartes** (la madera solo se
+gasta al Place y se devuelve si no guardas), y muestra el **gasto acumulado** ("spent $X")
+en la cabecera. Verifica con `tsc`.
+**Qué se hizo:** nota de advertencia + "spent $X" visible en el header del modal.
+**Commit:** `7f64ed7`
