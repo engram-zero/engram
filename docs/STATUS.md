@@ -17,6 +17,14 @@ Also working: first-person/aerial Aldenmoor (WASD + mouse-look, terrain/sky/fore
 rate-limit/size guard on `/api/npc`, pointer-lock UX, Vercel auto-deploy on push to `main`,
 and the on-chain root registry for cross-device recall.
 
+Also shipped (gameplay): textures, day/night cycle tied to the player's clock, torches;
+tree chopping + inventory; **building system** (walls/houses + AI-designed voxel "blocks"
+via `/api/build`, with preview, USD cost estimate + spend cap, and distance-based pricing
+around a protected village core); **world state persisted on 0G** (a *second* real 0G use
+case — inventory/chopped trees/buildings ride the same wallet bundle, with a **Save World**
+button and a read-only **public world** showing other wallets' builds); mobile/touch
+controls (drag joystick, touch look, no-scroll) + a no-wallet **guest mode**.
+
 ## 0G integration gotchas (READ before touching storage)
 These cost a long debugging session; keep them in mind.
 

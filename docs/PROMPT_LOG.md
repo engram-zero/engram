@@ -257,3 +257,15 @@ gasta al Place y se devuelve si no guardas), y muestra el **gasto acumulado** ("
 en la cabecera. Verifica con `tsc`.
 **Qué se hizo:** nota de advertencia + "spent $X" visible en el header del modal.
 **Commit:** `7f64ed7`
+
+### 18 jun 2026 · Repasar docs + guion del video
+**Pedido (humano):** Revisar que los docs estén alineados con lo actual, sobre todo el
+guion del video (martelaxe propuso una narración nueva).
+**Prompt sintetizado:** Adopta la narración pulida de martelaxe en `DEMO_SCRIPT.md`
+manteniendo la shot-list/tips; corrige la nota obsoleta ("cross-device no live") porque el
+registry ya ancla el puntero on-chain → cross-device SÍ funciona (mantén el caveat de
+"sponsored, no wallet-pays"); añade un beat opcional para el 2º uso de 0G (mundo construido
++ public world). Actualiza `STATUS.md` ("Also working") con building/IA/voxel/day-night/
+mobile/guest/public-world.
+**Qué se hizo:** reescribí `DEMO_SCRIPT.md` (narración de martelaxe + honestidad
+actualizada + beat opcional) y amplié `STATUS.md`.
