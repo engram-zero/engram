@@ -546,7 +546,7 @@ function Terrain() {
   }, []);
   return (
     <mesh geometry={geom} receiveShadow>
-      <meshStandardMaterial color="#3e4a32" map={getTexture('terrain_grass', { repeat: Math.round(GROUND_RADIUS / 3) })} roughness={1} />
+      <meshStandardMaterial color="#7c8a5c" map={getTexture('terrain_grass', { repeat: Math.round(GROUND_RADIUS / 3) })} roughness={1} />
     </mesh>
   );
 }
@@ -1747,11 +1747,11 @@ export function computeDayNight(hour: number): DayNight {
     sunPos: [sunX * 90, sunY * 80, -55], // drives the <Sky> shader (dark when sunY<0)
     bg: mixColor('#0c1020', '#9fc4ec', day),
     fog: mixColor('#141d33', '#aac4e0', day),
-    ambIntensity: mix(0.45, 1.15, day),
+    ambIntensity: mix(0.5, 1.6, day),
     ambColor: mixColor('#6c7ea8', '#fff3e0', day),
-    hemiSky: mixColor('#2a3a66', '#bcd4f5', day),
-    hemiGround: mixColor('#2a3326', '#6a7458', day),
-    hemiIntensity: mix(0.5, 1.1, day),
+    hemiSky: mixColor('#2a3a66', '#cfe0fb', day),
+    hemiGround: mixColor('#2a3326', '#86936a', day),
+    hemiIntensity: mix(0.55, 1.5, day),
     dirPos: [sunX * 60, Math.max(12, sunY * 60), -40], // key light follows the sun; min height keeps moonlight
     dirIntensity: mix(0.4, 2.4, day),
     dirColor: mixColor('#aab8e6', '#fff1d6', day),
@@ -1791,16 +1791,12 @@ export default function Scene3D({ memories = null, active = null, talking = fals
   // Movement + pointer lock only when not mid-dialogue and no GUI is open.
   const exploring = explorable && !active && !uiOpen;
 
-  // Day/night driven by the player's own local clock (re-checked each minute).
-  const [localHour, setLocalHour] = useState(() => {
-    const d = new Date();
-    return d.getHours() + d.getMinutes() / 60;
-  });
+  // Day/night driven by the player's local clock. The sun steps to a new spot
+  // every 5 local minutes (:00, :05, :10 …), so over a session you see it arc.
+  const quantHour = (d: Date) => d.getHours() + (Math.floor(d.getMinutes() / 5) * 5) / 60;
+  const [localHour, setLocalHour] = useState(() => quantHour(new Date()));
   useEffect(() => {
-    const id = window.setInterval(() => {
-      const d = new Date();
-      setLocalHour(d.getHours() + d.getMinutes() / 60);
-    }, 60000);
+    const id = window.setInterval(() => setLocalHour(quantHour(new Date())), 30000);
     return () => window.clearInterval(id);
   }, []);
   const dn = useMemo(() => computeDayNight(localHour), [localHour]);

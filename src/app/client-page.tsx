@@ -81,6 +81,9 @@ function Game() {
   const [dirty, setDirty] = useState<Partial<Record<NPCName, boolean>>>({});
   const [save, setSave] = useState<SaveState>({ status: 'idle' });
   const [err, setErr] = useState<string | null>(null);
+  // "Explore as guest" — roam Aldenmoor without a wallet (no dialogue/saving).
+  // The best mobile fallback when there's no injected wallet / WalletConnect.
+  const [guest, setGuest] = useState(false);
 
   // Latest active NPC, readable from inside a delayed retry without stale closure.
   const activeRef = useRef<NPCName | null>(active);
@@ -173,7 +176,7 @@ function Game() {
   }
 
   // ── Title screen ──
-  if (!isConnected || !address) {
+  if ((!isConnected || !address) && !guest) {
     return (
       <div className="relative w-screen h-screen overflow-hidden engram-serif">
         {/* key forces a full remount vs the in-game Scene3D so nothing lingers
@@ -193,8 +196,14 @@ function Game() {
           </p>
         </div>
         <div className="absolute inset-x-0 bottom-0 z-10 flex flex-col items-center text-center gap-4 pb-[12vh] bg-gradient-to-t from-black/60 via-black/20 to-transparent pointer-events-none">
-          <div className="pointer-events-auto">
+          <div className="pointer-events-auto flex flex-col items-center gap-2">
             <ConnectButton />
+            <button
+              onClick={() => setGuest(true)}
+              className="text-sm text-[#f4e8d0]/80 underline underline-offset-4 hover:text-[#f4e8d0]"
+            >
+              or explore as a guest →
+            </button>
           </div>
           <p className="text-sm text-[#f4e8d0]/70 max-w-md px-6">
             Your wallet is your name. Three souls keep their own memory of you — stored on 0G, where no one can make them forget.
@@ -215,8 +224,8 @@ function Game() {
         memories={memories}
         active={active}
         talking={scene.loading}
-        onSelect={openDialogue}
-        interactive={!!memories}
+        onSelect={address ? openDialogue : () => {}}
+        interactive={address ? !!memories : true}
         uiOpen={panelOpen}
       />
 
@@ -224,13 +233,24 @@ function Game() {
       <header className="absolute top-0 inset-x-0 z-20 flex justify-between items-center px-4 py-3 bg-gradient-to-b from-black/55 to-transparent">
         <div className="font-bold tracking-[0.15em] text-[#d6b84a]">ENGRAM · Aldenmoor</div>
         <div className="flex items-center gap-2">
-          <NetworkToggle />
-          <span className="text-xs font-mono bg-black/40 border border-[#4a3f28] px-3 py-1.5 rounded-full" title={address}>
-            {short(address)}
-          </span>
-          <button onClick={() => setPanelOpen(true)} className="bg-black/40 border border-[#5a4a28] hover:border-[#d6b84a] rounded-md px-3 py-1.5 text-sm">
-            📜 Memory
-          </button>
+          {address ? (
+            <>
+              <NetworkToggle />
+              <span className="text-xs font-mono bg-black/40 border border-[#4a3f28] px-3 py-1.5 rounded-full" title={address}>
+                {short(address)}
+              </span>
+              <button onClick={() => setPanelOpen(true)} className="bg-black/40 border border-[#5a4a28] hover:border-[#d6b84a] rounded-md px-3 py-1.5 text-sm">
+                📜 Memory
+              </button>
+            </>
+          ) : (
+            <>
+              <span className="text-xs bg-black/40 border border-[#4a3f28] px-3 py-1.5 rounded-full text-[#f4e8d0]/80">Demo</span>
+              <div className="pointer-events-auto">
+                <ConnectButton />
+              </div>
+            </>
+          )}
         </div>
       </header>
 
@@ -252,8 +272,8 @@ function Game() {
         </div>
       )}
 
-      {/* Loading memories */}
-      {!memories && (
+      {/* Loading memories (only when a wallet is connected; guests have none). */}
+      {address && !memories && (
         <div className="absolute inset-0 z-10 flex items-center justify-center">
           <div className="engram-thinking text-xl text-[#d6b84a]">Reading Aldenmoor’s memory from 0G…</div>
         </div>
@@ -320,7 +340,7 @@ function Game() {
       )}
 
       {/* Memory panel */}
-      {memories && (
+      {address && memories && (
         <MemoryPanel
           open={panelOpen}
           onClose={() => setPanelOpen(false)}
