@@ -2586,10 +2586,17 @@ export default function Scene3D({ memories = null, active = null, talking = fals
                 className="w-full max-w-md rounded-2xl border border-[#5a4a28] bg-[rgba(20,16,10,0.97)] p-5 text-[#f4e8d0] shadow-2xl"
                 onClick={(e) => e.stopPropagation()}
               >
-                <div className="mb-1 text-lg font-bold text-[#b98bff]">🤖 Build with AI</div>
+                <div className="mb-1 flex items-baseline justify-between gap-2">
+                  <span className="text-lg font-bold text-[#b98bff]">🤖 Build with AI</span>
+                  <span className="text-xs text-[#f4e8d0]/60">spent ${aiSpent.toFixed(4)}</span>
+                </div>
                 <p className="mb-3 text-xs text-[#f4e8d0]/70">
                   Describe a structure. It&apos;s built around you (drive somewhere open, outside the village
-                  core). Costs wood — bigger ideas cost more.
+                  core). Placing costs wood — bigger ideas cost more.
+                </p>
+                <p className="mb-3 rounded-md border border-[#7a6ad6]/40 bg-[#2a2340]/60 px-2.5 py-1.5 text-[11px] text-[#f4e8d0]/80">
+                  ⚠️ Generating a design calls the AI and <b>costs a few cents of tokens even if you Discard</b>
+                  (the wood is only spent when you Place, and refunded if you don&apos;t save).
                 </p>
                 <textarea
                   value={aiPrompt}
