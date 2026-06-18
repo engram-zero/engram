@@ -5,9 +5,18 @@
 > commit. Es distinto de [`ENGRAM_PROMPTS.md`](ENGRAM_PROMPTS.md), que es el
 > *backlog* de tareas **futuras**; aquí queda lo que **ya se construyó**.
 >
-> Formato de cada entrada: **fecha · prompt (resumen) → qué se hizo · commit(s)**.
-> Append al final (orden cronológico). El historial de git es la fuente de verdad
-> (cada commit lleva `Co-Authored-By: Claude`).
+> Workflow (ver [`CLAUDE.md`](../CLAUDE.md)): por cada tarea, el agente redacta el
+> **prompt sintetizado** (el prompt autocontenido que *crea* la tarea, como paso
+> intermedio entre el pedido casual y el resultado) y lo registra aquí. Append al
+> final, en orden cronológico. El historial de git es la fuente de verdad.
+>
+> Formato por entrada:
+> ```
+> ### <fecha> · <título>
+> **Pedido (humano):** …   **Prompt sintetizado:** …
+> **Qué se hizo:** …   **Commit:** <hash>
+> ```
+> (Las entradas de abajo previas a este formato quedan en estilo resumido.)
 
 ---
 
@@ -50,4 +59,17 @@ cielo, niebla, **estrellas de noche** y **antorchas encendidas de noche**; revis
 cada minuto. · `14d57ec`
 
 **"Registrar cada cambio para que sea auditable por los jueces"** → creé este
-`PROMPT_LOG.md`. · (este commit)
+`PROMPT_LOG.md`. · `53a4908`
+
+### 17 jun 2026 · Astro móvil + workflow de prompt-logging
+**Pedido (humano):** "el 'sol' me da problemas; que se mueva según la hora del
+servidor, a esta hora ya no se debe ver; amanece 6am, anochece 7pm, gradual" + "que
+cada agente, además de la tarea, redacte el prompt que la crea y lo guarde en el
+historial de prompts".
+**Prompt sintetizado:** (1) Sustituir la luna fija por un astro que recorre un arco
+calculado por `computeDayNight(horaLocal)`: sol visible entre SUNRISE=6 y SUNSET=19,
+bajo el horizonte fuera de ese rango; luna en el arco nocturno; ambos salen/ocultan
+gradualmente. (2) Añadir `CLAUDE.md` instruyendo a los agentes a, por cada tarea,
+sintetizar el prompt de la tarea y registrarlo en `PROMPT_LOG.md` junto al commit.
+**Qué se hizo:** `Celestial` (sol/luna) posicionado por el ciclo; `CLAUDE.md` con el
+workflow; este formato de log. **Commit:** `bffb428` (código) + este commit (docs).
