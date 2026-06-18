@@ -24,7 +24,7 @@ import {
   type CottageDef,
 } from './map';
 import { getTexture, getTextureVariant, hasTexture } from './textures';
-import { useWorld, chopTree, isChopped, woodIsFull, MAX_WOOD } from '@/lib/world';
+import { useWorld, harvestTree, isChopped, woodIsFull, MAX_WOOD } from '@/lib/world';
 
 // A tree carries its global index (into TREES) so chopping can target it.
 type TreeInst = TreeDef & { idx: number };
@@ -1498,17 +1498,17 @@ export default function Scene3D({ memories = null, active = null, talking = fals
       fHeldRef.current = false;
       return;
     }
-    const CHOP_MS = 1500;
+    const PER_UNIT_MS = 5000; // ~5s of holding F = 1 unit of wood
     const TICK = 80;
     const id = window.setInterval(() => {
       const tree = nearbyTreeRef.current;
       const canChop = fHeldRef.current && tree !== null && !isChopped(tree) && !woodIsFull();
       if (canChop) {
-        chopRef.current = Math.min(100, chopRef.current + (TICK / CHOP_MS) * 100);
+        chopRef.current = Math.min(100, chopRef.current + (TICK / PER_UNIT_MS) * 100);
         if (chopRef.current >= 100) {
-          chopTree(tree!);
+          const { depleted } = harvestTree(tree!); // grant 1 unit; deplete after TREE_WOOD
           chopRef.current = 0;
-          setNearbyTree(null); // it's gone; Player repicks next frame
+          if (depleted) setNearbyTree(null); // tree gone; Player repicks next frame
         }
       } else if (chopRef.current !== 0) {
         chopRef.current = 0;

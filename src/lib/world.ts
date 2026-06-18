@@ -134,6 +134,30 @@ export function woodIsFull(): boolean {
   return state.inventory.wood >= MAX_WOOD;
 }
 
+/** Wood units a full tree yields (extracted one unit at a time while chopping). */
+export const TREE_WOOD = 5;
+
+// Transient per-tree extraction progress (not persisted — only the final
+// "chopped" state matters for the world; partial harvest resets on reload).
+const harvested: Record<number, number> = {};
+
+/**
+ * Extract ONE unit of wood from a tree (called each time the player holds the
+ * chop key long enough). After TREE_WOOD units the tree is fully chopped and
+ * vanishes. No-op (gained:false) if already chopped or the player is full.
+ */
+export function harvestTree(index: number): { depleted: boolean; gained: boolean } {
+  if (state.choppedTrees.includes(index)) return { depleted: true, gained: false };
+  if (state.inventory.wood >= MAX_WOOD) return { depleted: false, gained: false };
+  const units = (harvested[index] = (harvested[index] ?? 0) + 1);
+  const depleted = units >= TREE_WOOD;
+  commit({
+    inventory: { ...state.inventory, wood: Math.min(MAX_WOOD, state.inventory.wood + 1) },
+    choppedTrees: depleted ? [...state.choppedTrees, index] : state.choppedTrees,
+  });
+  return { depleted, gained: true };
+}
+
 // ── React hooks ───────────────────────────────────────────────────────────────
 export function useWorld(): WorldState {
   return useSyncExternalStore(subscribe, getWorld, () => EMPTY_WORLD);
