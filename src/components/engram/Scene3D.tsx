@@ -985,12 +985,12 @@ function EnemySpawner() {
 
 // ── Torch ── a planted post with a flickering warm point light, for atmosphere
 // and local lighting around the village.
-function Torch({ position }: { position: [number, number, number] }) {
+function Torch({ position, lit = true }: { position: [number, number, number]; lit?: boolean }) {
   const light = useRef<THREE.PointLight>(null);
   const seed = position[0] * 1.3 + position[2];
   useFrame((s) => {
     if (light.current) {
-      light.current.intensity = 2.1 + Math.sin(s.clock.elapsedTime * 9 + seed) * 0.4 + Math.random() * 0.12;
+      light.current.intensity = lit ? 2.1 + Math.sin(s.clock.elapsedTime * 9 + seed) * 0.4 + Math.random() * 0.12 : 0;
     }
   });
   const y = getHeightAt(position[0], position[2]);
@@ -1000,26 +1000,26 @@ function Torch({ position }: { position: [number, number, number] }) {
         <cylinderGeometry args={[0.05, 0.07, 1.3, 6]} />
         <meshStandardMaterial color="#4a3424" flatShading />
       </mesh>
-      <mesh position={[0, 1.42, 0]}>
+      <mesh position={[0, 1.42, 0]} visible={lit}>
         <coneGeometry args={[0.13, 0.4, 8]} />
         <meshBasicMaterial color="#ffb347" />
       </mesh>
-      <pointLight ref={light} color="#ff9a3c" intensity={2.1} distance={9} decay={2} position={[0, 1.45, 0]} />
+      <pointLight ref={light} color="#ff9a3c" intensity={lit ? 2.1 : 0} distance={9} decay={2} position={[0, 1.45, 0]} />
     </group>
   );
 }
 
-function Village() {
+function Village({ torchesLit = true, showMoon = true }: { torchesLit?: boolean; showMoon?: boolean }) {
   return (
     <group>
       <Terrain />
-      <Moon />
+      {showMoon && <Moon />}
       {COTTAGES.map((c, i) => (
         <Cottage key={i} def={c} seed={i} />
       ))}
       {/* A torch by each cottage door (door faces the cottage's +z, rotated). */}
       {COTTAGES.map((c, i) => (
-        <Torch key={`torch${i}`} position={[c.x + 1.7 * c.scale * Math.sin(c.rot), 0, c.z + 1.7 * c.scale * Math.cos(c.rot)]} />
+        <Torch key={`torch${i}`} lit={torchesLit} position={[c.x + 1.7 * c.scale * Math.sin(c.rot), 0, c.z + 1.7 * c.scale * Math.cos(c.rot)]} />
       ))}
       <InstancedTrees />
       <Campfire />
@@ -1576,6 +1576,66 @@ function DimGroup({ dim, children }: { dim: boolean; children: React.ReactNode }
   return <group ref={ref}>{children}</group>;
 }
 
+// ─── Day/night cycle (driven by the player's local clock) ─────────────────────
+
+export interface DayNight {
+  sunPos: [number, number, number];
+  bg: string;
+  fog: string;
+  ambIntensity: number;
+  ambColor: string;
+  hemiSky: string;
+  hemiGround: string;
+  hemiIntensity: number;
+  dirPos: [number, number, number];
+  dirIntensity: number;
+  dirColor: string;
+  turbidity: number;
+  rayleigh: number;
+  starsVisible: boolean;
+  torchesLit: boolean;
+  isNight: boolean;
+}
+
+function mix(a: number, b: number, t: number) {
+  return a + (b - a) * t;
+}
+function mixColor(a: string, b: string, t: number): string {
+  return '#' + new THREE.Color(a).lerp(new THREE.Color(b), t).getHexString();
+}
+
+/**
+ * Map a local hour (0..24, fractional) to a full lighting setup. `day` ramps from
+ * 0 at night to 1 at solar noon; the drei <Sky> shader paints the warm dawn/dusk
+ * horizon on its own as the sun crosses y≈0.
+ */
+export function computeDayNight(hour: number): DayNight {
+  const elevation = Math.sin(((hour - 6) / 24) * Math.PI * 2); // -1 midnight .. +1 noon
+  const day = Math.max(0, elevation);
+  const az = ((hour - 6) / 12) * Math.PI; // sun arcs east→west
+  const sunX = -Math.cos(az) * 90;
+  const sunY = elevation * 80;
+  const sunZ = -55;
+  return {
+    sunPos: [sunX, sunY, sunZ],
+    bg: mixColor('#0c1020', '#9fc4ec', day),
+    fog: mixColor('#141d33', '#aac4e0', day),
+    ambIntensity: mix(0.45, 1.15, day),
+    ambColor: mixColor('#6c7ea8', '#fff3e0', day),
+    hemiSky: mixColor('#2a3a66', '#bcd4f5', day),
+    hemiGround: mixColor('#2a3326', '#6a7458', day),
+    hemiIntensity: mix(0.5, 1.1, day),
+    dirPos: [sunX, Math.max(10, sunY), sunZ], // keep height at night so moonlight still falls
+    dirIntensity: mix(0.45, 2.4, day),
+    dirColor: mixColor('#aab8e6', '#fff1d6', day),
+    turbidity: mix(6, 11, day),
+    rayleigh: mix(0.6, 1.6, day),
+    starsVisible: day < 0.18,
+    torchesLit: day < 0.32,
+    isNight: day < 0.32,
+  };
+}
+
 // ─── Public component ─────────────────────────────────────────────────────────
 
 interface Scene3DProps {
@@ -1600,6 +1660,20 @@ export default function Scene3D({ memories = null, active = null, talking = fals
   const explorable = interactive && !showTitle;
   // Movement + pointer lock only when not mid-dialogue and no GUI is open.
   const exploring = explorable && !active && !uiOpen;
+
+  // Day/night driven by the player's own local clock (re-checked each minute).
+  const [localHour, setLocalHour] = useState(() => {
+    const d = new Date();
+    return d.getHours() + d.getMinutes() / 60;
+  });
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      const d = new Date();
+      setLocalHour(d.getHours() + d.getMinutes() / 60);
+    }, 60000);
+    return () => window.clearInterval(id);
+  }, []);
+  const dn = useMemo(() => computeDayNight(localHour), [localHour]);
 
   const [nearby, setNearby] = useState<NPCName | null>(null);
   const [nearbyTree, setNearbyTree] = useState<number | null>(null);
@@ -1775,19 +1849,21 @@ export default function Scene3D({ memories = null, active = null, talking = fals
           camera={{ position: [0, 3.1, 9], fov: 60 }}
           gl={{ antialias: true, toneMappingExposure: 1.6 }}
         >
-          <color attach="background" args={['#1b2236']} />
-          <fog attach="fog" args={['#243150', 30, 110]} />
+          <color attach="background" args={[dn.bg]} />
+          <fog attach="fog" args={[dn.fog, 30, 110]} />
 
-          {/* Dusk skydome behind the stars for a deep, graded horizon. */}
-          <Sky distance={450000} sunPosition={[-40, 14, -70]} turbidity={9} rayleigh={1.1} mieCoefficient={0.02} mieDirectionalG={0.86} />
+          {/* Skydome — the sun position follows the player's local clock, so the
+              drei <Sky> shader paints day, dusk and night automatically. */}
+          <Sky distance={450000} sunPosition={dn.sunPos} turbidity={dn.turbidity} rayleigh={dn.rayleigh} mieCoefficient={0.02} mieDirectionalG={0.86} />
 
-          {/* Brighter dusk: strong ambient + hemisphere fill + the moonlight key. */}
-          <ambientLight intensity={1.25} color="#b9c8e2" />
-          <hemisphereLight args={['#cdd9ff', '#5d6a54', 1.1]} />
+          {/* Lighting scales with time of day: warm strong sun at noon, dim cool
+              moonlight at night (the key light follows the same sun/moon arc). */}
+          <ambientLight intensity={dn.ambIntensity} color={dn.ambColor} />
+          <hemisphereLight args={[dn.hemiSky, dn.hemiGround, dn.hemiIntensity]} />
           <directionalLight
-            position={[20, 24, -46]}
-            intensity={2.0}
-            color="#e6ecff"
+            position={dn.dirPos}
+            intensity={dn.dirIntensity}
+            color={dn.dirColor}
             castShadow
             shadow-mapSize={[2048, 2048]}
             shadow-camera-near={1}
@@ -1798,7 +1874,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
             shadow-camera-bottom={-26}
           />
 
-          <Stars radius={80} depth={45} count={1800} factor={3.2} saturation={0} fade speed={0.5} />
+          {dn.starsVisible && <Stars radius={80} depth={45} count={1800} factor={3.2} saturation={0} fade speed={0.5} />}
 
           {/* Cinematic rig on the title/loading screen; first-person controls
               once Aldenmoor is explorable. */}
@@ -1824,7 +1900,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
           )}
           {explorable && active && view === 'fp' && <TalkFraming active={active} />}
 
-          <Village />
+          <Village torchesLit={dn.torchesLit} showMoon={dn.isNight} />
           {explorable && <Buildings />}
           {explorable && <EnemySpawner />}
           {/* The title text is HTML in client-page now: a 3D drei <Text> here
