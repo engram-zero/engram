@@ -25,17 +25,26 @@ export const MAX_WOOD = 100;
 
 /** BASE wood cost per building. The actual cost scales up the closer you build
  * to the village centre (computed in the scene); persistence is unaffected. */
-export const BUILD_COST: Record<BuildingType, number> = { wall: 3, house: 10 };
-/** Collider radius for each building (kept in sync with the rendered footprint). */
-export const BUILD_RADIUS: Record<BuildingType, number> = { wall: 0.9, house: 1.8 };
+export const BUILD_COST: Record<BuildingType, number> = { wall: 3, house: 10, block: 1 };
+/** Collider radius for each building (kept in sync with the rendered footprint).
+ * Blocks are decorative voxels — they don't collide (radius 0). */
+export const BUILD_RADIUS: Record<BuildingType, number> = { wall: 0.9, house: 1.8, block: 0 };
 
 export const EMPTY_WORLD: WorldState = { inventory: { wood: 0, stone: 0, coin: 0 }, choppedTrees: [], buildings: [] };
 
 function normalizeBuildings(raw: unknown): Building[] {
   if (!Array.isArray(raw)) return [];
   return raw
-    .filter((b): b is Building => !!b && (b.type === 'wall' || b.type === 'house') && typeof b.x === 'number' && typeof b.z === 'number')
-    .map((b) => ({ type: b.type, x: b.x, z: b.z, rot: typeof b.rot === 'number' ? b.rot : 0 }));
+    .filter((b): b is Building => !!b && (b.type === 'wall' || b.type === 'house' || b.type === 'block') && typeof b.x === 'number' && typeof b.z === 'number')
+    .map((b) => {
+      const base: Building = { type: b.type, x: b.x, z: b.z, rot: typeof b.rot === 'number' ? b.rot : 0 };
+      if (b.type === 'block') {
+        base.y = typeof b.y === 'number' ? b.y : 0;
+        base.scale = typeof b.scale === 'number' ? b.scale : 0.6;
+        base.color = typeof b.color === 'string' ? b.color : '#8a6a4a';
+      }
+      return base;
+    });
 }
 
 export function normalizeWorldState(raw: unknown): WorldState {

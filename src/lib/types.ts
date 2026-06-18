@@ -6,13 +6,21 @@
 export type NPCName = 'aldric' | 'maren' | 'sable';
 export type ResourceType = 'wood' | 'stone' | 'coin';
 
-export type BuildingType = 'wall' | 'house';
-/** A structure the player has placed in the world. */
+export type BuildingType = 'wall' | 'house' | 'block';
+/** A structure the player has placed in the world. `block` is a small coloured
+ * voxel the AI stacks/colours to sculpt arbitrary shapes (trees, statues…);
+ * y/color/scale only apply to blocks. */
 export interface Building {
   type: BuildingType;
   x: number;
   z: number;
   rot: number;
+  /** Block only: centre height above the ground. */
+  y?: number;
+  /** Block only: hex colour. */
+  color?: string;
+  /** Block only: cube size. */
+  scale?: number;
 }
 
 export interface WorldState {

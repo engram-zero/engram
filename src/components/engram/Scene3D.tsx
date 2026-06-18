@@ -98,7 +98,7 @@ function resolveCollision(x: number, z: number): [number, number] {
     ...COLLIDERS,
     ...(Object.values(dynamicNpcState)).map((state) => ({ x: state.x, z: state.z, r: 0.6 })),
     ...(Object.values(dynamicEnemyState)).filter((s) => !s.dead).map((s) => ({ x: s.x, z: s.z, r: 0.5 })),
-    ...getWorld().buildings.map((b) => ({ x: b.x, z: b.z, r: BUILD_RADIUS[b.type] })),
+    ...getWorld().buildings.filter((b) => b.type !== 'block').map((b) => ({ x: b.x, z: b.z, r: BUILD_RADIUS[b.type] })),
   ];
   for (const c of obstacles) {
     const dx = x - c.x;
@@ -118,6 +118,7 @@ function resolveCollision(x: number, z: number): [number, number] {
 // that move directly (not via resolveCollision) so they can't walk through walls.
 function resolveBuildings(x: number, z: number, radius = 0.5): [number, number] {
   for (const b of getWorld().buildings) {
+    if (b.type === 'block') continue; // decorative voxels don't block movement
     const dx = x - b.x;
     const dz = z - b.z;
     const dist = Math.hypot(dx, dz);
@@ -1166,6 +1167,15 @@ function Village({ torchesLit = true }: { torchesLit?: boolean }) {
 
 function BuildingMesh({ b }: { b: Building }) {
   const y = getHeightAt(b.x, b.z);
+  if (b.type === 'block') {
+    const s = b.scale ?? 0.6;
+    return (
+      <mesh position={[b.x, y + (b.y ?? 0) + s / 2, b.z]} rotation={[0, b.rot, 0]} castShadow receiveShadow>
+        <boxGeometry args={[s, s, s]} />
+        <meshStandardMaterial color={b.color ?? '#8a6a4a'} flatShading />
+      </mesh>
+    );
+  }
   if (b.type === 'wall') {
     return (
       <mesh position={[b.x, y + 0.75, b.z]} rotation={[0, b.rot, 0]} castShadow receiveShadow>
@@ -1229,6 +1239,8 @@ function canPlaceBuilding(type: BuildingType, x: number, z: number): boolean {
   if (d < NO_BUILD_RADIUS) return false; // protected village core
   if (d > WORLD_RADIUS) return false;
   if (w.inventory.wood < buildCostAt(type, x, z)) return false;
+  // Blocks are decorative voxels — they may overlap freely (no collision check).
+  if (type === 'block') return true;
   const r = BUILD_RADIUS[type];
   const obstacles = [
     ...COTTAGES.map((c) => ({ x: c.x, z: c.z, r: c.scale * 1.5 })),
@@ -1357,8 +1369,20 @@ function MobileBuildGhost({ mode, posRef, rot }: { mode: BuildingType; posRef: P
   );
 }
 
-// A piece returned by /api/build (offset from the avatar).
-type AIPiece = { type: BuildingType; dx: number; dz: number; rot: number };
+// A piece returned by /api/build (offset from the avatar). Blocks carry voxel
+// attributes (height, colour, size) so the AI can sculpt arbitrary shapes.
+type AIPiece = { type: BuildingType; dx: number; dz: number; rot: number; dy?: number; color?: string; scale?: number };
+
+// AI piece → a placeable Building at absolute (x,z).
+function aiPieceToBuilding(b: AIPiece, x: number, z: number): Building {
+  const out: Building = { type: b.type, x, z, rot: b.rot };
+  if (b.type === 'block') {
+    out.y = b.dy ?? 0;
+    out.color = b.color ?? '#8a6a4a';
+    out.scale = b.scale ?? 0.6;
+  }
+  return out;
+}
 
 // Preview of an AI-designed structure at the spot it was generated — purple where
 // it'll place, red where it's blocked. Shown until the player confirms or discards.
@@ -1369,8 +1393,18 @@ function AIPreviewGhosts({ pieces, origin }: { pieces: AIPiece[]; origin: { x: n
         const x = Math.round(origin.x + b.dx);
         const z = Math.round(origin.z + b.dz);
         const ok = canPlaceBuilding(b.type, x, z);
+        const gy = getHeightAt(x, z);
+        if (b.type === 'block') {
+          const s = b.scale ?? 0.6;
+          return (
+            <mesh key={i} position={[x, gy + (b.dy ?? 0) + s / 2, z]} rotation={[0, b.rot, 0]}>
+              <boxGeometry args={[s, s, s]} />
+              <meshStandardMaterial color={ok ? b.color ?? '#8a6a4a' : '#d05a4a'} transparent opacity={0.55} depthWrite={false} />
+            </mesh>
+          );
+        }
         return (
-          <mesh key={i} position={[x, getHeightAt(x, z) + (b.type === 'house' ? 1.0 : 0.75), z]} rotation={[0, b.rot, 0]}>
+          <mesh key={i} position={[x, gy + (b.type === 'house' ? 1.0 : 0.75), z]} rotation={[0, b.rot, 0]}>
             {b.type === 'house' ? <boxGeometry args={[2.4, 1.8, 2.0]} /> : <boxGeometry args={[1.8, 1.5, 0.3]} />}
             <meshStandardMaterial color={ok ? '#7a6ad6' : '#d05a4a'} transparent opacity={0.45} depthWrite={false} />
           </mesh>
@@ -2144,7 +2178,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
       const z = Math.round(aiOrigin.z + b.dz);
       if (canPlaceBuilding(b.type, x, z)) {
         const cost = buildCostAt(b.type, x, z);
-        if (placeBuilding({ type: b.type, x, z, rot: b.rot }, cost)) {
+        if (placeBuilding(aiPieceToBuilding(b, x, z), cost)) {
           placed += 1;
           wood += cost;
         }
