@@ -112,6 +112,23 @@ function resolveCollision(x: number, z: number): [number, number] {
   return [x, z];
 }
 
+// Push an entity (NPCs, enemies) out of any building it overlaps. Used for actors
+// that move directly (not via resolveCollision) so they can't walk through walls.
+function resolveBuildings(x: number, z: number, radius = 0.5): [number, number] {
+  for (const b of getWorld().buildings) {
+    const dx = x - b.x;
+    const dz = z - b.z;
+    const dist = Math.hypot(dx, dz);
+    const min = BUILD_RADIUS[b.type] + radius;
+    if (dist < min && dist > 1e-4) {
+      const push = min - dist;
+      x += (dx / dist) * push;
+      z += (dz / dist) * push;
+    }
+  }
+  return [x, z];
+}
+
 function trustColor(t: number) {
   if (t >= 70) return '#5fb86a';
   if (t >= 40) return '#d6b84a';
@@ -895,6 +912,7 @@ function Enemy({ id }: { id: string }) {
       const moveRatio = step / Math.hypot(dx, dz);
       dyn.x += dx * moveRatio;
       dyn.z += dz * moveRatio;
+      [dyn.x, dyn.z] = resolveBuildings(dyn.x, dyn.z, 0.5); // can't walk through walls
     }
 
     const phase = dyn.x * 2.1;
@@ -1055,7 +1073,19 @@ function Buildings() {
 // the structure (green = valid, red = blocked / not enough wood); click places.
 function BuildController({ mode }: { mode: BuildingType | 'demolish' }) {
   const [ghost, setGhost] = useState<[number, number] | null>(null);
+  const [rot, setRot] = useState(0);
   const world = useWorld();
+
+  // R rotates the building to place (45° steps).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (document.activeElement as HTMLElement | null)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (e.code === 'KeyR') setRot((r) => (r + Math.PI / 4) % (Math.PI * 2));
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const isBuild = mode !== 'demolish';
   const r = isBuild ? BUILD_RADIUS[mode] : 0;
@@ -1063,8 +1093,12 @@ function BuildController({ mode }: { mode: BuildingType | 'demolish' }) {
   if (isBuild && valid && ghost) {
     const [tx, tz] = ghost;
     if (Math.hypot(tx, tz) > WORLD_RADIUS) valid = false;
+    // Build obstacles from live data so CHOPPED trees no longer block, and use a
+    // small tree footprint. Terrain slope is intentionally NOT a blocker.
     const obstacles = [
-      ...COLLIDERS,
+      ...COTTAGES.map((c) => ({ x: c.x, z: c.z, r: c.scale * 1.5 })),
+      { x: CAMPFIRE.x, z: CAMPFIRE.z, r: 1.0 },
+      ...TREES.map((t, i) => ({ t, i })).filter(({ i }) => !isChopped(i)).map(({ t }) => ({ x: t.x, z: t.z, r: 0.45 * t.scale })),
       ...world.buildings.map((b) => ({ x: b.x, z: b.z, r: BUILD_RADIUS[b.type] })),
       ...(Object.values(NPC_POS) as [number, number, number][]).map((p) => ({ x: p[0], z: p[2], r: 0.9 })),
     ];
@@ -1091,7 +1125,7 @@ function BuildController({ mode }: { mode: BuildingType | 'demolish' }) {
       });
       if (bi >= 0) removeBuilding(bi);
     } else if (valid) {
-      placeBuilding({ type: mode, x, z, rot: 0 });
+      placeBuilding({ type: mode, x, z, rot });
     }
   };
 
@@ -1111,7 +1145,10 @@ function BuildController({ mode }: { mode: BuildingType | 'demolish' }) {
         <meshBasicMaterial visible={false} />
       </mesh>
       {isBuild && ghost && (
-        <mesh position={[ghost[0], getHeightAt(ghost[0], ghost[1]) + (mode === 'house' ? 1.0 : 0.75), ghost[1]]}>
+        <mesh
+          position={[ghost[0], getHeightAt(ghost[0], ghost[1]) + (mode === 'house' ? 1.0 : 0.75), ghost[1]]}
+          rotation={[0, rot, 0]}
+        >
           {mode === 'house' ? <boxGeometry args={[2.4, 1.8, 2.0]} /> : <boxGeometry args={[1.8, 1.5, 0.3]} />}
           <meshStandardMaterial color={valid ? '#5fd06a' : '#d05a4a'} transparent opacity={0.4} depthWrite={false} />
         </mesh>
@@ -1365,6 +1402,7 @@ function Character({
           const moveRatio = step / closestDist;
           dyn.x += dx * moveRatio;
           dyn.z += dz * moveRatio;
+          [dyn.x, dyn.z] = resolveBuildings(dyn.x, dyn.z, 0.5);
           targetRotY = Math.atan2(dx, dz);
         }
       }
@@ -1414,6 +1452,7 @@ function Character({
         const moveRatio = Math.min(1, step / dist);
         dyn.x += dx * moveRatio;
         dyn.z += dz * moveRatio;
+        [dyn.x, dyn.z] = resolveBuildings(dyn.x, dyn.z, 0.5);
         targetRotY = Math.atan2(dx, dz);
         dyn.timer = 0;
       } else {
@@ -1849,7 +1888,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
               ))}
               {buildMode && (
                 <span className="rounded bg-black/60 px-2 py-1 text-xs text-[#f4e8d0]/80">
-                  {buildMode === 'demolish' ? 'Click a building to demolish' : 'Click the ground to place · click tool again to cancel'}
+                  {buildMode === 'demolish' ? 'Click a building to demolish' : 'Click ground to place · R to rotate · click tool to cancel'}
                 </span>
               )}
             </div>
