@@ -1539,21 +1539,21 @@ export default function Scene3D({ memories = null, active = null, talking = fals
           shadows
           dpr={[1, 1.75]}
           camera={{ position: [0, 3.1, 9], fov: 60 }}
-          gl={{ antialias: true }}
+          gl={{ antialias: true, toneMappingExposure: 1.6 }}
         >
-          <color attach="background" args={['#141a2c']} />
-          <fog attach="fog" args={['#1b2740', 28, 95]} />
+          <color attach="background" args={['#1b2236']} />
+          <fog attach="fog" args={['#243150', 30, 110]} />
 
           {/* Dusk skydome behind the stars for a deep, graded horizon. */}
-          <Sky distance={450000} sunPosition={[-40, 10, -70]} turbidity={10} rayleigh={0.9} mieCoefficient={0.02} mieDirectionalG={0.86} />
+          <Sky distance={450000} sunPosition={[-40, 14, -70]} turbidity={9} rayleigh={1.1} mieCoefficient={0.02} mieDirectionalG={0.86} />
 
-          {/* Brighter dusk: ambient + a hemisphere fill + the moonlight key light. */}
-          <ambientLight intensity={0.7} color="#aebfda" />
-          <hemisphereLight args={['#cdd9ff', '#3b4a3a', 0.6]} />
+          {/* Brighter dusk: strong ambient + hemisphere fill + the moonlight key. */}
+          <ambientLight intensity={1.25} color="#b9c8e2" />
+          <hemisphereLight args={['#cdd9ff', '#5d6a54', 1.1]} />
           <directionalLight
             position={[20, 24, -46]}
-            intensity={1.55}
-            color="#dde6ff"
+            intensity={2.0}
+            color="#e6ecff"
             castShadow
             shadow-mapSize={[2048, 2048]}
             shadow-camera-near={1}
