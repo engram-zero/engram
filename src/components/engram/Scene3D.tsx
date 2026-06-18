@@ -332,7 +332,9 @@ function AerialRig({ enabled, posRef }: { enabled: boolean; posRef: PlayerPosRef
   useEffect(() => {
     if (!enabled) return;
     const onWheel = (e: WheelEvent) => {
-      zoom.current = THREE.MathUtils.clamp(zoom.current - e.deltaY * 0.02, 7, 55);
+      // Min kept above the point where the bright sky horizon peeks in at the
+      // bottom of the tilted view.
+      zoom.current = THREE.MathUtils.clamp(zoom.current - e.deltaY * 0.02, 12, 55);
     };
     window.addEventListener('wheel', onWheel, { passive: true });
     return () => window.removeEventListener('wheel', onWheel);
