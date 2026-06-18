@@ -450,16 +450,24 @@ function Terrain() {
 }
 
 // ── Moon ── emissive disc + an additive halo sprite.
-function Moon() {
-  const halo = useMemo(() => makeRadialTexture('rgba(255,247,224,0.9)', 'rgba(255,240,200,0.25)'), []);
+// Sun (warm, big glow) or moon (cool, small glow). Position is supplied by the
+// day/night cycle so it rises and sets with the player's local clock.
+function Celestial({ position, sun = false }: { position: [number, number, number]; sun?: boolean }) {
+  const halo = useMemo(
+    () =>
+      sun
+        ? makeRadialTexture('rgba(255,238,190,0.95)', 'rgba(255,200,120,0.28)')
+        : makeRadialTexture('rgba(255,247,224,0.9)', 'rgba(214,226,255,0.22)'),
+    [sun]
+  );
   return (
-    <group position={[20, 24, -46]}>
+    <group position={position}>
       <mesh>
-        <sphereGeometry args={[3, 24, 24]} />
-        <meshBasicMaterial color="#fff7e0" />
+        <sphereGeometry args={[sun ? 4 : 3, 24, 24]} />
+        <meshBasicMaterial color={sun ? '#fff2c4' : '#eef2ff'} />
       </mesh>
-      <sprite scale={[22, 22, 1]}>
-        <spriteMaterial map={halo} transparent depthWrite={false} blending={THREE.AdditiveBlending} opacity={0.7} />
+      <sprite scale={sun ? [44, 44, 1] : [22, 22, 1]}>
+        <spriteMaterial map={halo} transparent depthWrite={false} blending={THREE.AdditiveBlending} opacity={sun ? 0.9 : 0.7} />
       </sprite>
     </group>
   );
@@ -1009,11 +1017,10 @@ function Torch({ position, lit = true }: { position: [number, number, number]; l
   );
 }
 
-function Village({ torchesLit = true, showMoon = true }: { torchesLit?: boolean; showMoon?: boolean }) {
+function Village({ torchesLit = true }: { torchesLit?: boolean }) {
   return (
     <group>
       <Terrain />
-      {showMoon && <Moon />}
       {COTTAGES.map((c, i) => (
         <Cottage key={i} def={c} seed={i} />
       ))}
@@ -1594,8 +1601,17 @@ export interface DayNight {
   rayleigh: number;
   starsVisible: boolean;
   torchesLit: boolean;
-  isNight: boolean;
+  /** Visible celestial discs (sun by day, moon by night) — both ride an arc and
+   *  drop below the horizon at the right hour. */
+  sunVisible: boolean;
+  moonVisible: boolean;
+  sunDiscPos: [number, number, number];
+  moonDiscPos: [number, number, number];
 }
+
+// Configurable day window (player's LOCAL hours).
+const SUNRISE = 6;
+const SUNSET = 19; // 7pm
 
 function mix(a: number, b: number, t: number) {
   return a + (b - a) * t;
@@ -1605,19 +1621,28 @@ function mixColor(a: string, b: string, t: number): string {
 }
 
 /**
- * Map a local hour (0..24, fractional) to a full lighting setup. `day` ramps from
- * 0 at night to 1 at solar noon; the drei <Sky> shader paints the warm dawn/dusk
- * horizon on its own as the sun crosses y≈0.
+ * Map a local hour (0..24, fractional) to a full lighting setup + the moving
+ * sun/moon positions. The sun is up between SUNRISE and SUNSET, arcing east→west
+ * and dropping below the horizon outside that window (so the drei <Sky> shader
+ * darkens and the moon takes over). `day` ramps 0 (night) → 1 (solar noon).
  */
 export function computeDayNight(hour: number): DayNight {
-  const elevation = Math.sin(((hour - 6) / 24) * Math.PI * 2); // -1 midnight .. +1 noon
-  const day = Math.max(0, elevation);
-  const az = ((hour - 6) / 12) * Math.PI; // sun arcs east→west
-  const sunX = -Math.cos(az) * 90;
-  const sunY = elevation * 80;
-  const sunZ = -55;
+  const dayLen = SUNSET - SUNRISE; // hours of daylight
+  const p = (hour - SUNRISE) / dayLen; // 0 at sunrise → 1 at sunset (out of range at night)
+  const ang = p * Math.PI;
+  const sunY = Math.sin(ang); // >0 daytime, <0 night
+  const sunX = -Math.cos(ang); // east (−1) → west (+1)
+  const day = Math.max(0, sunY);
+
+  // Moon rides its own arc across the night (sunset → sunrise).
+  const nightLen = 24 - dayLen;
+  const np = ((hour - SUNSET + 24) % 24) / nightLen; // 0 at sunset → 1 at sunrise
+  const mAng = np * Math.PI;
+  const moonY = Math.sin(mAng);
+  const moonX = -Math.cos(mAng);
+
   return {
-    sunPos: [sunX, sunY, sunZ],
+    sunPos: [sunX * 90, sunY * 80, -55], // drives the <Sky> shader (dark when sunY<0)
     bg: mixColor('#0c1020', '#9fc4ec', day),
     fog: mixColor('#141d33', '#aac4e0', day),
     ambIntensity: mix(0.45, 1.15, day),
@@ -1625,14 +1650,17 @@ export function computeDayNight(hour: number): DayNight {
     hemiSky: mixColor('#2a3a66', '#bcd4f5', day),
     hemiGround: mixColor('#2a3326', '#6a7458', day),
     hemiIntensity: mix(0.5, 1.1, day),
-    dirPos: [sunX, Math.max(10, sunY), sunZ], // keep height at night so moonlight still falls
-    dirIntensity: mix(0.45, 2.4, day),
+    dirPos: [sunX * 60, Math.max(12, sunY * 60), -40], // key light follows the sun; min height keeps moonlight
+    dirIntensity: mix(0.4, 2.4, day),
     dirColor: mixColor('#aab8e6', '#fff1d6', day),
     turbidity: mix(6, 11, day),
     rayleigh: mix(0.6, 1.6, day),
-    starsVisible: day < 0.18,
-    torchesLit: day < 0.32,
-    isNight: day < 0.32,
+    starsVisible: sunY < 0.05,
+    torchesLit: sunY < 0.12,
+    sunVisible: sunY > 0.02,
+    moonVisible: sunY < -0.02 && moonY > 0,
+    sunDiscPos: [sunX * 130, sunY * 95 + 6, -60],
+    moonDiscPos: [moonX * 110, moonY * 70 + 8, -55],
   };
 }
 
@@ -1875,6 +1903,8 @@ export default function Scene3D({ memories = null, active = null, talking = fals
           />
 
           {dn.starsVisible && <Stars radius={80} depth={45} count={1800} factor={3.2} saturation={0} fade speed={0.5} />}
+          {dn.sunVisible && <Celestial position={dn.sunDiscPos} sun />}
+          {dn.moonVisible && <Celestial position={dn.moonDiscPos} />}
 
           {/* Cinematic rig on the title/loading screen; first-person controls
               once Aldenmoor is explorable. */}
@@ -1900,7 +1930,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
           )}
           {explorable && active && view === 'fp' && <TalkFraming active={active} />}
 
-          <Village torchesLit={dn.torchesLit} showMoon={dn.isNight} />
+          <Village torchesLit={dn.torchesLit} />
           {explorable && <Buildings />}
           {explorable && <EnemySpawner />}
           {/* The title text is HTML in client-page now: a 3D drei <Text> here
