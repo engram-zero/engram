@@ -2409,7 +2409,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
             </div>
           )}
 
-          {controlsArmed && nearbyTree !== null && !nearbyNpc && (
+          {controlsArmed && !isTouchDevice && nearbyTree !== null && !nearbyNpc && (
             <div className="pointer-events-none absolute bottom-28 left-1/2 z-10 -translate-x-1/2">
               {world.inventory.wood >= MAX_WOOD ? (
                 <div className="rounded-full border border-[#8a6a4a] px-5 py-2 text-sm font-semibold text-[#f4e8d0] shadow-lg" style={{ background: 'rgba(20,16,10,0.9)' }}>
@@ -2466,23 +2466,32 @@ export default function Scene3D({ memories = null, active = null, talking = fals
               </button>
             )}
             {nearbyTree !== null && !nearbyNpc && (
-              <button
-                onPointerDown={() => {
-                  fHeldRef.current = true;
-                }}
-                onPointerUp={() => {
-                  fHeldRef.current = false;
-                }}
-                onPointerLeave={() => {
-                  fHeldRef.current = false;
-                }}
-                onPointerCancel={() => {
-                  fHeldRef.current = false;
-                }}
-                className="rounded-2xl border border-[#6a8a4a] bg-[rgba(16,20,10,0.92)] px-4 py-3 text-sm font-semibold text-[#f4e8d0]"
-              >
-                Hold to chop
-              </button>
+              world.inventory.wood >= MAX_WOOD ? (
+                <div className="rounded-2xl border border-[#8a6a4a] bg-[rgba(20,16,10,0.92)] px-4 py-3 text-sm font-semibold text-[#f4e8d0]">
+                  Wood full ({MAX_WOOD})
+                </div>
+              ) : (
+                <button
+                  onPointerDown={() => {
+                    fHeldRef.current = true;
+                  }}
+                  onPointerUp={() => {
+                    fHeldRef.current = false;
+                  }}
+                  onPointerLeave={() => {
+                    fHeldRef.current = false;
+                  }}
+                  onPointerCancel={() => {
+                    fHeldRef.current = false;
+                  }}
+                  className="rounded-2xl border border-[#6a8a4a] bg-[rgba(16,20,10,0.92)] px-4 py-3 text-center text-sm font-semibold text-[#f4e8d0]"
+                >
+                  Hold to chop
+                  <div className="mt-1.5 h-2 w-32 overflow-hidden rounded-full bg-black/55">
+                    <div className="h-full rounded-full bg-[#8fd06a] transition-[width] duration-75" style={{ width: `${chopPct}%` }} />
+                  </div>
+                </button>
+              )
             )}
             {nearbyEnemy && !nearbyNpc && nearbyTree === null && (
               <button
@@ -2514,13 +2523,11 @@ export default function Scene3D({ memories = null, active = null, talking = fals
             </div>
           )}
 
-          <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/40 px-3 py-1 text-center text-[11px] text-[#f4e8d0]/65">
-            {buildMode
-              ? buildMode === 'demolish'
-                ? 'Move next to a building · tap Demolish'
-                : 'Drive to aim the ghost · tap Place'
-              : `Drag to move${fpExploring ? ' · drag right side to look' : ''}`}
-          </div>
+          {buildMode && (
+            <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/40 px-3 py-1 text-center text-[11px] text-[#f4e8d0]/65">
+              {buildMode === 'demolish' ? 'Move next to a building · tap Demolish' : 'Drive to aim the ghost · tap Place'}
+            </div>
+          )}
         </>
       )}
     </div>

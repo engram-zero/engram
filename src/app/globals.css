@@ -45,6 +45,22 @@ button {
   touch-action: manipulation;
 }
 
+/* On touch devices nothing in the game UI should be selectable/copyable (it just
+   gets in the way) — but keep real text fields usable. Desktop is left alone so
+   demo hashes etc. stay selectable. */
+@media (pointer: coarse) {
+  * {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+  input,
+  textarea {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+}
+
 /* ─── Engram (Aldenmoor) ─────────────────────────────────────────────────── */
 .engram-portrait {
   border-radius: 9999px;
