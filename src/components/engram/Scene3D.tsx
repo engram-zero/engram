@@ -92,7 +92,11 @@ const keyboardMap = [
   { name: 'backward', keys: ['ArrowDown', 'KeyS'] },
   { name: 'left', keys: ['ArrowLeft', 'KeyA'] },
   { name: 'right', keys: ['ArrowRight', 'KeyD'] },
+  { name: 'jump', keys: ['Space'] },
 ];
+
+const JUMP_SPEED = 5.2; // initial upward velocity (m/s)
+const GRAVITY = 16; // m/s²
 
 // Slide the player out of the boundary and any prop/NPC they overlap.
 function resolveCollision(x: number, z: number): [number, number] {
@@ -233,6 +237,7 @@ function Player({
   const { camera } = useThree();
   const [, getKeys] = useKeyboardControls();
   const bob = useRef({ t: 0, off: 0 });
+  const jump = useRef({ y: 0, vy: 0, held: false }); // first-person jump (Space)
   const nearbyRef = useRef<NPCName | null>(null);
   const treeRef = useRef<number | null>(null);
   const nearbyEnemyRef = useRef<string | null>(null);
@@ -272,7 +277,18 @@ function Player({
       touchLook.current.dx = 0;
       touchLook.current.dy = 0;
     }
-    const k = mergeMovement(getKeys() as MovementInput, touchMove);
+    const keys = getKeys() as MovementInput & { jump: boolean };
+    const k = mergeMovement(keys, touchMove);
+
+    // Jump: launch on a fresh Space press while grounded, then fall under gravity.
+    const grounded = jump.current.y <= 0.001;
+    if (keys.jump && !jump.current.held && grounded) jump.current.vy = JUMP_SPEED;
+    jump.current.held = !!keys.jump;
+    if (!grounded || jump.current.vy > 0) {
+      jump.current.vy -= GRAVITY * dt;
+      jump.current.y = Math.max(0, jump.current.y + jump.current.vy * dt);
+      if (jump.current.y === 0) jump.current.vy = 0;
+    }
 
     camera.getWorldDirection(forward);
     forward.y = 0;
@@ -296,8 +312,8 @@ function Player({
     } else {
       bob.current.off += (0 - bob.current.off) * Math.min(1, dt * 10);
     }
-    // Follow the terrain: ground height under the feet + eye height + head-bob.
-    camera.position.y = getHeightAt(camera.position.x, camera.position.z) + EYE_HEIGHT + bob.current.off;
+    // Follow the terrain: ground height under the feet + eye height + head-bob + jump.
+    camera.position.y = getHeightAt(camera.position.x, camera.position.z) + EYE_HEIGHT + bob.current.off + jump.current.y;
 
     // Publish position + facing so the aerial avatar can pick up where we are.
     posRef.current.x = camera.position.x;
@@ -2779,7 +2795,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
 
           {!isTouchDevice && (
             <div className="pointer-events-none absolute bottom-4 left-4 z-10 text-xs text-[#f4e8d0]/55">
-              WASD move · Mouse look · E talk · F chop · Click attack · V aerial · Esc release cursor
+              WASD move · Space jump · Mouse look · E talk · F chop · Click attack · V aerial · Esc release cursor
             </div>
           )}
         </>
