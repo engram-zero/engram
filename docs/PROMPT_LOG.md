@@ -224,3 +224,18 @@ generaciones al alcanzarlo, y muestra costo + gasto acumulado. Verifica con `tsc
 **Qué se hizo:** `usdCost`/`costUsd` en el endpoint; `AIPreviewGhosts` + estado
 preview/budget/spent + `requestAIBuild`/`placeAIPreview` y modal con budget en Scene3D.
 **Commit:** `7ff2474`
+
+### 18 jun 2026 · Bloques voxel para que la IA construya cualquier cosa
+**Pedido (humano):** Pedí "un árbol" y la IA puso dos muros — solo puede usar el catálogo
+(wall/house). Idea: un sistema de bloques pequeños que la IA agrupe y coloree según lo
+que pida el usuario.
+**Prompt sintetizado:** Añade un tercer tipo de edificio **`block`**: un cubo pequeño con
+`y` (altura), `color` (hex) y `scale`. La IA (`/api/build`) ahora apila y colorea muchos
+bloques (estilo voxel/LEGO) para esculpir lo que se pida (árboles, estatuas, torres), no
+solo muros/casas; el system prompt la guía a usar bloques para todo lo que no sea muro o
+casa, MAX_PIECES 24→64. Los bloques son decorativos (sin colisión, se solapan libremente,
+costo base 1 madera) y persisten como cualquier edificio. Preview/place/costo manejan los
+atributos del bloque; el fallback sin key es un arbolito voxel. Verifica con `tsc`.
+**Qué se hizo:** `BuildingType` += 'block' + campos y/color/scale en `types.ts`;
+`BUILD_COST/RADIUS.block` + normalización en `world.ts`; render/colisión/preview/IA en
+Scene3D; prompt + normalización de bloque en el endpoint. **Commit:** `8f7588a`
