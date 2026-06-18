@@ -4,6 +4,13 @@
 // be used from both server and browser code.
 
 export type NPCName = 'aldric' | 'maren' | 'sable';
+export type ResourceType = 'wood' | 'stone' | 'coin';
+
+export interface WorldState {
+  inventory: Record<ResourceType, number>;
+  /** Indices (into map.ts TREES) of trees the player has chopped. */
+  choppedTrees: number[];
+}
 
 /**
  * The persistent memory object stored on 0G Storage for a single NPC.
@@ -69,6 +76,8 @@ export interface MemoryBundle {
   version: number;
   wallet: string;
   npcs: Record<NPCName, NPCMemory>;
+  /** Player-owned gameplay state, committed to 0G with the same wallet root. */
+  world?: WorldState;
   updatedAt: number;
 }
 

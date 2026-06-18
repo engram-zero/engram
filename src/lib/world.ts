@@ -15,19 +15,39 @@
 //     NOT cross-device, NOT on-chain).
 
 import { useSyncExternalStore } from 'react';
+import type { ResourceType, WorldState } from '@/lib/types';
 
-export type ResourceType = 'wood' | 'stone' | 'coin';
+export type { ResourceType, WorldState } from '@/lib/types';
 
 /** How much wood the player can carry before they must use/drop some. */
 export const MAX_WOOD = 20;
 
-export interface WorldState {
-  inventory: Record<ResourceType, number>;
-  /** Indices (into map.ts TREES) of trees the player has chopped. */
-  choppedTrees: number[];
+export const EMPTY_WORLD: WorldState = { inventory: { wood: 0, stone: 0, coin: 0 }, choppedTrees: [] };
+
+export function normalizeWorldState(raw: unknown): WorldState {
+  const p = raw && typeof raw === 'object' ? raw as any : {};
+  const choppedTrees: number[] = Array.isArray(p?.choppedTrees)
+    ? Array.from(new Set<number>(p.choppedTrees
+        .map((n: unknown) => Number(n))
+        .filter((n: number) => Number.isInteger(n) && n >= 0)))
+    : [];
+
+  return {
+    inventory: {
+      wood: Math.max(0, Number(p?.inventory?.wood ?? 0)),
+      stone: Math.max(0, Number(p?.inventory?.stone ?? 0)),
+      coin: Math.max(0, Number(p?.inventory?.coin ?? 0)),
+    },
+    choppedTrees,
+  };
 }
 
-export const EMPTY_WORLD: WorldState = { inventory: { wood: 0, stone: 0, coin: 0 }, choppedTrees: [] };
+function cloneWorldState(value: WorldState = EMPTY_WORLD): WorldState {
+  return {
+    inventory: { ...value.inventory },
+    choppedTrees: [...value.choppedTrees],
+  };
+}
 
 // ── Persistence seam (martelaxe owns the 0G/on-chain implementation) ──────────
 export interface WorldPersistence {
@@ -46,21 +66,13 @@ function key(wallet: string) {
  */
 export const localWorldPersistence: WorldPersistence = {
   async load(wallet) {
-    if (typeof window === 'undefined') return { ...EMPTY_WORLD };
+    if (typeof window === 'undefined') return cloneWorldState();
     try {
       const raw = window.localStorage.getItem(key(wallet));
-      if (!raw) return { ...EMPTY_WORLD };
-      const p = JSON.parse(raw);
-      return {
-        inventory: {
-          wood: Math.max(0, Number(p?.inventory?.wood ?? 0)),
-          stone: Math.max(0, Number(p?.inventory?.stone ?? 0)),
-          coin: Math.max(0, Number(p?.inventory?.coin ?? 0)),
-        },
-        choppedTrees: Array.isArray(p?.choppedTrees) ? p.choppedTrees.filter((n: unknown) => Number.isInteger(n)) : [],
-      };
+      if (!raw) return cloneWorldState();
+      return normalizeWorldState(JSON.parse(raw));
     } catch {
-      return { ...EMPTY_WORLD };
+      return cloneWorldState();
     }
   },
   async save(wallet, state) {
@@ -95,6 +107,10 @@ export async function initWorld(addr: string): Promise<void> {
 
 export function getWorld(): WorldState {
   return state;
+}
+
+export function getWorldWallet(): string | null {
+  return wallet;
 }
 
 async function commit(next: WorldState) {

@@ -10,14 +10,14 @@
 **Repo:** `engram` — Next.js 15.1.5 + TypeScript · 0G Storage (Galileo testnet, chain `16602`) · ethers v6 · wagmi · Three.js / @react-three/fiber / @react-three/drei.
 
 Índice:
-1. [On-chain rootHash registry (memoria cross-device / cross-game)](#prompt-1--on-chain-roothash-registry) — ⏳ pendiente
+1. [On-chain rootHash registry (memoria cross-device / cross-game)](#prompt-1--on-chain-roothash-registry) — ✅ done
 2. [World pass: terreno con alturas, cielo, casas, árboles y avatares](#prompt-2--world-pass-terreno-cielo-y-props) — ✅ done
 3. [Protección de coste/abuso en /api/npc (rate limit)](#prompt-3--rate-limit--anti-abuso-en-apinpc) — ✅ done
 4. [Controles móviles / táctiles (sin pointer lock)](#prompt-4--controles-móviles--táctiles) — ⏳ pendiente
 5. [Texturas PNG en lugar de materiales planos](#prompt-5--texturas-png) — 🟡 sistema listo (faltan PNGs; ver [`ART_ASSETS.md`](ART_ASSETS.md))
 6. [Audio ambiental (fogata, pasos, noche)](#prompt-6--audio-ambiental) — ⏳ pendiente
 7. [Verificar end-to-end la UX del 429 en el cliente](#prompt-7--verificación-diferida-ux-del-429) — ⏳ diferida (ver precondición)
-8. [Visión: gameplay loop, doble vista y mundo persistente en 0G](#prompt-8--visión-gameplay-loop--doble-vista) — 🔭 roadmap (post-MVP)
+8. [Visión: gameplay loop, doble vista y mundo persistente en 0G](#prompt-8--visión-gameplay-loop--doble-vista) — 🟡 partial: 8a done, 8b persistence MVP done
 
 > **Tareas no-código (ADMIN):** ✅ deploy a Vercel + env vars · ✅ save a 0G end-to-end ·
 > ⏳ actualizar la Description del dashboard 0g.ai (versión honesta) ·
@@ -27,6 +27,17 @@
 ---
 
 ## Prompt 1 — On-chain rootHash registry
+
+> **✅ DONE — 17 jun 2026.** Implementado con [`contracts/EngramRegistry.sol`](../contracts/EngramRegistry.sol),
+> [`scripts/deploy-registry.ts`](../scripts/deploy-registry.ts), ABI mínimo en
+> [`src/lib/registry/abi.ts`](../src/lib/registry/abi.ts), cliente en
+> [`src/lib/registry/registry.ts`](../src/lib/registry/registry.ts), e integración en
+> [`src/lib/memory.ts`](../src/lib/memory.ts). Registry Galileo actual:
+> `0xD142048BcA7fC224d557C12F8adbAc70D4EC4067` (baked-in como infraestructura pública
+> de la app; `NEXT_PUBLIC_ENGRAM_REGISTRY` queda solo como override de testing).
+> `readBundle` intenta `rootOf(wallet)` primero y cae a localStorage; `writeMemory`
+> sube el bundle a 0G vía `/api/save` y luego ancla el root con `setRoot` si cambió.
+> `npx tsc --noEmit` limpio.
 
 ```
 # Tarea: anclar el puntero de memoria en un contrato on-chain (no en localStorage)
@@ -441,6 +452,15 @@ Quick win, alto valor, bajo riesgo. En `src/components/engram/Scene3D.tsx`:
   visibles en ambas. `tsc` limpio.
 
 ### Fase 8b — Construir + recursos, persistido en 0G
+> **🟡 MVP implementado — 17 jun 2026.** Ya existe `WorldState` (`inventory` +
+> `choppedTrees`) en [`src/lib/world.ts`](../src/lib/world.ts), y ahora también vive dentro
+> del `MemoryBundle.world` en 0G. [`src/lib/world-0g.ts`](../src/lib/world-0g.ts) hidrata
+> el mundo desde el bundle al conectar wallet y mantiene localStorage como fallback
+> instantáneo. [`src/lib/memory.ts`](../src/lib/memory.ts) incluye el mundo actual en cada
+> guardado normal de conversación, por lo que no aparece una firma/transacción extra por
+> cada árbol talado. Lo que falta para llamar esta fase "completa": construir edificios,
+> crecimiento de árboles, economía real y UX clara de "world saved".
+
 - Acciones básicas: **plantar árboles** (semilla → crecimiento con el tiempo) y **talar**
   para obtener **madera**; un inventario simple de recursos.
 - Construir estructuras con recursos; si el mapa crece, agrupar en **aldeas**.
