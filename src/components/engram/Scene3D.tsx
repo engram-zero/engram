@@ -24,7 +24,20 @@ import {
   type CottageDef,
 } from './map';
 import { getTexture, getTextureVariant, hasTexture } from './textures';
-import { useWorld, harvestTree, isChopped, woodIsFull, MAX_WOOD } from '@/lib/world';
+import {
+  useWorld,
+  getWorld,
+  harvestTree,
+  isChopped,
+  woodIsFull,
+  MAX_WOOD,
+  placeBuilding,
+  removeBuilding,
+  BUILD_COST,
+  BUILD_RADIUS,
+  type BuildingType,
+  type Building,
+} from '@/lib/world';
 
 // A tree carries its global index (into TREES) so chopping can target it.
 type TreeInst = TreeDef & { idx: number };
@@ -83,6 +96,7 @@ function resolveCollision(x: number, z: number): [number, number] {
     ...COLLIDERS,
     ...(Object.values(dynamicNpcState)).map((state) => ({ x: state.x, z: state.z, r: 0.6 })),
     ...(Object.values(dynamicEnemyState)).filter((s) => !s.dead).map((s) => ({ x: s.x, z: s.z, r: 0.5 })),
+    ...getWorld().buildings.map((b) => ({ x: b.x, z: b.z, r: BUILD_RADIUS[b.type] })),
   ];
   for (const c of obstacles) {
     const dx = x - c.x;
@@ -995,6 +1009,117 @@ function Village() {
   );
 }
 
+// ─── Player-built structures ──────────────────────────────────────────────────
+
+function BuildingMesh({ b }: { b: Building }) {
+  const y = getHeightAt(b.x, b.z);
+  if (b.type === 'wall') {
+    return (
+      <mesh position={[b.x, y + 0.75, b.z]} rotation={[0, b.rot, 0]} castShadow receiveShadow>
+        <boxGeometry args={[1.8, 1.5, 0.3]} />
+        <meshStandardMaterial color="#7a5a3a" map={getTextureVariant('cottage_wood', Math.round(b.x + b.z))} flatShading />
+      </mesh>
+    );
+  }
+  return (
+    <group position={[b.x, y, b.z]} rotation={[0, b.rot, 0]}>
+      <mesh position={[0, 1.0, 0]} castShadow receiveShadow>
+        <boxGeometry args={[2.4, 1.8, 2.0]} />
+        <meshStandardMaterial color="#7a5a3a" map={getTextureVariant('cottage_wood', Math.round(b.x))} flatShading />
+      </mesh>
+      <mesh position={[0, 2.2, -0.66]} rotation={[-0.62, 0, 0]} castShadow>
+        <boxGeometry args={[2.8, 0.14, 1.6]} />
+        <meshStandardMaterial color="#8a3a2a" map={getTextureVariant('cottage_roof', Math.round(b.z))} flatShading />
+      </mesh>
+      <mesh position={[0, 2.2, 0.66]} rotation={[0.62, 0, 0]} castShadow>
+        <boxGeometry args={[2.8, 0.14, 1.6]} />
+        <meshStandardMaterial color="#8a3a2a" map={getTextureVariant('cottage_roof', Math.round(b.z))} flatShading />
+      </mesh>
+    </group>
+  );
+}
+
+function Buildings() {
+  const world = useWorld();
+  return (
+    <group>
+      {world.buildings.map((b, i) => (
+        <BuildingMesh key={i} b={b} />
+      ))}
+    </group>
+  );
+}
+
+// Build/demolish controller — only mounted in the aerial view while a build tool
+// is selected. A big invisible ground plane reads the cursor; a ghost previews
+// the structure (green = valid, red = blocked / not enough wood); click places.
+function BuildController({ mode }: { mode: BuildingType | 'demolish' }) {
+  const [ghost, setGhost] = useState<[number, number] | null>(null);
+  const world = useWorld();
+
+  const isBuild = mode !== 'demolish';
+  const r = isBuild ? BUILD_RADIUS[mode] : 0;
+  let valid = isBuild ? world.inventory.wood >= BUILD_COST[mode] : true;
+  if (isBuild && valid && ghost) {
+    const [tx, tz] = ghost;
+    if (Math.hypot(tx, tz) > WORLD_RADIUS) valid = false;
+    const obstacles = [
+      ...COLLIDERS,
+      ...world.buildings.map((b) => ({ x: b.x, z: b.z, r: BUILD_RADIUS[b.type] })),
+      ...(Object.values(NPC_POS) as [number, number, number][]).map((p) => ({ x: p[0], z: p[2], r: 0.9 })),
+    ];
+    for (const c of obstacles) {
+      if (Math.hypot(tx - c.x, tz - c.z) < c.r + r) {
+        valid = false;
+        break;
+      }
+    }
+  }
+
+  const place = (px: number, pz: number) => {
+    const x = Math.round(px);
+    const z = Math.round(pz);
+    if (mode === 'demolish') {
+      let bi = -1;
+      let bd = Infinity;
+      getWorld().buildings.forEach((b, i) => {
+        const d = Math.hypot(px - b.x, pz - b.z);
+        if (d < 2 && d < bd) {
+          bd = d;
+          bi = i;
+        }
+      });
+      if (bi >= 0) removeBuilding(bi);
+    } else if (valid) {
+      placeBuilding({ type: mode, x, z, rot: 0 });
+    }
+  };
+
+  return (
+    <>
+      <mesh
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[0, 0.02, 0]}
+        onPointerMove={(e) => setGhost([Math.round(e.point.x), Math.round(e.point.z)])}
+        onPointerOut={() => setGhost(null)}
+        onClick={(e) => {
+          e.stopPropagation();
+          place(e.point.x, e.point.z);
+        }}
+      >
+        <planeGeometry args={[GROUND_RADIUS * 2, GROUND_RADIUS * 2]} />
+        <meshBasicMaterial visible={false} />
+      </mesh>
+      {isBuild && ghost && (
+        <mesh position={[ghost[0], getHeightAt(ghost[0], ghost[1]) + (mode === 'house' ? 1.0 : 0.75), ghost[1]]}>
+          {mode === 'house' ? <boxGeometry args={[2.4, 1.8, 2.0]} /> : <boxGeometry args={[1.8, 1.5, 0.3]} />}
+          <meshStandardMaterial color={valid ? '#5fd06a' : '#d05a4a'} transparent opacity={0.4} depthWrite={false} />
+        </mesh>
+      )}
+    </>
+  );
+}
+
 // The 3D floating title was removed — it's rendered as HTML in client-page now.
 // A drei/troika <Text> here orphaned in the persistent canvas across the
 // title→game transition and showed up as stray letters in the aerial view.
@@ -1441,6 +1566,11 @@ export default function Scene3D({ memories = null, active = null, talking = fals
   const [nearbyTree, setNearbyTree] = useState<number | null>(null);
   const [locked, setLocked] = useState(false);
   const [view, setView] = useState<ViewMode>('fp');
+  const [buildMode, setBuildMode] = useState<BuildingType | 'demolish' | null>(null);
+  // Building is aerial-only (needs the free cursor); leave it when not in aerial.
+  useEffect(() => {
+    if (!(exploring && view === 'aerial')) setBuildMode(null);
+  }, [exploring, view]);
   const [flash, setFlash] = useState(false);
   const [playerHp, setPlayerHp] = useState(100);
   const [playerDead, setPlayerDead] = useState(false);
@@ -1650,11 +1780,13 @@ export default function Scene3D({ memories = null, active = null, talking = fals
             <>
               <AerialRig enabled={aerialExploring} posRef={posRef} />
               <Avatar posRef={posRef} />
+              {buildMode && <BuildController mode={buildMode} />}
             </>
           )}
           {explorable && active && view === 'fp' && <TalkFraming active={active} />}
 
           <Village />
+          {explorable && <Buildings />}
           {explorable && <EnemySpawner />}
           {/* The title text is HTML in client-page now: a 3D drei <Text> here
               orphaned in the persistent canvas across the title→game transition,
@@ -1694,6 +1826,34 @@ export default function Scene3D({ memories = null, active = null, talking = fals
           >
             {view === 'fp' ? '🦅 Aerial (V)' : '🚶 First person (V)'}
           </button>
+
+          {/* Build palette (aerial only). */}
+          {view === 'aerial' && (
+            <div className="absolute top-32 right-4 z-10 flex flex-col items-end gap-1.5">
+              {([
+                ['wall', `🧱 Wall (${BUILD_COST.wall}🪵)`],
+                ['house', `🏠 House (${BUILD_COST.house}🪵)`],
+                ['demolish', '🧨 Demolish'],
+              ] as const).map(([m, label]) => (
+                <button
+                  key={m}
+                  onClick={() => setBuildMode((cur) => (cur === m ? null : m))}
+                  className="rounded-md border px-3 py-1.5 text-sm text-[#f4e8d0]"
+                  style={{
+                    background: buildMode === m ? 'rgba(95,150,90,0.85)' : 'rgba(0,0,0,0.5)',
+                    borderColor: buildMode === m ? '#8fd06a' : '#5a4a28',
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+              {buildMode && (
+                <span className="rounded bg-black/60 px-2 py-1 text-xs text-[#f4e8d0]/80">
+                  {buildMode === 'demolish' ? 'Click a building to demolish' : 'Click the ground to place · click tool again to cancel'}
+                </span>
+              )}
+            </div>
+          )}
         </>
       )}
 

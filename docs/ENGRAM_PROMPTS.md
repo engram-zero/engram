@@ -19,6 +19,7 @@
 7. [Verificar end-to-end la UX del 429 en el cliente](#prompt-7--verificación-diferida-ux-del-429) — ⏳ diferida (ver precondición)
 8. [Visión: gameplay loop, doble vista y mundo persistente en 0G](#prompt-8--visión-gameplay-loop--doble-vista) — 🔭 roadmap (post-MVP)
 9. [Construir edificios + persistir el mundo en 0G](#prompt-9--construir--persistir-el-mundo-en-0g) — ⏳ pendiente (9a gameplay · 9b 0G/martelaxe)
+10. [Mercado: vender recursos a los NPCs → reputación en 0G](#prompt-10--mercado-vender-recursos--reputación) — ⏳ pendiente
 
 > **Tareas no-código (ADMIN):** ✅ deploy a Vercel + env vars · ✅ save a 0G end-to-end ·
 > ⏳ actualizar la Description del dashboard 0g.ai (versión honesta) ·
@@ -515,6 +516,47 @@ aparte (paso 2). En resumen: serializar `WorldState` → subida server-side patr
 3. Con `WorldPersistence` de 0G activo: construir → recargar/otro dispositivo → el mundo
    construido se recupera desde 0G.
 4. Sin 0G configurado, todo funciona en local (localStorage). `tsc` limpio.
+
+---
+
+## Prompt 10 — Mercado: vender recursos → reputación
+
+> El gancho del proyecto: que el **gameplay alimente la memoria/reputación en 0G**.
+> Vender al comerciante (Aldric) y regatear cambia tu reputación, que ya vive en 0G.
+> No es infraestructura nueva — se apoya en el sistema de memoria de NPCs existente.
+
+### Objetivo
+Cerrar el loop **talar → vender a Aldric → cambia tu reputación (0G) → cambian
+precios/diálogo**. Empezar simple; el regateo con LLM es v2.
+
+### v1 — Venta simple (gameplay)
+- Acércate a **Aldric** → opción **"Vender madera"** (junto a hablar).
+- UI mínima: cantidad a vender + precio fijo por unidad → recibes `coin`, pierdes `wood`
+  (usar `addResource` en [`world.ts`](../src/lib/world.ts)).
+- La venta **registra una interacción en la memoria de Aldric** (reusar el flujo de
+  `/api/npc` / la memoria): vender justo/seguido sube `trust`; nada de precios aún.
+- Mostrar precio y reputación actual; al subir trust, Aldric saluda mejor (ya lo hace).
+
+### v2 — Regateo / negociación (LLM) — opcional, alto impacto demo
+- El jugador **propone un precio**; el LLM de Aldric responde en personaje:
+  - precio abusivo → "scammer", `trust` ↓, puede rechazar.
+  - precio justo/bajo → acepta, `trust` ↑.
+- Reusar `/api/npc`: mandar la oferta como `message` con contexto de "negociación de
+  venta de X madera"; el modelo devuelve aceptar/rechazar + delta de trust (ya existe el
+  contrato de `memory_update`). El precio acordado define los `coin` recibidos.
+
+### Ídem para otros NPCs (futuro)
+- Matar enemigos / defender la aldea → sube reputación con **Maren** (la guardia), que
+  ya "rastrea tu historial de combate" → puede protegerte. Mismo patrón: la acción
+  registra una interacción en su memoria 0G.
+
+### No rompas
+- El flujo de diálogo/memoria existente ni el guardado a 0G. `tsc --noEmit` limpio.
+
+### Criterios de aceptación
+1. Vender madera a Aldric da coins, descuenta madera, y sube su `trust` (visible en 📜 Memory).
+2. Al recargar, Aldric recuerda la venta (persistido en 0G como cualquier interacción).
+3. (v2) Regatear caro → el modelo te trata de tramposo y baja trust.
 
 ---
 

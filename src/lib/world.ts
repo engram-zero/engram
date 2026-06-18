@@ -21,13 +21,35 @@ export type ResourceType = 'wood' | 'stone' | 'coin';
 /** How much wood the player can carry before they must use/drop some. */
 export const MAX_WOOD = 20;
 
+export type BuildingType = 'wall' | 'house';
+export interface Building {
+  type: BuildingType;
+  x: number;
+  z: number;
+  rot: number;
+}
+
+/** Wood cost to place each building. */
+export const BUILD_COST: Record<BuildingType, number> = { wall: 2, house: 8 };
+/** Collider radius for each building (kept in sync with the rendered footprint). */
+export const BUILD_RADIUS: Record<BuildingType, number> = { wall: 0.9, house: 1.8 };
+
 export interface WorldState {
   inventory: Record<ResourceType, number>;
   /** Indices (into map.ts TREES) of trees the player has chopped. */
   choppedTrees: number[];
+  /** Structures the player has built. */
+  buildings: Building[];
 }
 
-export const EMPTY_WORLD: WorldState = { inventory: { wood: 0, stone: 0, coin: 0 }, choppedTrees: [] };
+export const EMPTY_WORLD: WorldState = { inventory: { wood: 0, stone: 0, coin: 0 }, choppedTrees: [], buildings: [] };
+
+function normalizeBuildings(raw: unknown): Building[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((b): b is Building => !!b && (b.type === 'wall' || b.type === 'house') && typeof b.x === 'number' && typeof b.z === 'number')
+    .map((b) => ({ type: b.type, x: b.x, z: b.z, rot: typeof b.rot === 'number' ? b.rot : 0 }));
+}
 
 // ── Persistence seam (martelaxe owns the 0G/on-chain implementation) ──────────
 export interface WorldPersistence {
@@ -58,6 +80,7 @@ export const localWorldPersistence: WorldPersistence = {
           coin: Math.max(0, Number(p?.inventory?.coin ?? 0)),
         },
         choppedTrees: Array.isArray(p?.choppedTrees) ? p.choppedTrees.filter((n: unknown) => Number.isInteger(n)) : [],
+        buildings: normalizeBuildings(p?.buildings),
       };
     } catch {
       return { ...EMPTY_WORLD };
@@ -120,6 +143,7 @@ export function chopTree(index: number, woodYield = 3) {
   if (state.inventory.wood >= MAX_WOOD) return; // can't carry more
   const wood = Math.min(MAX_WOOD, state.inventory.wood + woodYield);
   return commit({
+    ...state,
     inventory: { ...state.inventory, wood },
     choppedTrees: [...state.choppedTrees, index],
   });
@@ -152,10 +176,36 @@ export function harvestTree(index: number): { depleted: boolean; gained: boolean
   const units = (harvested[index] = (harvested[index] ?? 0) + 1);
   const depleted = units >= TREE_WOOD;
   commit({
+    ...state,
     inventory: { ...state.inventory, wood: Math.min(MAX_WOOD, state.inventory.wood + 1) },
     choppedTrees: depleted ? [...state.choppedTrees, index] : state.choppedTrees,
   });
   return { depleted, gained: true };
+}
+
+// ── Building ──────────────────────────────────────────────────────────────────
+
+/** Place a structure if the player can afford it (deducts wood). Returns success. */
+export function placeBuilding(b: Building): boolean {
+  const cost = BUILD_COST[b.type];
+  if (state.inventory.wood < cost) return false;
+  commit({
+    ...state,
+    inventory: { ...state.inventory, wood: state.inventory.wood - cost },
+    buildings: [...state.buildings, b],
+  });
+  return true;
+}
+
+/** Demolish a building by index, refunding half its wood (capped). */
+export function removeBuilding(index: number) {
+  if (index < 0 || index >= state.buildings.length) return;
+  const refund = Math.floor(BUILD_COST[state.buildings[index].type] / 2);
+  commit({
+    ...state,
+    inventory: { ...state.inventory, wood: Math.min(MAX_WOOD, state.inventory.wood + refund) },
+    buildings: state.buildings.filter((_, i) => i !== index),
+  });
 }
 
 // ── React hooks ───────────────────────────────────────────────────────────────
