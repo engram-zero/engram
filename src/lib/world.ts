@@ -15,32 +15,17 @@
 //     NOT cross-device, NOT on-chain).
 
 import { useSyncExternalStore } from 'react';
+import type { ResourceType, WorldState, Building, BuildingType } from '@/lib/types';
 
-export type ResourceType = 'wood' | 'stone' | 'coin';
+export type { ResourceType, WorldState, Building, BuildingType } from '@/lib/types';
 
 /** How much wood the player can carry before they must use/drop some. */
 export const MAX_WOOD = 20;
-
-export type BuildingType = 'wall' | 'house';
-export interface Building {
-  type: BuildingType;
-  x: number;
-  z: number;
-  rot: number;
-}
 
 /** Wood cost to place each building. */
 export const BUILD_COST: Record<BuildingType, number> = { wall: 2, house: 8 };
 /** Collider radius for each building (kept in sync with the rendered footprint). */
 export const BUILD_RADIUS: Record<BuildingType, number> = { wall: 0.9, house: 1.8 };
-
-export interface WorldState {
-  inventory: Record<ResourceType, number>;
-  /** Indices (into map.ts TREES) of trees the player has chopped. */
-  choppedTrees: number[];
-  /** Structures the player has built. */
-  buildings: Building[];
-}
 
 export const EMPTY_WORLD: WorldState = { inventory: { wood: 0, stone: 0, coin: 0 }, choppedTrees: [], buildings: [] };
 
@@ -49,6 +34,33 @@ function normalizeBuildings(raw: unknown): Building[] {
   return raw
     .filter((b): b is Building => !!b && (b.type === 'wall' || b.type === 'house') && typeof b.x === 'number' && typeof b.z === 'number')
     .map((b) => ({ type: b.type, x: b.x, z: b.z, rot: typeof b.rot === 'number' ? b.rot : 0 }));
+}
+
+export function normalizeWorldState(raw: unknown): WorldState {
+  const p = raw && typeof raw === 'object' ? (raw as any) : {};
+  const choppedTrees: number[] = Array.isArray(p?.choppedTrees)
+    ? Array.from(new Set<number>(p.choppedTrees
+        .map((n: unknown) => Number(n))
+        .filter((n: number) => Number.isInteger(n) && n >= 0)))
+    : [];
+
+  return {
+    inventory: {
+      wood: Math.max(0, Number(p?.inventory?.wood ?? 0)),
+      stone: Math.max(0, Number(p?.inventory?.stone ?? 0)),
+      coin: Math.max(0, Number(p?.inventory?.coin ?? 0)),
+    },
+    choppedTrees,
+    buildings: normalizeBuildings(p?.buildings),
+  };
+}
+
+function cloneWorldState(value: WorldState = EMPTY_WORLD): WorldState {
+  return {
+    inventory: { ...value.inventory },
+    choppedTrees: [...value.choppedTrees],
+    buildings: value.buildings.map((b) => ({ ...b })),
+  };
 }
 
 // ── Persistence seam (martelaxe owns the 0G/on-chain implementation) ──────────
@@ -68,22 +80,13 @@ function key(wallet: string) {
  */
 export const localWorldPersistence: WorldPersistence = {
   async load(wallet) {
-    if (typeof window === 'undefined') return { ...EMPTY_WORLD };
+    if (typeof window === 'undefined') return cloneWorldState();
     try {
       const raw = window.localStorage.getItem(key(wallet));
-      if (!raw) return { ...EMPTY_WORLD };
-      const p = JSON.parse(raw);
-      return {
-        inventory: {
-          wood: Math.max(0, Number(p?.inventory?.wood ?? 0)),
-          stone: Math.max(0, Number(p?.inventory?.stone ?? 0)),
-          coin: Math.max(0, Number(p?.inventory?.coin ?? 0)),
-        },
-        choppedTrees: Array.isArray(p?.choppedTrees) ? p.choppedTrees.filter((n: unknown) => Number.isInteger(n)) : [],
-        buildings: normalizeBuildings(p?.buildings),
-      };
+      if (!raw) return cloneWorldState();
+      return normalizeWorldState(JSON.parse(raw));
     } catch {
-      return { ...EMPTY_WORLD };
+      return cloneWorldState();
     }
   },
   async save(wallet, state) {
@@ -118,6 +121,10 @@ export async function initWorld(addr: string): Promise<void> {
 
 export function getWorld(): WorldState {
   return state;
+}
+
+export function getWorldWallet(): string | null {
+  return wallet;
 }
 
 async function commit(next: WorldState) {

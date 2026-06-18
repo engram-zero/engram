@@ -4,7 +4,8 @@
 // The whole game UI. Connect a wallet (your identity), talk to three NPCs, and
 // their memory of you persists on 0G Storage. Loop per conversation:
 //   readAllMemories (0G) → POST /api/npc (Claude) → ...chat... → writeMemory (0G)
-// Memory is written once, when you leave an NPC (one wallet signature).
+// Memory is written once, when you leave an NPC; the storage write is sponsored
+// server-side and the player signs the registry pointer only when the root changes.
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Providers, useNetwork } from './providers';
@@ -14,7 +15,8 @@ import { useWallet } from '@/hooks/useWallet';
 import { NPC_LIST } from '@/lib/npcs';
 import type { NPCName, NPCMemory } from '@/lib/types';
 import { readAllMemories, writeMemory, getBundleRoot } from '@/lib/memory';
-import { initWorld } from '@/lib/world';
+import { initWorld, setWorldPersistence } from '@/lib/world';
+import { createBundleWorldPersistence } from '@/lib/world-0g';
 import { Portrait } from '@/components/engram/Art';
 import dynamic from 'next/dynamic';
 
@@ -100,8 +102,9 @@ function Game() {
   // Load the player's world state (resources + chopped trees) for this wallet.
   useEffect(() => {
     if (!isConnected || !address) return;
+    setWorldPersistence(createBundleWorldPersistence(networkType));
     initWorld(address).catch(() => {});
-  }, [address, isConnected]);
+  }, [address, isConnected, networkType]);
 
   const crossFor = useCallback(
     (npc: NPCName): Partial<Record<NPCName, NPCMemory>> | undefined => {
@@ -152,7 +155,7 @@ function Game() {
     runTurn(npc, message.trim());
   }
 
-  // Leaving an NPC persists that conversation to 0G — one signature.
+  // Leaving an NPC persists that conversation to 0G and anchors the new root if needed.
   async function leave() {
     const npc = active;
     setActive(null);

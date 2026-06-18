@@ -15,10 +15,13 @@ Keep changes on your side of a seam; don't change a seam's interface without a h
   `docs/STATUS.md` for the 0G gotchas (SDK package, CORS, no EIP-1559, Turbo default).
 - **EngramRegistry** deployed at `0xD142048BcA7fC224d557C12F8adbAc70D4EC4067`
   (`contracts/EngramRegistry.sol`, `src/lib/registry/`).
+- **WorldState → 0G bundle (MVP)**: inventory/chopped trees hydrate from
+  `MemoryBundle.world` via `src/lib/world-0g.ts` and are committed into the same 0G bundle
+  on normal conversation save. This keeps one registry pointer per wallet and avoids an
+  extra MetaMask prompt on every gameplay action.
 
-## 🔌 The seam that matters now: world-state persistence
-Gameplay resources/buildings are **client-side today** and need an owner for on-chain/0G
-persistence. The seam is defined in **`src/lib/world.ts`**:
+## 🔌 The seam for world-state persistence
+Gameplay resources/buildings still go through the seam defined in **`src/lib/world.ts`**:
 
 ```ts
 export interface WorldPersistence {
@@ -31,18 +34,17 @@ export function setWorldPersistence(p: WorldPersistence): void; // register your
 - **world/UI dev owns:** the gameplay store + actions (`chopTree`, `addResource`,
   `useWorld`) and the default `localWorldPersistence` (localStorage). DON'T change the
   store's public API.
-- **martelaxe owns:** a real `WorldPersistence` backed by 0G / a contract (wood balance,
-  coins, built things). Implement it and call `setWorldPersistence(yours)` once at
-  startup (e.g. in a provider). **You do not need to touch Scene3D or gameplay code** —
-  just swap the persistence. Keep `load/save` resilient (a failure must not break play;
-  the store already wraps `save` in try/catch).
+- **martelaxe owns:** the 0G/contract persistence adapter. Current MVP:
+  `createBundleWorldPersistence(networkType)` in `src/lib/world-0g.ts`, registered from
+  `src/app/client-page.tsx`. **You do not need to touch Scene3D or gameplay code** for
+  persistence work. Keep `load/save` resilient (a failure must not break play; the store
+  already wraps `save` in try/catch).
 
 ### Contract design notes for resources/coins (martelaxe's call)
-- **Wood/resources**: could live in the same MemoryBundle-style doc on 0G (one
-  `WorldState` blob per wallet, like memory), OR in an ERC-20-ish contract. Simplest first
-  step mirrors memory: serialize `WorldState` → `/api/save`-style sponsored upload →
-  anchor root (reuse the registry pattern, or a second registry slot). Coins as a real
-  token come later (see `docs/ENGRAM_ECONOMY.md`).
+- **Wood/resources**: currently live inside the same `MemoryBundle` doc on 0G, under
+  `world`. This is the simplest version of the ownership thesis: one wallet-owned root
+  points to NPC memory plus world state. Coins as a real token come later (see
+  `docs/ENGRAM_ECONOMY.md`).
 - Whatever you choose, expose it ONLY through `WorldPersistence` so gameplay stays decoupled.
 
 ### Building system (Prompt 9) — heads up

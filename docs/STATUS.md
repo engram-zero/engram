@@ -13,8 +13,9 @@ Verified end-to-end on the live Vercel demo:
    interaction log). The write→0G→read→recall loop is closed → **tournament criterion #1
    ("0G must do real work") is genuinely satisfied.**
 
-Also working: first-person explorable Aldenmoor (WASD + mouse-look, terrain/sky/forest),
-rate-limit/size guard on `/api/npc`, pointer-lock UX, Vercel auto-deploy on push to `main`.
+Also working: first-person/aerial Aldenmoor (WASD + mouse-look, terrain/sky/forest),
+rate-limit/size guard on `/api/npc`, pointer-lock UX, Vercel auto-deploy on push to `main`,
+and the on-chain root registry for cross-device recall.
 
 ## 0G integration gotchas (READ before touching storage)
 These cost a long debugging session; keep them in mind.
@@ -50,33 +51,40 @@ These cost a long debugging session; keep them in mind.
 - `ENGRAM_SPONSOR_KEY` — funded 0G Galileo testnet private key the server writes 0G with.
   **Server-only, never `NEXT_PUBLIC_`.** The wallet must hold testnet OG (faucet.0g.ai).
 - `NEXT_PUBLIC_PROJECT_ID` — WalletConnect (optional for injected wallets).
+- `NEXT_PUBLIC_ENGRAM_REGISTRY` — optional override for redeploy/testing. The current
+  Galileo registry is baked into the app as public infrastructure:
+  `0xD142048BcA7fC224d557C12F8adbAc70D4EC4067`.
 - 0G RPC/Flow vars — unset → code defaults used (correct).
 
 ## Two wallet roles (don't confuse them)
-- **Player wallet** = the player's identity, connected in the browser. **Signs/pays
-  nothing now** — it's just the key the memory bundle is indexed by.
+- **Player wallet** = the player's identity, connected in the browser. It signs the
+  `EngramRegistry.setRoot(rootHash)` pointer update when the 0G bundle root changes.
 - **Sponsor wallet** = `ENGRAM_SPONSOR_KEY` on the server; pays the storage fee. Needs
   testnet OG. (We used a dedicated throwaway MetaMask account for this.)
 
 ## Key files (memory path)
-- `src/lib/memory.ts` — read the bundle from 0G (client GET) + `writeMemory()` POSTs the
-  full bundle to `/api/save`. Caches the rootHash pointer in localStorage.
+- `src/lib/memory.ts` — reads the latest root from EngramRegistry, downloads the bundle from
+  0G (client GET), and `writeMemory()` POSTs the full bundle to `/api/save`. Caches the
+  rootHash pointer in localStorage as fallback.
+- `src/lib/registry/*` — minimal ABI + client for `rootOf(wallet)` / `setRoot(rootHash)`.
+- `src/lib/world.ts` + `src/lib/world-0g.ts` — world inventory/chopped trees. Hydrates from
+  `MemoryBundle.world`; normal conversation saves commit the current world into the 0G
+  bundle without an extra gameplay-action tx.
 - `src/app/api/save/route.ts` — server-side 0G upload with the sponsor wallet + legacy gas.
 - `src/lib/0g/uploader.ts` — `uploadToStorage()` wraps `indexer.upload`.
 - `src/lib/0g/{blob,downloader,fees,network}.ts` — 0G primitives + network config.
 - `src/app/providers.tsx` — default network (Turbo).
 
 ## Known limitation (next real feature)
-**Cross-device recall is NOT live.** The rootHash pointer is cached in the client's
-`localStorage`, so a different device/browser won't find the bundle. The data itself is
-fully on 0G. Fixing this = an on-chain rootHash registry (see Prompt 1 in
-`docs/ENGRAM_PROMPTS.md`). Don't claim "cross-device" anywhere until that ships
-(tournament rules forbid misrepresenting functionality).
+World persistence is an MVP: `WorldState` is included in the same 0G bundle as NPC memory
+and hydrates cross-device through the registry root, but gameplay actions are cached locally
+until the next normal conversation save. This avoids a MetaMask prompt per chop. The future
+version should add an explicit "save world" UX, batching/debounce, or a relayer/meta-tx flow.
 
 ## Remaining for the Jun 23 submission
 - [x] Save to 0G working end-to-end (criterion #1). ✅
 - [ ] Update the 0g.ai dashboard **Description** to the corrected, honest copy (no
       "MetaMask signature / no server / cross-device" — see README / chat history).
 - [ ] (Optional) 2–3 min demo video.
-- [ ] Backlog in `docs/ENGRAM_PROMPTS.md`: on-chain registry (1), mobile (4), textures
-      (5), audio (6), deferred 429-UX check (7).
+- [ ] Backlog in `docs/ENGRAM_PROMPTS.md`: mobile (4), textures (5), audio (6),
+      deferred 429-UX check (7), richer world loop/economy (8b+).

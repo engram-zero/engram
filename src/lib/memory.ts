@@ -20,6 +20,7 @@
 import { downloadByRootHashAPI } from '@/lib/0g/downloader';
 import { getNetworkConfig } from '@/lib/0g/network';
 import { getRegistryAddress, readRootOnchain, writeRootOnchain } from '@/lib/registry/registry';
+import { getWorld, getWorldWallet, normalizeWorldState } from '@/lib/world';
 import type { NetworkType } from '@/app/providers';
 import {
   type MemoryBundle,
@@ -89,6 +90,9 @@ function normalizeBundle(raw: any, wallet: string): MemoryBundle {
         last_seen: typeof m.last_seen === 'number' ? m.last_seen : null,
       };
     }
+  }
+  if ('world' in raw) {
+    base.world = normalizeWorldState(raw.world);
   }
   base.updatedAt = typeof raw.updatedAt === 'number' ? raw.updatedAt : base.updatedAt;
   return base;
@@ -196,6 +200,9 @@ export async function writeMemory(
   bundle.npcs[npcName] = memory;
   bundle.wallet = wallet.toLowerCase();
   bundle.version = BUNDLE_VERSION;
+  if (getWorldWallet()?.toLowerCase() === wallet.toLowerCase()) {
+    bundle.world = normalizeWorldState(getWorld());
+  }
   if (memoryChanged) bundle.updatedAt = Date.now();
 
   // Hand the full bundle to the server, which writes it to 0G (no CORS in Node).
