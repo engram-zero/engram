@@ -142,3 +142,12 @@ sembrado de la cámara. Verifica con `tsc`. (Ataque: ya existe — botón rojo a
 el avatar a un enemigo, radio 4.)
 **Qué se hizo:** `MAX_ENEMIES=13`/120s; CSS no-scroll + `100dvh`; regla global de
 botones; `TouchLook` ahora pasa `{dx,dy}` y `Player` hace yaw+pitch. **Commit:** `adbbe3a`
+
+### 18 jun 2026 · iOS sigue con scroll → fijar el body
+**Pedido (humano):** En iPhone (Safari y Chrome) **sigue habiendo scroll**.
+**Prompt sintetizado:** `overflow:hidden` no frena el rubber-band de iOS; saca el
+`body` del flujo con `position:fixed; inset:0; width:100%` para que no haya nada que
+scrollear, y desactiva el zoom (`maximumScale:1`, `userScalable:false`) que también
+provoca pan. Verifica con `tsc`.
+**Qué se hizo:** `body { position:fixed; inset:0 }` en `globals.css` y viewport sin
+zoom en `layout.tsx`. **Commit:** `e3e9953`
