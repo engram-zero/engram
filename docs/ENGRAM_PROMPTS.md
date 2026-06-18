@@ -23,7 +23,7 @@
 8. [Visión: gameplay loop, doble vista y mundo persistente en 0G](#prompt-8--visión-gameplay-loop--doble-vista) — 🟡 partial: 8a done, 8b persistencia MVP done (martelaxe)
 9. [Construir edificios + persistir el mundo en 0G](#prompt-9--construir--persistir-el-mundo-en-0g) — ✅ 9a (gameplay + zonas/precios) y 9b (persistencia 0G, martelaxe) hechos
 10. [Mercado: vender recursos a los NPCs → reputación en 0G](#prompt-10--mercado-vender-recursos--reputación) — ⏳ pendiente
-11. [Construcción con IA + tokens (describir y que la IA edifique)](#prompt-11--construcción-con-ia--tokens) — ⏳ pendiente
+11. [Construcción con IA + tokens (describir y que la IA edifique)](#prompt-11--construcción-con-ia--tokens) — ✅ done (MVP: `/api/build` + modal; cap tokens + BYO key)
 12. [Edificios habitables (entrar dentro)](#prompt-12--edificios-habitables-entrar) — ⏳ pendiente
 
 > **Tareas no-código (ADMIN):** ✅ deploy a Vercel + env vars · ✅ save a 0G end-to-end ·

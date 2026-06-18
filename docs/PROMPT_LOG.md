@@ -196,3 +196,17 @@ de IA del Prompt 11 (costo en madera, cap de `max_tokens` + BYO key). Verifica c
 **Qué se hizo:** `NO_BUILD_RADIUS`/`buildCostAt` + `canPlaceBuilding` con núcleo y
 precio; `MAX_WOOD=100`, base 3/10; `placeBuilding(b,cost)`; Prompt 9/11 actualizados.
 **Commit:** `6af9958` (código) + este (docs).
+
+### 18 jun 2026 · IA de construcción (Prompt 11)
+**Pedido (humano):** No veo la opción de construir con IA (estaba documentada, no
+implementada) → impleméntala.
+**Prompt sintetizado:** Crea `/api/build` (espejo de `/api/npc`): recibe
+`{prompt, apiKey?}`, llama a Claude con `max_tokens` capado (~1000) + rate-limit, y
+devuelve `Building[]` como offsets (dx,dz) desde el jugador; BYO key opcional y fallback
+determinista sin key. En el cliente añade un botón "🤖 Build with AI" en la paleta
+(aérea) con un modal (descripción + key opcional) que postea, convierte offsets a
+absoluto alrededor del avatar, y coloca cada pieza con `canPlaceBuilding` +
+`placeBuilding(b, buildCostAt(...))` (paga en madera, respeta núcleo/precio). Reporta
+piezas y madera. Verifica con `tsc`.
+**Qué se hizo:** `src/app/api/build/route.ts`; estado/modal/`runAIBuild` en Scene3D;
+Prompt 11 → done. **Commit:** `99bbe6d`
