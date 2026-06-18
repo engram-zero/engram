@@ -490,11 +490,11 @@ function Cottage({ def, seed }: { def: CottageDef; seed: number }) {
         </mesh>
       ))}
       {/* gable roof — two slopes meeting at a ridge running along X */}
-      <mesh position={[0, 2.2, -0.66]} rotation={[0.62, 0, 0]} castShadow>
+      <mesh position={[0, 2.2, -0.66]} rotation={[-0.62, 0, 0]} castShadow>
         <boxGeometry args={[2.8, 0.14, 1.6]} />
         <meshStandardMaterial color={def.roof} map={getTextureVariant('cottage_roof', seed)} flatShading />
       </mesh>
-      <mesh position={[0, 2.2, 0.66]} rotation={[-0.62, 0, 0]} castShadow>
+      <mesh position={[0, 2.2, 0.66]} rotation={[0.62, 0, 0]} castShadow>
         <boxGeometry args={[2.8, 0.14, 1.6]} />
         <meshStandardMaterial color={def.roof} map={getTextureVariant('cottage_roof', seed)} flatShading />
       </mesh>
