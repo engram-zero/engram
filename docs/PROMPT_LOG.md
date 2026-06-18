@@ -94,3 +94,15 @@ su siguiente posición en :00/:05/:10. Verifica con `tsc`.
 **Qué se hizo:** modo invitado en `client-page` (gate, botón, header y overlays
 condicionados a `address`); terreno aclarado + más luz de día; `quantHour` a 5 min.
 **Commit:** `874a134`
+
+### 18 jun 2026 · Cablear el conector WalletConnect (deeplink móvil a MetaMask)
+**Pedido (humano):** Que el botón Conectar pueda abrir la app de MetaMask en celular
+(usar `NEXT_PUBLIC_PROJECT_ID`).
+**Prompt sintetizado:** El config de wagmi solo registra el conector `injected`, así
+que `NEXT_PUBLIC_PROJECT_ID` no se usa y el "preferir walletConnect en móvil" no tiene
+conector. Agrega el conector `walletConnect` (de `wagmi/connectors`) a
+`src/config/index.ts`, condicionado a que exista `projectId`, con metadata de la app,
+para que en móvil sin wallet inyectada se pueda conectar la APP de MetaMask/Rabby por
+deeplink/QR. Verifica con `tsc`.
+**Qué se hizo:** añadí `walletConnect({ projectId, showQrModal, metadata })` cuando hay
+`NEXT_PUBLIC_PROJECT_ID`. **Commit:** `e562fc6`
