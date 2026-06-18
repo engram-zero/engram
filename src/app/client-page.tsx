@@ -178,7 +178,7 @@ function Game() {
   // ── Title screen ──
   if ((!isConnected || !address) && !guest) {
     return (
-      <div className="relative w-screen h-screen overflow-hidden engram-serif">
+      <div className="relative w-screen h-[100dvh] overflow-hidden engram-serif">
         {/* key forces a full remount vs the in-game Scene3D so nothing lingers
             in the persistent canvas when the wallet connects. */}
         <Scene3D key="title" interactive={false} showTitle />
@@ -216,7 +216,7 @@ function Game() {
   const activeNpc = NPC_LIST.find((n) => n.id === active);
 
   return (
-    <div className="relative w-screen h-screen overflow-hidden engram-serif text-[#f4e8d0]">
+    <div className="relative w-screen h-[100dvh] overflow-hidden engram-serif text-[#f4e8d0]">
       {/* 3D Aldenmoor. Clicking a villager opens their dialogue; the camera
           eases toward whoever is active. All memory/dialogue logic is unchanged. */}
       <Scene3D

@@ -20,6 +20,24 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+/* The game fills the viewport exactly, so there's nothing to scroll on mobile
+   (a stray scroll was stealing drags from the right thumb). */
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+/* Don't let a long-press / drag select button labels (e.g. "Hold to chop"). */
+button {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
+}
+
 /* ─── Engram (Aldenmoor) ─────────────────────────────────────────────────── */
 .engram-portrait {
   border-radius: 9999px;

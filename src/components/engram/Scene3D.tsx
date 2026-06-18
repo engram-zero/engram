@@ -209,7 +209,7 @@ function Player({
   enabled,
   posRef,
   touchMove = IDLE_MOVEMENT,
-  touchYaw,
+  touchLook,
   onNearbyChange,
   onNearbyTreeChange,
   onNearbyEnemyChange,
@@ -217,7 +217,7 @@ function Player({
   enabled: boolean;
   posRef: PlayerPosRef;
   touchMove?: MovementInput;
-  touchYaw?: React.MutableRefObject<number>;
+  touchLook?: React.MutableRefObject<{ dx: number; dy: number }>;
   onNearbyChange: (npc: NPCName | null) => void;
   onNearbyTreeChange?: (treeIdx: number | null) => void;
   onNearbyEnemyChange?: (enemyId: string | null) => void;
@@ -229,6 +229,7 @@ function Player({
   const treeRef = useRef<number | null>(null);
   const nearbyEnemyRef = useRef<string | null>(null);
   const didLook = useRef(false);
+  const lookEuler = useRef(new THREE.Euler(0, 0, 0, 'YXZ')); // touch look (yaw/pitch)
   const forward = useMemo(() => new THREE.Vector3(), []);
   const right = useMemo(() => new THREE.Vector3(), []);
   const move = useMemo(() => new THREE.Vector3(), []);
@@ -245,15 +246,23 @@ function Player({
       camera.lookAt(0, 1.2, 0);
       didLook.current = true;
     }
+    // Seed the touch-look angles from wherever the camera is now.
+    lookEuler.current.setFromQuaternion(camera.quaternion, 'YXZ');
   }, [enabled, camera, posRef]);
 
   useFrame((_, dtRaw) => {
     if (!enabled || dynamicPlayerState.dead) return;
     const dt = Math.min(dtRaw, 0.05);
-    // Touch look: drag yaw rotates the camera (no pointer lock on mobile).
-    if (touchYaw && touchYaw.current !== 0) {
-      camera.rotateOnWorldAxis(up, touchYaw.current);
-      touchYaw.current = 0;
+    // Touch look: drag rotates the camera (yaw + clamped pitch) — no pointer
+    // lock on mobile. Pitch is clamped so you can glance at the sky/ground but
+    // not flip over.
+    if (touchLook && (touchLook.current.dx !== 0 || touchLook.current.dy !== 0)) {
+      lookEuler.current.y -= touchLook.current.dx * 0.005;
+      lookEuler.current.x -= touchLook.current.dy * 0.005;
+      lookEuler.current.x = Math.max(-1.2, Math.min(1.2, lookEuler.current.x));
+      camera.quaternion.setFromEuler(lookEuler.current);
+      touchLook.current.dx = 0;
+      touchLook.current.dy = 0;
     }
     const k = mergeMovement(getKeys() as MovementInput, touchMove);
 
@@ -1068,7 +1077,7 @@ function EnemySpawner() {
   useEffect(() => {
     // Hold off so the player can explore in peace, then spawn 1 enemy every ~9s
     // up to a small cap (kept low so it doesn't feel like a horde).
-    const MAX_ENEMIES = 6;
+    const MAX_ENEMIES = 13;
     let interval: ReturnType<typeof setInterval> | undefined;
     const startDelay = setTimeout(() => {
       interval = setInterval(() => {
@@ -1092,7 +1101,7 @@ function EnemySpawner() {
 
           return [...alive, id];
         });
-      }, 9000);
+      }, 120000); // a new enemy every ~2 minutes
     }, 20000); // ~20s of calm before the first enemy
 
     return () => {
@@ -1835,21 +1844,22 @@ function TouchJoystick({ onChange }: { onChange: (m: MovementInput) => void }) {
   );
 }
 
-function TouchLook({ yawRef }: { yawRef: React.MutableRefObject<number> }) {
+function TouchLook({ lookRef }: { lookRef: React.MutableRefObject<{ dx: number; dy: number }> }) {
   const idRef = useRef<number | null>(null);
-  const lastX = useRef(0);
+  const last = useRef({ x: 0, y: 0 });
   return (
     <div
       className="absolute right-0 top-0 z-10 h-[62%] w-[42%] touch-none select-none"
       onPointerDown={(e) => {
         idRef.current = e.pointerId;
-        lastX.current = e.clientX;
+        last.current = { x: e.clientX, y: e.clientY };
         (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
       }}
       onPointerMove={(e) => {
         if (idRef.current !== e.pointerId) return;
-        yawRef.current += -(e.clientX - lastX.current) * 0.005;
-        lastX.current = e.clientX;
+        lookRef.current.dx += e.clientX - last.current.x;
+        lookRef.current.dy += e.clientY - last.current.y;
+        last.current = { x: e.clientX, y: e.clientY };
       }}
       onPointerUp={() => {
         idRef.current = null;
@@ -1956,7 +1966,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
   const fpExploring = exploring && view === 'fp';
   const aerialExploring = exploring && view === 'aerial';
   const controlsArmed = isTouchDevice ? exploring : locked;
-  const touchYawRef = useRef(0); // first-person look (drag) on touch devices
+  const touchLookRef = useRef({ dx: 0, dy: 0 }); // first-person look (drag) on touch
 
   const activateNearbyNpc = () => {
     if (nearbyRef.current) onSelect(nearbyRef.current);
@@ -2153,7 +2163,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
               posRef={posRef}
               enabled={true}
               touchMove={isTouchDevice ? touchMove : undefined}
-              touchYaw={isTouchDevice ? touchYawRef : undefined}
+              touchLook={isTouchDevice ? touchLookRef : undefined}
               onNearbyChange={setNearby}
               onNearbyTreeChange={setNearbyTree}
               onNearbyEnemyChange={setNearbyEnemy}
@@ -2376,7 +2386,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
         <>
           {/* Drag the left zone to move; in first person drag the right zone to look. */}
           <TouchJoystick onChange={setTouchMove} />
-          {fpExploring && <TouchLook yawRef={touchYawRef} />}
+          {fpExploring && <TouchLook lookRef={touchLookRef} />}
 
           {/* Action buttons sit above the drag zones (higher z). */}
           <div className="absolute right-0 bottom-0 z-30 flex flex-col items-end gap-2 px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
