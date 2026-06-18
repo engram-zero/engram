@@ -17,6 +17,13 @@ const MAX_PIECES = 24;
 const COORD_LIMIT = 18; // dx/dz clamp from origin
 const MAX_TOKENS = 1000; // caps structure size + spend
 
+// Claude Sonnet 4.6 pricing (USD per 1M tokens). Override per model via env.
+const PRICE_IN = Number(process.env.ENGRAM_PRICE_IN || 3);
+const PRICE_OUT = Number(process.env.ENGRAM_PRICE_OUT || 15);
+function usdCost(inTok: number, outTok: number): number {
+  return (inTok / 1e6) * PRICE_IN + (outTok / 1e6) * PRICE_OUT;
+}
+
 type AIBuilding = { type: 'wall' | 'house'; dx: number; dz: number; rot: number };
 
 const serverKey = process.env.ANTHROPIC_API_KEY;
@@ -104,7 +111,7 @@ export async function POST(req: Request) {
 
   const client = byoKey ? new Anthropic({ apiKey: byoKey }) : serverAnthropic;
   if (!client) {
-    return NextResponse.json({ buildings: fallback(), fallback: true });
+    return NextResponse.json({ buildings: fallback(), fallback: true, costUsd: 0 });
   }
 
   try {
@@ -118,11 +125,12 @@ export async function POST(req: Request) {
       .filter((b): b is Anthropic.TextBlock => b.type === 'text')
       .map((b) => b.text)
       .join('');
+    const costUsd = usdCost(resp.usage.input_tokens, resp.usage.output_tokens);
     const buildings = normalize(JSON.parse(extractJson(text)));
-    if (buildings.length === 0) return NextResponse.json({ buildings: fallback(), fallback: true });
-    return NextResponse.json({ buildings });
+    if (buildings.length === 0) return NextResponse.json({ buildings: fallback(), fallback: true, costUsd });
+    return NextResponse.json({ buildings, costUsd, byo: !!byoKey });
   } catch {
     const error = byoKey ? 'Your API key was rejected or the request failed.' : 'AI build failed — using a default layout.';
-    return NextResponse.json({ error, buildings: fallback(), fallback: true });
+    return NextResponse.json({ error, buildings: fallback(), fallback: true, costUsd: 0 });
   }
 }

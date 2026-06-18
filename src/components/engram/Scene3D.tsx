@@ -1357,6 +1357,29 @@ function MobileBuildGhost({ mode, posRef, rot }: { mode: BuildingType; posRef: P
   );
 }
 
+// A piece returned by /api/build (offset from the avatar).
+type AIPiece = { type: BuildingType; dx: number; dz: number; rot: number };
+
+// Preview of an AI-designed structure at the spot it was generated — purple where
+// it'll place, red where it's blocked. Shown until the player confirms or discards.
+function AIPreviewGhosts({ pieces, origin }: { pieces: AIPiece[]; origin: { x: number; z: number } }) {
+  return (
+    <group>
+      {pieces.map((b, i) => {
+        const x = Math.round(origin.x + b.dx);
+        const z = Math.round(origin.z + b.dz);
+        const ok = canPlaceBuilding(b.type, x, z);
+        return (
+          <mesh key={i} position={[x, getHeightAt(x, z) + (b.type === 'house' ? 1.0 : 0.75), z]} rotation={[0, b.rot, 0]}>
+            {b.type === 'house' ? <boxGeometry args={[2.4, 1.8, 2.0]} /> : <boxGeometry args={[1.8, 1.5, 0.3]} />}
+            <meshStandardMaterial color={ok ? '#7a6ad6' : '#d05a4a'} transparent opacity={0.45} depthWrite={false} />
+          </mesh>
+        );
+      })}
+    </group>
+  );
+}
+
 // The 3D floating title was removed — it's rendered as HTML in client-page now.
 // A drei/troika <Text> here orphaned in the persistent canvas across the
 // title→game transition and showed up as stray letters in the aerial view.
@@ -2047,49 +2070,89 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     if (canPlaceBuilding(buildMode, x, z)) placeBuilding({ type: buildMode, x, z, rot: buildRot }, buildCostAt(buildMode, x, z));
   };
 
-  // AI construction: describe a structure → /api/build returns pieces relative to
-  // the avatar → place each one that's valid and affordable.
+  // AI construction: describe → /api/build returns pieces relative to the avatar
+  // → PREVIEW (ghosts) at your spot → confirm to place (pays in wood). The API
+  // call costs $ (Claude), estimated and budget-capped per the player's wallet.
   const [aiOpen, setAiOpen] = useState(false);
   const [aiPrompt, setAiPrompt] = useState('');
   const [aiKey, setAiKey] = useState('');
   const [aiBusy, setAiBusy] = useState(false);
   const [aiMsg, setAiMsg] = useState<string | null>(null);
+  const [aiPreview, setAiPreview] = useState<AIPiece[] | null>(null);
+  const [aiOrigin, setAiOrigin] = useState<{ x: number; z: number } | null>(null);
+  const [aiCost, setAiCost] = useState(0); // USD of the last generation
+  const [aiBudget, setAiBudget] = useState(''); // session $ cap (persisted)
+  const [aiSpent, setAiSpent] = useState(0); // cumulative $ (persisted)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    setAiBudget(window.localStorage.getItem('engram:aiBudget') || '');
+    setAiSpent(Number(window.localStorage.getItem('engram:aiSpent') || 0));
+  }, []);
+  const updateBudget = (v: string) => {
+    setAiBudget(v);
+    if (typeof window !== 'undefined') window.localStorage.setItem('engram:aiBudget', v);
+  };
+  const addSpend = (usd: number) =>
+    setAiSpent((s) => {
+      const n = s + usd;
+      if (typeof window !== 'undefined') window.localStorage.setItem('engram:aiSpent', String(n));
+      return n;
+    });
 
-  const runAIBuild = async () => {
+  const requestAIBuild = async () => {
     if (aiBusy || !aiPrompt.trim()) return;
+    const budget = parseFloat(aiBudget);
+    if (Number.isFinite(budget) && budget > 0 && aiSpent >= budget) {
+      setAiMsg(`Budget reached ($${aiSpent.toFixed(4)} / $${budget.toFixed(2)}). Raise it to keep building.`);
+      return;
+    }
     setAiBusy(true);
     setAiMsg('Designing…');
+    setAiPreview(null);
     try {
       const res = await fetch('/api/build', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: aiPrompt.trim(), apiKey: aiKey.trim() || undefined }),
       });
-      const data = (await res.json()) as { buildings?: { type: BuildingType; dx: number; dz: number; rot: number }[]; error?: string };
+      const data = (await res.json()) as { buildings?: AIPiece[]; error?: string; costUsd?: number };
       if (data.error && !data.buildings) {
         setAiMsg(data.error);
         setAiBusy(false);
         return;
       }
-      const origin = posRef.current;
-      let placed = 0;
-      let spent = 0;
-      for (const b of data.buildings ?? []) {
-        const x = Math.round(origin.x + b.dx);
-        const z = Math.round(origin.z + b.dz);
-        if (canPlaceBuilding(b.type, x, z)) {
-          const cost = buildCostAt(b.type, x, z);
-          if (placeBuilding({ type: b.type, x, z, rot: b.rot }, cost)) {
-            placed += 1;
-            spent += cost;
-          }
-        }
-      }
-      setAiMsg(placed > 0 ? `Built ${placed} piece${placed === 1 ? '' : 's'} (−${spent}🪵).` : 'Nothing fit / not enough wood here. Try open ground.');
+      const cost = data.costUsd ?? 0;
+      setAiCost(cost);
+      addSpend(cost); // the design was generated → that API call's $ is incurred now
+      const pieces = data.buildings ?? [];
+      setAiOrigin({ x: posRef.current.x, z: posRef.current.z });
+      setAiPreview(pieces);
+      setAiMsg(`Preview ready — ${pieces.length} piece${pieces.length === 1 ? '' : 's'}.`);
     } catch {
       setAiMsg('Build request failed.');
     }
     setAiBusy(false);
+  };
+
+  // Place the previewed structure at the spot it was generated.
+  const placeAIPreview = () => {
+    if (!aiPreview || !aiOrigin) return;
+    let placed = 0;
+    let wood = 0;
+    for (const b of aiPreview) {
+      const x = Math.round(aiOrigin.x + b.dx);
+      const z = Math.round(aiOrigin.z + b.dz);
+      if (canPlaceBuilding(b.type, x, z)) {
+        const cost = buildCostAt(b.type, x, z);
+        if (placeBuilding({ type: b.type, x, z, rot: b.rot }, cost)) {
+          placed += 1;
+          wood += cost;
+        }
+      }
+    }
+    setAiPreview(null);
+    setAiOrigin(null);
+    setAiMsg(placed > 0 ? `Built ${placed} piece${placed === 1 ? '' : 's'} (−${wood}🪵).` : 'Nothing fit / not enough wood. Drive to open ground and re-generate.');
   };
 
   const activateNearbyNpc = () => {
@@ -2315,6 +2378,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
 
           <Village torchesLit={dn.torchesLit} />
           {explorable && <Buildings />}
+          {explorable && aiPreview && aiOrigin && <AIPreviewGhosts pieces={aiPreview} origin={aiOrigin} />}
           {explorable && <EnemySpawner />}
           {/* The title text is HTML in client-page now: a 3D drei <Text> here
               orphaned in the persistent canvas across the title→game transition,
@@ -2414,7 +2478,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
                   className="w-full rounded-lg border border-[#5a4a28] bg-black/40 p-2 text-sm outline-none focus:border-[#b98bff]"
                 />
                 <details className="mt-2 text-xs text-[#f4e8d0]/70">
-                  <summary className="cursor-pointer">Use my own Anthropic key (optional)</summary>
+                  <summary className="cursor-pointer">Use my own Anthropic key + spend limit (optional)</summary>
                   <input
                     value={aiKey}
                     onChange={(e) => setAiKey(e.target.value)}
@@ -2422,19 +2486,51 @@ export default function Scene3D({ memories = null, active = null, talking = fals
                     placeholder="sk-ant-…  (sent to the server for this request only, never stored)"
                     className="mt-2 w-full rounded-lg border border-[#5a4a28] bg-black/40 p-2 text-sm outline-none focus:border-[#b98bff]"
                   />
+                  <div className="mt-2 flex items-center gap-2">
+                    <span className="whitespace-nowrap">Max $ this session:</span>
+                    <input
+                      value={aiBudget}
+                      onChange={(e) => updateBudget(e.target.value)}
+                      inputMode="decimal"
+                      placeholder="e.g. 0.50"
+                      className="w-24 rounded-lg border border-[#5a4a28] bg-black/40 p-1.5 text-sm outline-none focus:border-[#b98bff]"
+                    />
+                    <span className="text-[#f4e8d0]/60">spent ${aiSpent.toFixed(4)}</span>
+                  </div>
                 </details>
                 {aiMsg && <div className="mt-3 text-sm text-[#d6b84a]">{aiMsg}</div>}
+                {aiPreview && (
+                  <div className="mt-1 text-xs text-[#f4e8d0]/70">Generation cost ≈ <span className="text-[#d6b84a]">${aiCost.toFixed(4)}</span> · purple = will place, red = blocked.</div>
+                )}
                 <div className="mt-4 flex justify-end gap-2">
                   <button onClick={() => setAiOpen(false)} disabled={aiBusy} className="rounded-lg border border-[#5a4a28] px-4 py-2 text-sm disabled:opacity-50">
                     Close
                   </button>
-                  <button
-                    onClick={runAIBuild}
-                    disabled={aiBusy || !aiPrompt.trim()}
-                    className="rounded-lg border border-[#b98bff] bg-[#3a2d5a] px-4 py-2 text-sm font-semibold disabled:opacity-50"
-                  >
-                    {aiBusy ? 'Building…' : 'Build'}
-                  </button>
+                  {aiPreview ? (
+                    <>
+                      <button
+                        onClick={() => {
+                          setAiPreview(null);
+                          setAiOrigin(null);
+                          setAiMsg(null);
+                        }}
+                        className="rounded-lg border border-[#5a4a28] px-4 py-2 text-sm"
+                      >
+                        Discard
+                      </button>
+                      <button onClick={placeAIPreview} className="rounded-lg border border-[#8fd06a] bg-[#22301a] px-4 py-2 text-sm font-semibold">
+                        ⬇ Place ({aiPreview.length})
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={requestAIBuild}
+                      disabled={aiBusy || !aiPrompt.trim()}
+                      className="rounded-lg border border-[#b98bff] bg-[#3a2d5a] px-4 py-2 text-sm font-semibold disabled:opacity-50"
+                    >
+                      {aiBusy ? 'Designing…' : 'Preview'}
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
