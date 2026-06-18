@@ -30,14 +30,14 @@ export type TextureSlot =
  * use them (or any names you like) and the scene picks them up.
  */
 export const TEXTURE_MANIFEST: Record<TextureSlot, string[]> = {
-  terrain_grass: [], // e.g. 'pasto1.png', 'pasto2.png'
-  cottage_wood: [], // e.g. 'madera1.png', 'madera2.png', 'madera3.png'
-  cottage_roof: [], // e.g. 'tejado1.png', 'tejado2.png', 'tejado3.png'
-  stone: [], // e.g. 'piedra1.png', 'piedra2.png', 'piedra3.png'
-  bark: [], // e.g. 'corteza1.png', 'corteza2.png', 'corteza3.png'
-  foliage_pine: [], // e.g. 'pino1.png', 'pino2.png', 'pino3.png'
-  foliage_broadleaf: [], // e.g. 'follaje1.png', 'follaje2.png', 'follaje3.png'
-  foliage_bush: [], // e.g. 'arbusto1.png', 'arbusto2.png'
+  terrain_grass: ['pasto1.webp', 'pasto2.webp'],
+  cottage_wood: ['madera1.webp', 'madera2.webp', 'madera3.webp'],
+  cottage_roof: ['tejado1.webp', 'tejado2.webp', 'tejado3.webp'],
+  stone: ['piedra1.webp', 'piedra2.webp', 'piedra3.webp'],
+  bark: ['corteza1.webp', 'corteza2.webp', 'corteza3.webp'],
+  foliage_pine: ['pino1.webp', 'pino2.webp', 'pino3.webp'],
+  foliage_broadleaf: ['follaje1.webp', 'follaje2.webp', 'follaje3.webp'],
+  foliage_bush: ['arbusto1.webp', 'arbusto2.webp'],
 };
 
 const cache = new Map<string, THREE.Texture>();
