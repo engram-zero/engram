@@ -1206,6 +1206,45 @@ function Buildings() {
 // Build/demolish controller — only mounted in the aerial view while a build tool
 // is selected. A big invisible ground plane reads the cursor; a ghost previews
 // the structure (green = valid, red = blocked / not enough wood); click places.
+// Whether a building of `type` may be placed at world (x,z): enough wood, inside
+// the world, and not overlapping a cottage, the campfire, a STANDING tree, an
+// existing building or an NPC. Terrain slope is intentionally NOT a blocker.
+function canPlaceBuilding(type: BuildingType, x: number, z: number): boolean {
+  const w = getWorld();
+  if (w.inventory.wood < BUILD_COST[type]) return false;
+  if (Math.hypot(x, z) > WORLD_RADIUS) return false;
+  const r = BUILD_RADIUS[type];
+  const obstacles = [
+    ...COTTAGES.map((c) => ({ x: c.x, z: c.z, r: c.scale * 1.5 })),
+    { x: CAMPFIRE.x, z: CAMPFIRE.z, r: 1.0 },
+    ...TREES.map((t, i) => ({ t, i })).filter(({ i }) => !isChopped(i)).map(({ t }) => ({ x: t.x, z: t.z, r: 0.45 * t.scale })),
+    ...w.buildings.map((b) => ({ x: b.x, z: b.z, r: BUILD_RADIUS[b.type] })),
+    ...(Object.values(NPC_POS) as [number, number, number][]).map((p) => ({ x: p[0], z: p[2], r: 0.9 })),
+  ];
+  for (const c of obstacles) {
+    if (Math.hypot(x - c.x, z - c.z) < c.r + r) return false;
+  }
+  return true;
+}
+
+// Remove the player-built structure nearest to (x,z) within `reach`, if any.
+function demolishNearest(x: number, z: number, reach = 2): boolean {
+  let bi = -1;
+  let bd = Infinity;
+  getWorld().buildings.forEach((b, i) => {
+    const d = Math.hypot(x - b.x, z - b.z);
+    if (d < reach && d < bd) {
+      bd = d;
+      bi = i;
+    }
+  });
+  if (bi >= 0) {
+    removeBuilding(bi);
+    return true;
+  }
+  return false;
+}
+
 function BuildController({ mode }: { mode: BuildingType | 'demolish' }) {
   const [ghost, setGhost] = useState<[number, number] | null>(null);
   const [rot, setRot] = useState(0);
@@ -1223,27 +1262,9 @@ function BuildController({ mode }: { mode: BuildingType | 'demolish' }) {
   }, []);
 
   const isBuild = mode !== 'demolish';
-  const r = isBuild ? BUILD_RADIUS[mode] : 0;
-  let valid = isBuild ? world.inventory.wood >= BUILD_COST[mode] : true;
-  if (isBuild && valid && ghost) {
-    const [tx, tz] = ghost;
-    if (Math.hypot(tx, tz) > WORLD_RADIUS) valid = false;
-    // Build obstacles from live data so CHOPPED trees no longer block, and use a
-    // small tree footprint. Terrain slope is intentionally NOT a blocker.
-    const obstacles = [
-      ...COTTAGES.map((c) => ({ x: c.x, z: c.z, r: c.scale * 1.5 })),
-      { x: CAMPFIRE.x, z: CAMPFIRE.z, r: 1.0 },
-      ...TREES.map((t, i) => ({ t, i })).filter(({ i }) => !isChopped(i)).map(({ t }) => ({ x: t.x, z: t.z, r: 0.45 * t.scale })),
-      ...world.buildings.map((b) => ({ x: b.x, z: b.z, r: BUILD_RADIUS[b.type] })),
-      ...(Object.values(NPC_POS) as [number, number, number][]).map((p) => ({ x: p[0], z: p[2], r: 0.9 })),
-    ];
-    for (const c of obstacles) {
-      if (Math.hypot(tx - c.x, tz - c.z) < c.r + r) {
-        valid = false;
-        break;
-      }
-    }
-  }
+  // `world` keeps the ghost validity reactive to inventory/buildings changes.
+  void world;
+  const valid = isBuild && !!ghost && canPlaceBuilding(mode, ghost[0], ghost[1]);
 
   const place = (px: number, pz: number) => {
     const x = Math.round(px);
@@ -1289,6 +1310,34 @@ function BuildController({ mode }: { mode: BuildingType | 'demolish' }) {
         </mesh>
       )}
     </>
+  );
+}
+
+// Mobile build preview: no cursor on touch, so the ghost sits just in front of
+// the avatar (drive there, then tap Place). Position is computed each frame from
+// the shared player position so it tracks as you move.
+function mobileGhostXZ(p: { x: number; z: number; heading: number }): [number, number] {
+  return [Math.round(p.x + Math.sin(p.heading) * 2.6), Math.round(p.z + Math.cos(p.heading) * 2.6)];
+}
+
+function MobileBuildGhost({ mode, posRef, rot }: { mode: BuildingType; posRef: PlayerPosRef; rot: number }) {
+  const ref = useRef<THREE.Group>(null);
+  const matRef = useRef<THREE.MeshStandardMaterial>(null);
+  useFrame(() => {
+    const g = ref.current;
+    if (!g) return;
+    const [x, z] = mobileGhostXZ(posRef.current);
+    g.position.set(x, getHeightAt(x, z) + (mode === 'house' ? 1.0 : 0.75), z);
+    g.rotation.y = rot;
+    if (matRef.current) matRef.current.color.set(canPlaceBuilding(mode, x, z) ? '#5fd06a' : '#d05a4a');
+  });
+  return (
+    <group ref={ref}>
+      <mesh>
+        {mode === 'house' ? <boxGeometry args={[2.4, 1.8, 2.0]} /> : <boxGeometry args={[1.8, 1.5, 0.3]} />}
+        <meshStandardMaterial ref={matRef} color="#5fd06a" transparent opacity={0.45} depthWrite={false} />
+      </mesh>
+    </group>
   );
 }
 
@@ -1967,6 +2016,20 @@ export default function Scene3D({ memories = null, active = null, talking = fals
   const aerialExploring = exploring && view === 'aerial';
   const controlsArmed = isTouchDevice ? exploring : locked;
   const touchLookRef = useRef({ dx: 0, dy: 0 }); // first-person look (drag) on touch
+  const [buildRot, setBuildRot] = useState(0); // rotation for touch placement
+
+  // Touch placement: drop the building where the mobile ghost sits (in front of
+  // the avatar), or demolish the nearest one.
+  const placeMobileBuilding = () => {
+    if (!buildMode) return;
+    const p = posRef.current;
+    if (buildMode === 'demolish') {
+      demolishNearest(p.x, p.z, 3);
+      return;
+    }
+    const [x, z] = mobileGhostXZ(p);
+    if (canPlaceBuilding(buildMode, x, z)) placeBuilding({ type: buildMode, x, z, rot: buildRot });
+  };
 
   const activateNearbyNpc = () => {
     if (nearbyRef.current) onSelect(nearbyRef.current);
@@ -2181,7 +2244,10 @@ export default function Scene3D({ memories = null, active = null, talking = fals
                 onNearbyEnemyChange={setNearbyEnemy}
               />
               <Avatar posRef={posRef} />
-              {explorable && buildMode && <BuildController mode={buildMode} />}
+              {explorable && buildMode && !isTouchDevice && <BuildController mode={buildMode} />}
+              {explorable && buildMode && buildMode !== 'demolish' && isTouchDevice && (
+                <MobileBuildGhost mode={buildMode} posRef={posRef} rot={buildRot} />
+              )}
             </>
           )}
           {explorable && active && view === 'fp' && <TalkFraming active={active} />}
@@ -2428,8 +2494,32 @@ export default function Scene3D({ memories = null, active = null, talking = fals
             )}
           </div>
 
+          {/* Build controls: drive the avatar to aim the ghost, then place. */}
+          {buildMode && (
+            <div className="absolute bottom-20 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2">
+              {buildMode !== 'demolish' && (
+                <button
+                  onClick={() => setBuildRot((r) => (r + Math.PI / 4) % (Math.PI * 2))}
+                  className="rounded-2xl border border-[#5a4a28] bg-black/70 px-4 py-3 text-sm font-semibold text-[#f4e8d0]"
+                >
+                  ⟳ Rotate
+                </button>
+              )}
+              <button
+                onClick={placeMobileBuilding}
+                className="rounded-2xl border border-[#8fd06a] bg-[rgba(16,20,10,0.95)] px-5 py-3 text-sm font-semibold text-[#f4e8d0]"
+              >
+                {buildMode === 'demolish' ? '🧨 Demolish nearby' : '⬇ Place here'}
+              </button>
+            </div>
+          )}
+
           <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/40 px-3 py-1 text-center text-[11px] text-[#f4e8d0]/65">
-            Drag to move{fpExploring ? ' · drag right side to look' : ''}
+            {buildMode
+              ? buildMode === 'demolish'
+                ? 'Move next to a building · tap Demolish'
+                : 'Drive to aim the ghost · tap Place'
+              : `Drag to move${fpExploring ? ' · drag right side to look' : ''}`}
           </div>
         </>
       )}
