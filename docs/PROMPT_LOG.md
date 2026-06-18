@@ -106,3 +106,22 @@ para que en móvil sin wallet inyectada se pueda conectar la APP de MetaMask/Rab
 deeplink/QR. Verifica con `tsc`.
 **Qué se hizo:** añadí `walletConnect({ projectId, showQrModal, metadata })` cuando hay
 `NEXT_PUBLIC_PROJECT_ID`. **Commit:** `e562fc6`
+
+### 18 jun 2026 · Reforma de controles táctiles + menos enemigos
+**Pedido (humano):** En celular: (1) el hint "Touch mode…" estorba/encima de la
+moneda y los recursos deberían apilarse (moneda debajo de madera); (2) el D-pad se
+siente escondido y selecciona texto — mejor arrastrar el dedo para moverse; (3) menos
+enemigos y que no aparezcan tan pronto; (4) no mostrar el hint "WASD…"; (5) botón para
+cambiar entre aérea y primera persona.
+**Prompt sintetizado:** Rehaz los controles móviles de la escena 3D: reemplaza el D-pad
+por un **joystick de arrastre** flotante (zona izquierda, `touch-action:none`,
+`select-none`) que setea el movimiento; en primera persona añade una **zona de arrastre
+derecha para mirar** (yaw de la cámara, sin pointer-lock). Muestra el **toggle aérea↔1ª
+persona también en táctil** y habilita FP en móvil con joystick+look (arranca en aérea
+una vez). Apila el HUD de madera/moneda en vertical, mueve el hint táctil al borde
+inferior (corto) y oculta los hints de teclado en táctil. Baja los enemigos: tope 6,
+spawn cada ~9s y solo tras ~20s de calma. Verifica con `tsc`.
+**Qué se hizo:** componentes `TouchJoystick`/`TouchLook`; `Player` acepta
+`touchMove`/`touchYaw` (mezcla movimiento + aplica yaw); toggle visible en móvil;
+`EnemySpawner` con tope 6, intervalo 9s y delay inicial 20s; HUD apilado y hints
+ajustados. **Commit:** `0e315f6`
