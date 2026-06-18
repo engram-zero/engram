@@ -239,3 +239,11 @@ atributos del bloque; el fallback sin key es un arbolito voxel. Verifica con `ts
 **Qué se hizo:** `BuildingType` += 'block' + campos y/color/scale en `types.ts`;
 `BUILD_COST/RADIUS.block` + normalización en `world.ts`; render/colisión/preview/IA en
 Scene3D; prompt + normalización de bloque en el endpoint. **Commit:** `8f7588a`
+
+### 18 jun 2026 · Sincronizar estados en ENGRAM_PROMPTS
+**Pedido (humano):** Actualizar docs (sobre todo `ENGRAM_PROMPTS`) y dar la lista de
+tareas pendientes para repartir entre partners.
+**Prompt sintetizado:** Marca en el índice de `ENGRAM_PROMPTS` lo ya hecho (Prompt 4
+móvil = done; Prompt 11 = bloques voxel + preview + costo + budget) y deja claras las
+pendientes (6 audio, 7 429-UX, 10 mercado, 12 habitables, + ADMIN).
+**Qué se hizo:** actualicé el índice (4 y 11). Pendientes: 6, 7, 10, 12 + tareas ADMIN.

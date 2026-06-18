@@ -16,14 +16,14 @@
 1. [On-chain rootHash registry (memoria cross-device / cross-game)](#prompt-1--on-chain-roothash-registry) — ✅ done
 2. [World pass: terreno con alturas, cielo, casas, árboles y avatares](#prompt-2--world-pass-terreno-cielo-y-props) — ✅ done
 3. [Protección de coste/abuso en /api/npc (rate limit)](#prompt-3--rate-limit--anti-abuso-en-apinpc) — ✅ done
-4. [Controles móviles / táctiles (sin pointer lock)](#prompt-4--controles-móviles--táctiles) — ⏳ pendiente
+4. [Controles móviles / táctiles (sin pointer lock)](#prompt-4--controles-móviles--táctiles) — ✅ done (joystick de arrastre, look táctil en 1ª persona, toggle de vista, sin scroll iOS, modo demo)
 5. [Texturas PNG en lugar de materiales planos](#prompt-5--texturas-png) — ✅ done (22 texturas en webp; ver [`ART_ASSETS.md`](ART_ASSETS.md))
 6. [Audio ambiental (fogata, pasos, noche)](#prompt-6--audio-ambiental) — ⏳ pendiente
 7. [Verificar end-to-end la UX del 429 en el cliente](#prompt-7--verificación-diferida-ux-del-429) — ⏳ diferida (ver precondición)
 8. [Visión: gameplay loop, doble vista y mundo persistente en 0G](#prompt-8--visión-gameplay-loop--doble-vista) — 🟡 partial: 8a done, 8b persistencia MVP done (martelaxe)
 9. [Construir edificios + persistir el mundo en 0G](#prompt-9--construir--persistir-el-mundo-en-0g) — ✅ 9a (gameplay + zonas/precios) y 9b (persistencia 0G, martelaxe) hechos
 10. [Mercado: vender recursos a los NPCs → reputación en 0G](#prompt-10--mercado-vender-recursos--reputación) — ⏳ pendiente
-11. [Construcción con IA + tokens (describir y que la IA edifique)](#prompt-11--construcción-con-ia--tokens) — ✅ done (MVP: `/api/build` + modal; cap tokens + BYO key)
+11. [Construcción con IA + tokens (describir y que la IA edifique)](#prompt-11--construcción-con-ia--tokens) — ✅ done (`/api/build` + modal; **bloques voxel**, preview, costo USD, tope de gasto, BYO key)
 12. [Edificios habitables (entrar dentro)](#prompt-12--edificios-habitables-entrar) — ⏳ pendiente
 
 > **Tareas no-código (ADMIN):** ✅ deploy a Vercel + env vars · ✅ save a 0G end-to-end ·
