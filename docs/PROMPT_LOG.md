@@ -319,3 +319,19 @@ verifica con `npx tsc --noEmit` y deja el cambio en un commit separado.
 **Qué se hizo:** reforcé las antorchas con más intensidad, radio y halo, añadí dos luces
 de relleno nocturnas suaves para levantar el terreno y sumé un enjambre de luciérnagas
 con puntos de luz pequeños alrededor del pueblo. **Commit:** `fe8cc3a`
+
+### 18 jun 2026 · Infraestructura de audio con fallback silencioso
+**Pedido (humano):** Dejar preparado el entorno para el prompt de audio: llamadas listas
+para grillos, pasos, fuego crepitando, etc., con fallback por si no hay archivos aún; no
+romper nada; indicar dónde colocar los audios y dar una lista clara de assets por hacer.
+**Prompt sintetizado:** Añade una capa de audio cliente compartida que permita disparar
+loops y one-shots desde la escena y la UI sin depender de que los archivos existan todavía:
+si un asset falta o el navegador bloquea reproducción, el juego debe seguir funcionando en
+silencio. Conecta llamadas para ambiente nocturno, fuego, pasos, salto/caída, hachazo,
+ataque y UI de diálogo/guardado. Además, documenta en un archivo de docs los paths exactos
+esperados bajo `public/audio/...` para que luego solo haya que añadir los `.mp3/.wav`.
+Verifica con `npx tsc --noEmit` y deja el cambio en commit separado.
+**Qué se hizo:** añadí `AudioProvider` + manifiesto de cues con fallback silencioso,
+conecté loops de grillos/fogata y one-shots de pasos, salto, caída, hachazo, ataque,
+abrir/cerrar diálogo y save éxito/error; documenté los archivos esperados en
+`docs/AUDIO_ASSETS.md`. **Commit:** `63893ed`
