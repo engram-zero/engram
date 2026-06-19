@@ -5,9 +5,9 @@
 
 export type NPCName = 'aldric' | 'maren' | 'sable';
 export type ResourceType = 'wood' | 'stone' | 'coin';
-export const BLOCK_UNIT = 0.35;
+export const BLOCK_UNIT = 0.2;
 export const BLOCK_SCALE_MIN = BLOCK_UNIT;
-export const BLOCK_SCALE_MAX = 0.6;
+export const BLOCK_SCALE_MAX = 0.4;
 
 export type BuildingType = 'wall' | 'house' | 'block';
 /** A structure the player has placed in the world. `block` is a small coloured
