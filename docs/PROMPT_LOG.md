@@ -306,3 +306,16 @@ en sombras. Verifica con `npx tsc --noEmit` y deja el cambio en un commit separa
 **Qué se hizo:** incrementé la base de visibilidad nocturna, aclaré cielo y niebla, subí
 la luz ambiente/hemisphere y bajé la fuerza de la direccional para que el piso siga leyendo
 sin perder el mood nocturno. **Commit:** `d0f4d7a`
+
+### 18 jun 2026 · Antorchas útiles + fill nocturno + luciérnagas
+**Pedido (humano):** Hacer una tercera pasada de iluminación nocturna con antorchas más
+útiles, un fill nocturno suave y luciérnagas, y empujar los commits sin miedo.
+**Prompt sintetizado:** En vez de seguir dependiendo solo de la iluminación global o de
+retocar materiales, añade fuentes de luz locales para que la noche sea más legible sin
+romper el ambiente: refuerza las antorchas (más alcance/intensidad + glow visible), suma
+un fill light nocturno muy suave sobre el pueblo y añade luciérnagas como acento vivo
+alrededor de Aldenmoor. Mantén la activación ligada al estado nocturno (`torchesLit`),
+verifica con `npx tsc --noEmit` y deja el cambio en un commit separado.
+**Qué se hizo:** reforcé las antorchas con más intensidad, radio y halo, añadí dos luces
+de relleno nocturnas suaves para levantar el terreno y sumé un enjambre de luciérnagas
+con puntos de luz pequeños alrededor del pueblo. **Commit:** `fe8cc3a`
