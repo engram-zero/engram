@@ -367,3 +367,24 @@ solo contacto cara con cara para obtener figuras más limpias y escultóricas.
 puerta abierta, de forma que ya se puede caminar dentro. Después afiné los bloques IA con una
 grilla pequeña (`BLOCK_UNIT`), normalización cliente/servidor y validación anti-overlap entre
 voxels, manteniendo el encastre sin huecos. **Commit:** `6a8175f`, `edc01e9` (código) + este commit (docs).
+
+### 18 jun 2026 · Aldea habitable, voxel más fino, refund real y backlog ampliado
+**Pedido (humano):** Hacer cinco cosas con commits/pushes individuales: (1) volver
+habitables y más grandes las seis casas existentes de la aldea; (2) bajar `BLOCK_UNIT`
+a `0.2`; (3) hacer que al demoler un edificio propio se devuelva parte de la madera real
+gastada, no el total; (4) considerar un sistema de aliados/enemigos entre players, incluso
+sabotaje/demolición de edificios rivales por recursos; y (5) pasar revista a los docs,
+sobre todo a los prompts, agregando nuevas tareas de mercado, demonios/horarios, animación
+de tala, futuro del terreno, ríos, mapa grande y otras ideas útiles.
+**Prompt sintetizado:** (1) Escala y vacía las seis `COTTAGES` del pueblo, reemplazando sus
+colliders sólidos por muros/puertas para poder entrar también a las casas del escenario base.
+(2) Reduce la unidad de voxel IA a `0.2` manteniendo el grid fino y la prevención de overlaps.
+(3) Persiste en cada building el costo real pagado en madera y usa la mitad de ese valor como
+refund al demoler. (4) Documenta un nuevo prompt para relaciones ally/enemy y sabotaje justo.
+(5) Revisa y amplía el backlog de prompts con mercado comprable, fairness offline para demonios,
+animación de gathering, dirección del terreno, ríos, escalado de mapa, reparación y durabilidad.
+**Qué se hizo:** agrandé e hice huecas las seis casas de Aldenmoor, bajé `BLOCK_UNIT` a `0.2`,
+hice que la demolición reembolse la mitad de la madera realmente pagada, añadí el prompt de
+aliados/enemigos y amplié el backlog estratégico de `ENGRAM_PROMPTS.md`; además actualicé
+`STATUS.md` con el estado real del proyecto. **Commit:** `7160b24`, `a2f9ca9`, `85e4e16`,
+`6b7ad1a`, `46c68ac`, `e262ca7` + este commit (docs).
