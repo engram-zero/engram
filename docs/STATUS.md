@@ -26,9 +26,10 @@ button and a read-only **public world** showing other wallets' builds); mobile/t
 controls (drag joystick, touch look, no-scroll) + a no-wallet **guest mode**; **Aldric's
 merchant loop** (sell wood for coin, raising his trust/memory); and **audio scaffolding**
 (silent-safe cues wired for ambience/foley/UI, awaiting assets/mute/positional polish).
-Player-built **houses are now enterable** (hollow walls + door gap), and AI voxel
-construction now snaps to a **fine anti-overlap grid** so generated shapes read more
-like deliberate sculptures than coarse overlapping cubes.
+Player-built **houses are now enterable** (hollow walls + door gap), the six
+**village cottages are also larger and hollow**, AI voxel construction now snaps to a
+**fine anti-overlap grid** with `BLOCK_UNIT = 0.2`, and demolition refunds **half of the
+actual wood paid** for that structure instead of a flat base value.
 
 ## 0G integration gotchas (READ before touching storage)
 These cost a long debugging session; keep them in mind.
@@ -108,4 +109,6 @@ better pending/saved feedback or a relayer/meta-tx flow.
       "MetaMask signature / no server / cross-device" — see README / chat history).
 - [ ] (Optional) 2–3 min demo video.
 - [ ] Backlog in `docs/ENGRAM_PROMPTS.md`: audio polish (6: mute + positional fire),
-      deferred 429-UX check (7), richer world loop/economy follow-ups (8c+, 10 v2, 12).
+      deferred 429-UX check (7), player relations/raids (13), market goods (14),
+      fair demon sieges (15), gathering animation polish (16), terrain/rivers/world expansion (17),
+      and repair/durability systems (18).
