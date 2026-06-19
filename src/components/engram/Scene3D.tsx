@@ -12,7 +12,7 @@ import { Stars, Sky, Html, ContactShadows, PointerLockControls, OrthographicCame
 import * as THREE from 'three';
 import { useNetwork } from '@/app/providers';
 import { NPC_LIST } from '@/lib/npcs';
-import type { NPCName, NPCMemory } from '@/lib/types';
+import { BLOCK_SCALE_MAX, BLOCK_SCALE_MIN, BLOCK_UNIT, type NPCName, type NPCMemory } from '@/lib/types';
 import { writeWorldState } from '@/lib/memory';
 import {
   getHeightAt,
@@ -176,6 +176,38 @@ function isInsideHouseInterior(house: Building, x: number, z: number) {
     Math.abs(local.x) < HOUSE_WIDTH / 2 - HOUSE_WALL_THICKNESS * 1.4 &&
     local.z > -HOUSE_DEPTH / 2 + HOUSE_WALL_THICKNESS * 1.4 &&
     local.z < HOUSE_DEPTH / 2 - HOUSE_WALL_THICKNESS * 1.4
+  );
+}
+
+function normalizeBlockBuilding(candidate: Partial<Building> & Pick<Building, 'x' | 'z'>): Building {
+  const scaleRaw = typeof candidate.scale === 'number' ? candidate.scale : BLOCK_UNIT;
+  const scale = Math.max(BLOCK_SCALE_MIN, Math.min(BLOCK_SCALE_MAX, Math.round(scaleRaw / BLOCK_UNIT) * BLOCK_UNIT));
+  const yRaw = typeof candidate.y === 'number' ? candidate.y : 0;
+  return {
+    type: 'block',
+    x: Math.round(candidate.x / BLOCK_UNIT) * BLOCK_UNIT,
+    z: Math.round(candidate.z / BLOCK_UNIT) * BLOCK_UNIT,
+    rot: typeof candidate.rot === 'number' ? candidate.rot : 0,
+    y: Math.max(0, Math.round(yRaw / BLOCK_UNIT) * BLOCK_UNIT),
+    scale,
+    color: candidate.color ?? '#8a6a4a',
+  };
+}
+
+function blocksOverlap(a: Building, b: Building) {
+  const sa = a.scale ?? BLOCK_UNIT;
+  const sb = b.scale ?? BLOCK_UNIT;
+  const ay0 = a.y ?? 0;
+  const ay1 = ay0 + sa;
+  const by0 = b.y ?? 0;
+  const by1 = by0 + sb;
+  return (
+    a.x - sa / 2 < b.x + sb / 2 &&
+    a.x + sa / 2 > b.x - sb / 2 &&
+    a.z - sa / 2 < b.z + sb / 2 &&
+    a.z + sa / 2 > b.z - sb / 2 &&
+    ay0 < by1 &&
+    ay1 > by0
   );
 }
 
@@ -1388,7 +1420,7 @@ function Village({ torchesLit = true }: { torchesLit?: boolean }) {
 function BuildingMesh({ b }: { b: Building }) {
   const y = getHeightAt(b.x, b.z);
   if (b.type === 'block') {
-    const s = b.scale ?? 0.6;
+    const s = b.scale ?? BLOCK_UNIT;
     return (
       <mesh position={[b.x, y + (b.y ?? 0) + s / 2, b.z]} rotation={[0, b.rot, 0]} castShadow receiveShadow>
         <boxGeometry args={[s, s, s]} />
@@ -1467,19 +1499,37 @@ function buildCostAt(type: BuildingType, x: number, z: number): number {
 // protected core, inside the world, affordable at this spot, and not overlapping
 // a cottage, the campfire, a STANDING tree, an existing building or an NPC.
 // Terrain slope is intentionally NOT a blocker.
-function canPlaceBuilding(type: BuildingType, x: number, z: number): boolean {
+function canPlaceBuilding(type: BuildingType, x: number, z: number, candidate?: Partial<Building>, extraBuildings: Building[] = []): boolean {
   const w = getWorld();
   const d = Math.hypot(x, z);
   if (d < NO_BUILD_RADIUS) return false; // protected village core
   if (d > WORLD_RADIUS) return false;
   if (!isLocalhostFreeBuildWallet() && w.inventory.wood < buildCostAt(type, x, z)) return false;
-  if (type === 'block') return true;
+  if (type === 'block') {
+    const block = normalizeBlockBuilding({ ...candidate, x, z });
+    const footprint = (block.scale ?? BLOCK_UNIT) / 2;
+    const staticObstacles = [
+      ...COTTAGES.map((c) => ({ x: c.x, z: c.z, r: c.scale * 1.5 })),
+      { x: CAMPFIRE.x, z: CAMPFIRE.z, r: 1.0 },
+      ...TREES.map((t, i) => ({ t, i })).filter(({ i }) => !isChopped(i)).map(({ t }) => ({ x: t.x, z: t.z, r: 0.45 * t.scale })),
+      ...(Object.values(NPC_POS) as [number, number, number][]).map((p) => ({ x: p[0], z: p[2], r: 0.9 })),
+    ];
+    for (const c of staticObstacles) {
+      if (Math.hypot(block.x - c.x, block.z - c.z) < c.r + footprint) return false;
+    }
+    for (const existing of [...w.buildings, ...extraBuildings]) {
+      if (existing.type !== 'block') continue;
+      if (blocksOverlap(block, normalizeBlockBuilding(existing))) return false;
+    }
+    return true;
+  }
   const r = BUILD_RADIUS[type];
   const obstacles = [
     ...COTTAGES.map((c) => ({ x: c.x, z: c.z, r: c.scale * 1.5 })),
     { x: CAMPFIRE.x, z: CAMPFIRE.z, r: 1.0 },
     ...TREES.map((t, i) => ({ t, i })).filter(({ i }) => !isChopped(i)).map(({ t }) => ({ x: t.x, z: t.z, r: 0.45 * t.scale })),
-    ...w.buildings.map((b) => ({ x: b.x, z: b.z, r: BUILD_RADIUS[b.type] })),
+    ...w.buildings.filter((b) => b.type !== 'block').map((b) => ({ x: b.x, z: b.z, r: BUILD_RADIUS[b.type] })),
+    ...extraBuildings.filter((b) => b.type !== 'block').map((b) => ({ x: b.x, z: b.z, r: BUILD_RADIUS[b.type] })),
     ...(Object.values(NPC_POS) as [number, number, number][]).map((p) => ({ x: p[0], z: p[2], r: 0.9 })),
   ];
   for (const c of obstacles) {
@@ -1615,7 +1665,8 @@ function aiPieceToBuilding(b: AIPiece, x: number, z: number): Building {
   if (b.type === 'block') {
     out.y = b.dy ?? 0;
     out.color = b.color ?? '#8a6a4a';
-    out.scale = b.scale ?? 0.6;
+    out.scale = b.scale ?? BLOCK_UNIT;
+    return normalizeBlockBuilding(out);
   }
   return out;
 }
@@ -1626,16 +1677,24 @@ function AIPreviewGhosts({ pieces, origin }: { pieces: AIPiece[]; origin: { x: n
   return (
     <group>
       {pieces.map((b, i) => {
-        const x = Math.round(origin.x + b.dx);
-        const z = Math.round(origin.z + b.dz);
-        const ok = canPlaceBuilding(b.type, x, z);
+        const x = b.type === 'block' ? origin.x + b.dx : Math.round(origin.x + b.dx);
+        const z = b.type === 'block' ? origin.z + b.dz : Math.round(origin.z + b.dz);
+        const candidate = aiPieceToBuilding(b, x, z);
+        const extra = pieces.slice(0, i).map((prev) =>
+          aiPieceToBuilding(
+            prev,
+            prev.type === 'block' ? origin.x + prev.dx : Math.round(origin.x + prev.dx),
+            prev.type === 'block' ? origin.z + prev.dz : Math.round(origin.z + prev.dz)
+          )
+        );
+        const ok = canPlaceBuilding(b.type, x, z, candidate, extra);
         const gy = getHeightAt(x, z);
         if (b.type === 'block') {
-          const s = b.scale ?? 0.6;
+          const s = candidate.scale ?? BLOCK_UNIT;
           return (
-            <mesh key={i} position={[x, gy + (b.dy ?? 0) + s / 2, z]} rotation={[0, b.rot, 0]}>
+            <mesh key={i} position={[candidate.x, gy + (candidate.y ?? 0) + s / 2, candidate.z]} rotation={[0, candidate.rot, 0]}>
               <boxGeometry args={[s, s, s]} />
-              <meshStandardMaterial color={ok ? b.color ?? '#8a6a4a' : '#d05a4a'} transparent opacity={0.55} depthWrite={false} />
+              <meshStandardMaterial color={ok ? candidate.color ?? '#8a6a4a' : '#d05a4a'} transparent opacity={0.55} depthWrite={false} />
             </mesh>
           );
         }
@@ -2479,14 +2538,17 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     if (!aiPreview || !aiOrigin) return;
     let placed = 0;
     let wood = 0;
+    const placedNow: Building[] = [];
     for (const b of aiPreview) {
-      const x = Math.round(aiOrigin.x + b.dx);
-      const z = Math.round(aiOrigin.z + b.dz);
-      if (canPlaceBuilding(b.type, x, z)) {
+      const x = b.type === 'block' ? aiOrigin.x + b.dx : Math.round(aiOrigin.x + b.dx);
+      const z = b.type === 'block' ? aiOrigin.z + b.dz : Math.round(aiOrigin.z + b.dz);
+      const candidate = aiPieceToBuilding(b, x, z);
+      if (canPlaceBuilding(b.type, x, z, candidate, placedNow)) {
         const cost = buildCostAt(b.type, x, z);
-        if (placeBuilding(aiPieceToBuilding(b, x, z), cost)) {
+        if (placeBuilding(candidate, cost)) {
           placed += 1;
           wood += cost;
+          placedNow.push(candidate);
         }
       }
     }

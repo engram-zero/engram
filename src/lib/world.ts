@@ -15,7 +15,7 @@
 //     NOT cross-device, NOT on-chain).
 
 import { useSyncExternalStore } from 'react';
-import type { ResourceType, WorldState, Building, BuildingType } from '@/lib/types';
+import { BLOCK_UNIT, type ResourceType, type WorldState, type Building, type BuildingType } from '@/lib/types';
 
 export type { ResourceType, WorldState, Building, BuildingType } from '@/lib/types';
 
@@ -59,7 +59,7 @@ function normalizeBuildings(raw: unknown): Building[] {
       const base: Building = { type: b.type, x: b.x, z: b.z, rot: typeof b.rot === 'number' ? b.rot : 0 };
       if (b.type === 'block') {
         base.y = typeof b.y === 'number' ? b.y : 0;
-        base.scale = typeof b.scale === 'number' ? b.scale : 0.6;
+        base.scale = typeof b.scale === 'number' ? b.scale : BLOCK_UNIT;
         base.color = typeof b.color === 'string' ? b.color : '#8a6a4a';
       }
       return base;

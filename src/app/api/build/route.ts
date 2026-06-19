@@ -8,12 +8,13 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
 import { reserve } from '@/lib/ratelimit';
+import { BLOCK_SCALE_MAX, BLOCK_SCALE_MIN, BLOCK_UNIT } from '@/lib/types';
 
 export const runtime = 'nodejs';
 
 const MODEL = process.env.ENGRAM_MODEL || 'claude-sonnet-4-6';
 const MAX_PROMPT_LEN = 300;
-const MAX_PIECES = 64; // voxel structures (trees, statues) need many small blocks
+const MAX_PIECES = 96; // smaller voxels need more pieces to sculpt nicely
 const COORD_LIMIT = 18; // dx/dz clamp from origin
 const MAX_TOKENS = 1500; // caps structure size + spend
 
@@ -54,7 +55,8 @@ function extractJson(text: string): string {
 function clampCoord(n: unknown): number {
   const x = Number(n);
   if (!Number.isFinite(x)) return 0;
-  return Math.max(-COORD_LIMIT, Math.min(COORD_LIMIT, Math.round(x * 10) / 10));
+  const clamped = Math.max(-COORD_LIMIT, Math.min(COORD_LIMIT, x));
+  return Math.round(clamped / BLOCK_UNIT) * BLOCK_UNIT;
 }
 
 function hexColor(c: unknown): string {
@@ -75,8 +77,8 @@ function normalize(raw: unknown): AIBuilding[] {
         rot: Number.isFinite(Number(b.rot)) ? Number(b.rot) : 0,
       };
       if (b.type === 'block') {
-        piece.dy = Math.max(0, Math.min(12, Number(b.dy) || 0));
-        piece.scale = Math.max(0.2, Math.min(2, Number(b.scale) || 0.6));
+        piece.dy = Math.round(Math.max(0, Math.min(12, Number(b.dy) || 0)) / BLOCK_UNIT) * BLOCK_UNIT;
+        piece.scale = Math.max(BLOCK_SCALE_MIN, Math.min(BLOCK_SCALE_MAX, Math.round((Number(b.scale) || BLOCK_UNIT) / BLOCK_UNIT) * BLOCK_UNIT));
         piece.color = hexColor(b.color);
       }
       return piece;
@@ -90,8 +92,9 @@ Coordinates: dx,dz are offsets in world units from the player at 0,0 (range abou
 Pieces:
 - "block": a small COLOURED CUBE — the main tool. Stack and colour MANY blocks (like voxels/LEGO)
   to sculpt ANYTHING the player asks (trees, statues, towers, animals, signs, fountains). Per block:
-  "dy" = height of its centre above ground (0..12, stack upward), "scale" = cube size (0.3..1.2),
-  "color" = hex. (wall/house ignore dy/color/scale.)
+  "dy" = height above ground (0..12, stack upward in fine steps), "scale" = cube size (${BLOCK_SCALE_MIN}..${BLOCK_SCALE_MAX}),
+  "color" = hex. Use multiples of ${BLOCK_UNIT} for dx, dz, dy and scale so cubes sit flush edge-to-edge without gaps.
+  Never place one block inside another; build by touching faces, not overlapping volumes. (wall/house ignore dy/color/scale.)
 - "wall": a 1.8m fence segment (use "rot" to line them into fences/enclosures).
 - "house": a 2.4x2 cottage.
 Guidance: prefer BLOCKS for anything that isn't literally a fence or a plain house. Example — a tree:
@@ -102,13 +105,13 @@ Be coherent and reasonably compact. Max ${MAX_PIECES} pieces. JSON only, no pros
 // voxel tree, to show blocks off.
 function fallback(): AIBuilding[] {
   const out: AIBuilding[] = [];
-  for (let i = 0; i < 4; i++) out.push({ type: 'block', dx: 0, dz: 0, rot: 0, dy: i * 0.6, scale: 0.6, color: '#6b4a2a' });
+  for (let i = 0; i < 7; i++) out.push({ type: 'block', dx: 0, dz: 0, rot: 0, dy: i * BLOCK_UNIT, scale: BLOCK_UNIT, color: '#6b4a2a' });
   const leaves: [number, number][] = [
-    [0, 0], [0.6, 0], [-0.6, 0], [0, 0.6], [0, -0.6], [0.6, 0.6], [-0.6, -0.6], [0.6, -0.6], [-0.6, 0.6],
+    [0, 0], [BLOCK_UNIT, 0], [-BLOCK_UNIT, 0], [0, BLOCK_UNIT], [0, -BLOCK_UNIT], [BLOCK_UNIT, BLOCK_UNIT], [-BLOCK_UNIT, -BLOCK_UNIT], [BLOCK_UNIT, -BLOCK_UNIT], [-BLOCK_UNIT, BLOCK_UNIT],
   ];
   for (const [dx, dz] of leaves) {
-    out.push({ type: 'block', dx, dz, rot: 0, dy: 2.4, scale: 0.7, color: '#3f7a3a' });
-    out.push({ type: 'block', dx: dx * 0.6, dz: dz * 0.6, rot: 0, dy: 3.1, scale: 0.6, color: '#48903f' });
+    out.push({ type: 'block', dx, dz, rot: 0, dy: 7 * BLOCK_UNIT, scale: BLOCK_UNIT, color: '#3f7a3a' });
+    out.push({ type: 'block', dx, dz, rot: 0, dy: 8 * BLOCK_UNIT, scale: BLOCK_UNIT, color: '#48903f' });
   }
   return out;
 }
