@@ -1912,7 +1912,10 @@ export function computeDayNight(hour: number): DayNight {
   const ang = p * Math.PI;
   const sunY = Math.sin(ang); // >0 daytime, <0 night
   const sunX = -Math.cos(ang); // east (−1) → west (+1)
-  const day = Math.max(0, sunY);
+  const daylight = Math.max(0, sunY);
+  // Keep a visibility floor so night still reads as night, but terrain, trees and
+  // silhouettes don't collapse into pure black.
+  const visible = 0.22 + daylight * 0.78;
 
   // Moon rides its own arc across the night (sunset → sunrise).
   const nightLen = 24 - dayLen;
@@ -1923,18 +1926,18 @@ export function computeDayNight(hour: number): DayNight {
 
   return {
     sunPos: [sunX * 90, sunY * 80, -55], // drives the <Sky> shader (dark when sunY<0)
-    bg: mixColor('#0c1020', '#9fc4ec', day),
-    fog: mixColor('#141d33', '#aac4e0', day),
-    ambIntensity: mix(0.5, 1.6, day),
-    ambColor: mixColor('#6c7ea8', '#fff3e0', day),
-    hemiSky: mixColor('#2a3a66', '#cfe0fb', day),
-    hemiGround: mixColor('#2a3326', '#86936a', day),
-    hemiIntensity: mix(0.55, 1.5, day),
-    dirPos: [sunX * 60, Math.max(12, sunY * 60), -40], // key light follows the sun; min height keeps moonlight
-    dirIntensity: mix(0.4, 2.4, day),
-    dirColor: mixColor('#aab8e6', '#fff1d6', day),
-    turbidity: mix(6, 11, day),
-    rayleigh: mix(0.6, 1.6, day),
+    bg: mixColor('#1b2740', '#a8caee', visible),
+    fog: mixColor('#24324a', '#b8d0e8', visible),
+    ambIntensity: mix(0.92, 1.7, visible),
+    ambColor: mixColor('#97add8', '#fff3e0', visible),
+    hemiSky: mixColor('#506892', '#d7e6ff', visible),
+    hemiGround: mixColor('#3d4934', '#93a073', visible),
+    hemiIntensity: mix(0.95, 1.58, visible),
+    dirPos: [sunX * 60, Math.max(18, sunY * 60), -40], // key light follows the sun; min height keeps moonlight
+    dirIntensity: mix(0.7, 2.25, visible),
+    dirColor: mixColor('#c1d0f5', '#fff1d6', visible),
+    turbidity: mix(7.2, 10.8, visible),
+    rayleigh: mix(0.8, 1.55, visible),
     starsVisible: sunY < 0.05,
     torchesLit: sunY < 0.12,
     sunVisible: sunY > 0.02,
