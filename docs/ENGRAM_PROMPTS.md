@@ -26,6 +26,11 @@
 11. [Construcción con IA + tokens (describir y que la IA edifique)](#prompt-11--construcción-con-ia--tokens) — ✅ done (`/api/build` + modal; **bloques voxel** refinados a grid fino, preview, costo USD, tope de gasto, BYO key)
 12. [Edificios habitables (entrar dentro)](#prompt-12--edificios-habitables-entrar) — ✅ done (casas huecas con puerta libre)
 13. [Relaciones entre players: aliados, enemigos y sabotaje](#prompt-13--relaciones-entre-players-aliados-enemigos-y-sabotaje) — ⏳ pendiente
+14. [Mercado v2: bienes comprables, sinks y reparación](#prompt-14--mercado-v2-bienes-comprables-sinks-y-reparación) — ⏳ pendiente
+15. [Asedios y demonios con fairness offline](#prompt-15--asedios-y-demonios-con-fairness-offline) — ⏳ pendiente
+16. [Animaciones de gathering y feedback físico](#prompt-16--animaciones-de-gathering-y-feedback-físico) — ⏳ pendiente
+17. [Terreno editable, ríos y mapa más grande](#prompt-17--terreno-editable-ríos-y-mapa-más-grande) — ⏳ pendiente
+18. [Reparación, durabilidad y mantenimiento del mundo](#prompt-18--reparación-durabilidad-y-mantenimiento-del-mundo) — ⏳ pendiente
 
 > **Tareas no-código (ADMIN):** ✅ deploy a Vercel + env vars · ✅ save a 0G end-to-end ·
 > ⏳ actualizar la Description del dashboard 0g.ai (versión honesta) ·
@@ -604,6 +609,9 @@ precios/diálogo**. Empezar simple; el regateo con LLM es v2.
 - Matar enemigos / defender la aldea → sube reputación con **Maren** (la guardia), que
   ya "rastrea tu historial de combate" → puede protegerte. Mismo patrón: la acción
   registra una interacción en su memoria 0G.
+- El paso siguiente del mercado es que Aldric también **venda** cosas reales al jugador
+  (herramientas, semillas, repair kits, antorchas, etc.) para que la moneda no sea solo
+  un marcador sino un recurso con sinks claros. Ver Prompt 14.
 
 ### No rompas
 - El flujo de diálogo/memoria existente ni el guardado a 0G. `tsc --noEmit` limpio.
@@ -740,6 +748,142 @@ conflicto controlado.
 1. Un player puede marcar a otro como aliado o enemigo y esa relación persiste.
 2. El mundo/UI refleja esa relación con feedback claro.
 3. Las futuras acciones de sabotaje o cooperación respetan esa relación y quedan auditables.
+
+---
+
+## Prompt 14 — Mercado v2: bienes comprables, sinks y reparación
+
+> La moneda ya existe y Aldric ya compra madera, pero aún falta el lado importante
+> del loop: **gastar** esa moneda en algo que cambie el gameplay.
+
+### Objetivo
+Convertir a Aldric en un mercado útil, no solo en un comprador. La idea es que los
+players puedan comprar herramientas, consumibles y utilidades que a su vez alimenten
+construcción, defensa y exploración.
+
+### Primera lista de bienes a evaluar
+- **Repair kit** para reparar edificios dañados.
+- **Seeds / saplings** para replantar árboles o acelerar regeneración.
+- **Torch kit / lantern oil** para iluminación decorativa o defensiva.
+- **Better axe / tool upgrades** para talar más rápido o cargar más.
+- **Building dyes / material skins** para personalizar bloques y casas.
+- **Bridge / stair kits** si el terreno evoluciona a verticalidad real.
+
+### Restricciones
+- Nada de power creep tonto: que los objetos abran decisiones, no solo números.
+- Mantener simple la primera versión: compra determinista, stock infinito o un stock
+  diario pequeño; no hace falta economía dinámica aún.
+
+### Criterios de aceptación (cuando se implemente)
+1. El jugador puede comprar al menos 2 bienes reales con coin.
+2. Esos bienes alteran gameplay o mantenimiento de la aldea.
+3. El gasto queda visible y coherente con la reputación/mercado de Aldric.
+
+---
+
+## Prompt 15 — Asedios y demonios con fairness offline
+
+> Henrique quiere que los demonios puedan atacar edificios, pero eso requiere una
+> capa de fairness: no es justo que alguien pierda trabajo offline por completo.
+
+### Objetivo
+Diseñar ataques de demonios que añadan tensión sin destruir la confianza del jugador
+en el mundo persistente.
+
+### Reglas a explorar
+- Los demonios **no aparecen** en ciertas horas o ventanas del día.
+- El daño a edificios es **lento y reducido**, no explosivo.
+- Debe haber tiempo para responder: telegraph visual/sonoro, asedio gradual.
+- El edificio no se borra de golpe: pasa por estados `healthy → damaged → critical`.
+- Offline, el daño máximo por ventana queda capado.
+
+### Posibles compensaciones
+- Maren o guardias NPC podrían mitigar parte del daño si tu reputación con ella es alta.
+- Los repair kits del mercado (Prompt 14) pueden cerrar el loop.
+- Aliados podrían ayudar a defender o reparar.
+
+### Criterios de aceptación (cuando se implemente)
+1. Los demonios pueden dañar edificios sin borrar una aldea entera de una sola pasada.
+2. El sistema respeta ventanas y límites claros para players offline.
+3. El daño queda registrado y el jugador entiende qué pasó.
+
+---
+
+## Prompt 16 — Animaciones de gathering y feedback físico
+
+> Falta dar más cuerpo a las acciones del jugador. La más evidente ahora mismo es la
+> tala: existe la mecánica, pero no la animación/impacto visual suficiente.
+
+### Objetivo
+Hacer que gathering y combate se sientan físicos y legibles con animaciones baratas
+pero expresivas.
+
+### Tareas candidatas
+- **Animación de tala**: balanceo del hacha/brazo, recoil, wood chips, shake del árbol.
+- **Telegraph de impacto** en enemigos: hit flash, knockback corto, polvo.
+- **Feedback de construcción/demolición**: ghost más vivo, partículas de escombro, pickup de refund.
+- **Paso por superficie**: variar audio/FX según tierra/pasto/madera si luego hay más biomas.
+
+### Criterios de aceptación (cuando se implemente)
+1. Talar deja de sentirse como una barra abstracta y pasa a sentirse como un golpe real.
+2. Construcción/demolición muestran feedback claro y satisfactorio.
+3. Todo sigue ligero y compatible con móvil.
+
+---
+
+## Prompt 17 — Terreno editable, ríos y mapa más grande
+
+> El terreno actual funciona y se ve bien para MVP, pero hoy es una fórmula
+> matemática continua. Falta decidir si ese será el camino definitivo o si el juego
+> debe migrar a un terreno más “autorable” y eventualmente editable.
+
+### Objetivo
+Tomar una decisión técnica/visual sobre el futuro del terreno antes de seguir
+encima de una base que luego haya que rehacer.
+
+### Opciones a evaluar
+- **Seguir con height function**: barato, bonito, continuo, poco editable a mano.
+- **Migrar a terrain grid editable**: permite valles/crestas diseñados, caminos,
+  terrazas, escalones y eventualmente edición por tools o IA.
+
+### Extras a estudiar
+- **Ríos** como capa de navegación/bioma.
+- **Mapa más grande** o por chunks, apoyado en 0G para persistencia.
+- **Sub-áreas escalables**: colinas, barrancos, puentes, entradas a zonas nuevas.
+- **Compatibilidad con construcción**: cómo se anclan casas, muros y bloques al nuevo relieve.
+
+### Criterios de aceptación (cuando se implemente o decida)
+1. Queda elegida una dirección clara para el sistema de terreno.
+2. Si hay spike/prototipo, muestra al menos una ventaja concreta frente al sistema actual.
+3. La decisión considera móvil, performance y persistencia del mundo.
+
+---
+
+## Prompt 18 — Reparación, durabilidad y mantenimiento del mundo
+
+> Si habrá demonios, sabotaje entre enemigos o simplemente desgaste, hace falta una
+> mecánica de mantenimiento del mundo. También abre espacio para coin sinks y trabajo cooperativo.
+
+### Objetivo
+Introducir una capa ligera de durabilidad/reparación para edificios sin volver el
+juego un simulador de chores.
+
+### Primera versión deseable
+- Cada building puede tener `hp/maxHp` o `condition`.
+- Daño parcial reduce condición, no borra de inmediato.
+- El jugador puede **repair** usando madera, coin o kits.
+- El estado visual cambia con daño ligero/medio/fuerte.
+
+### Cómo conecta con otros sistemas
+- Mercado vende repair kits (Prompt 14).
+- Demonios dañan lentamente (Prompt 15).
+- Aliados pueden ayudar a reparar; enemigos podrían sabotear (Prompt 13).
+- El mundo persistente guarda la condición de los edificios junto con el resto del bundle.
+
+### Criterios de aceptación (cuando se implemente)
+1. Un edificio puede dañarse y luego repararse.
+2. El costo de reparación es menor que reconstruir desde cero, pero no gratis.
+3. El estado dañado/reparado persiste correctamente.
 
 ---
 
