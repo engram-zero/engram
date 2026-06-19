@@ -103,6 +103,7 @@ const HOUSE_WALL_HEIGHT = 1.8;
 const HOUSE_WALL_THICKNESS = 0.16;
 const HOUSE_DOOR_WIDTH = 0.82;
 const HOUSE_DOOR_OFFSET_Z = HOUSE_DEPTH / 2 - HOUSE_WALL_THICKNESS / 2;
+const HOUSE_PORCH_DEPTH = 0.42;
 const HOUSE_ROOF_Y = 2.2;
 const HOUSE_INTERIOR_CAMERA_BOOST = 0.18;
 
@@ -204,6 +205,19 @@ function isInsideStaticCottage(cottage: CottageDef, x: number, z: number) {
   );
 }
 
+function isAtStaticCottageDoor(cottage: CottageDef, x: number, z: number) {
+  const local = toLocalXZ(x, z, cottage.x, cottage.z, cottage.rot);
+  return (
+    Math.abs(local.x) < (HOUSE_DOOR_WIDTH / 2 + 0.18) * cottage.scale &&
+    local.z > (HOUSE_DOOR_OFFSET_Z - 0.18) * cottage.scale &&
+    local.z < (HOUSE_DOOR_OFFSET_Z + HOUSE_PORCH_DEPTH) * cottage.scale
+  );
+}
+
+function staticCottageFloorY(cottage: CottageDef) {
+  return getHeightAt(cottage.x, cottage.z) + 0.12 * cottage.scale;
+}
+
 function normalizeBlockBuilding(candidate: Partial<Building> & Pick<Building, 'x' | 'z'>): Building {
   const scaleRaw = typeof candidate.scale === 'number' ? candidate.scale : BLOCK_UNIT;
   const scale = Math.max(BLOCK_SCALE_MIN, Math.min(BLOCK_SCALE_MAX, Math.round(scaleRaw / BLOCK_UNIT) * BLOCK_UNIT));
@@ -244,7 +258,6 @@ function resolveCollision(x: number, z: number): [number, number] {
     z = (z / d) * WORLD_RADIUS;
   }
   const obstacles = [
-    ...COTTAGES.map((c) => ({ x: c.x, z: c.z, r: c.scale * 1.5 })),
     { x: CAMPFIRE.x, z: CAMPFIRE.z, r: 1.0 },
     ...TREES.map((t, i) => ({ t, i })).filter(({ i }) => !isChopped(i)).map(({ t }) => ({ x: t.x, z: t.z, r: 0.45 * t.scale })),
     ...(Object.values(dynamicNpcState)).map((state) => ({ x: state.x, z: state.z, r: 0.6 })),
@@ -494,8 +507,15 @@ function Player({
     } else {
       footstep.current = 0;
     }
-    // Follow the terrain: ground height under the feet + eye height + head-bob + jump.
-    camera.position.y = getHeightAt(camera.position.x, camera.position.z) + EYE_HEIGHT + bob.current.off + jump.current.y;
+    // Follow the terrain, but let cottages lift the player onto their floor when
+    // they're inside or stepping through the doorway.
+    let groundY = getHeightAt(camera.position.x, camera.position.z);
+    for (const cottage of COTTAGES) {
+      if (isInsideStaticCottage(cottage, camera.position.x, camera.position.z) || isAtStaticCottageDoor(cottage, camera.position.x, camera.position.z)) {
+        groundY = Math.max(groundY, staticCottageFloorY(cottage));
+      }
+    }
+    camera.position.y = groundY + EYE_HEIGHT + bob.current.off + jump.current.y;
     for (const cottage of COTTAGES) {
       if (isInsideStaticCottage(cottage, camera.position.x, camera.position.z)) {
         camera.position.y += HOUSE_INTERIOR_CAMERA_BOOST * cottage.scale * 0.7;
@@ -849,9 +869,17 @@ function Cottage({ def, seed }: { def: CottageDef; seed: number }) {
   const y = getHeightAt(def.x, def.z);
   return (
     <group position={[def.x, y, def.z]} rotation={[0, def.rot, 0]} scale={def.scale}>
-      {/* stone plinth */}
-      <mesh position={[0, 0.1, 0]} castShadow receiveShadow>
-        <boxGeometry args={[3.4, 0.24, 2.8]} />
+      {/* stone plinth with an open front doorway/porch gap */}
+      <mesh position={[0, 0.06, -0.14]} castShadow receiveShadow>
+        <boxGeometry args={[3.4, 0.12, 2.42]} />
+        <meshStandardMaterial color="#5b5048" map={getTextureVariant('stone', seed)} flatShading />
+      </mesh>
+      <mesh position={[-1.16, 0.06, 1.14]} castShadow receiveShadow>
+        <boxGeometry args={[1.08, 0.12, 0.34]} />
+        <meshStandardMaterial color="#5b5048" map={getTextureVariant('stone', seed)} flatShading />
+      </mesh>
+      <mesh position={[1.16, 0.06, 1.14]} castShadow receiveShadow>
+        <boxGeometry args={[1.08, 0.12, 0.34]} />
         <meshStandardMaterial color="#5b5048" map={getTextureVariant('stone', seed)} flatShading />
       </mesh>
       <mesh position={[0, 0.03, 0]} receiveShadow rotation={[-Math.PI / 2, 0, 0]}>
