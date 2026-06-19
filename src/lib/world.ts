@@ -56,7 +56,13 @@ function normalizeBuildings(raw: unknown): Building[] {
   return raw
     .filter((b): b is Building => !!b && (b.type === 'wall' || b.type === 'house' || b.type === 'block') && typeof b.x === 'number' && typeof b.z === 'number')
     .map((b) => {
-      const base: Building = { type: b.type, x: b.x, z: b.z, rot: typeof b.rot === 'number' ? b.rot : 0 };
+      const base: Building = {
+        type: b.type,
+        x: b.x,
+        z: b.z,
+        rot: typeof b.rot === 'number' ? b.rot : 0,
+        woodCost: typeof b.woodCost === 'number' ? Math.max(0, Math.round(b.woodCost)) : undefined,
+      };
       if (b.type === 'block') {
         base.y = typeof b.y === 'number' ? b.y : 0;
         base.scale = typeof b.scale === 'number' ? b.scale : BLOCK_UNIT;
@@ -232,10 +238,11 @@ export function harvestTree(index: number): { depleted: boolean; gained: boolean
 export function placeBuilding(b: Building, cost: number = BUILD_COST[b.type]): boolean {
   const freeBuild = isLocalhostFreeBuildWallet();
   if (!freeBuild && state.inventory.wood < cost) return false;
+  const nextBuilding: Building = { ...b, woodCost: freeBuild ? 0 : cost };
   commit({
     ...state,
     inventory: { ...state.inventory, wood: freeBuild ? MAX_WOOD : state.inventory.wood - cost },
-    buildings: [...state.buildings, b],
+    buildings: [...state.buildings, nextBuilding],
   });
   return true;
 }
@@ -243,7 +250,9 @@ export function placeBuilding(b: Building, cost: number = BUILD_COST[b.type]): b
 /** Demolish a building by index, refunding half its wood (capped). */
 export function removeBuilding(index: number) {
   if (index < 0 || index >= state.buildings.length) return;
-  const refund = Math.floor(BUILD_COST[state.buildings[index].type] / 2);
+  const built = state.buildings[index];
+  const refundBase = built.woodCost ?? BUILD_COST[built.type];
+  const refund = Math.max(0, Math.floor(refundBase * 0.5));
   commit({
     ...state,
     inventory: { ...state.inventory, wood: Math.min(MAX_WOOD, state.inventory.wood + refund) },

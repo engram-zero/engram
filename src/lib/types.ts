@@ -18,6 +18,8 @@ export interface Building {
   x: number;
   z: number;
   rot: number;
+  /** How much wood this placement originally cost. Used for partial demolition refunds. */
+  woodCost?: number;
   /** Block only: centre height above the ground. */
   y?: number;
   /** Block only: hex colour. */
