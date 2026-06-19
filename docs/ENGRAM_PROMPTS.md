@@ -25,6 +25,7 @@
 10. [Mercado: vender recursos a los NPCs → reputación en 0G](#prompt-10--mercado-vender-recursos--reputación) — ✅ v1 done (venta simple + reputación); v2 regateo pendiente
 11. [Construcción con IA + tokens (describir y que la IA edifique)](#prompt-11--construcción-con-ia--tokens) — ✅ done (`/api/build` + modal; **bloques voxel** refinados a grid fino, preview, costo USD, tope de gasto, BYO key)
 12. [Edificios habitables (entrar dentro)](#prompt-12--edificios-habitables-entrar) — ✅ done (casas huecas con puerta libre)
+13. [Relaciones entre players: aliados, enemigos y sabotaje](#prompt-13--relaciones-entre-players-aliados-enemigos-y-sabotaje) — ⏳ pendiente
 
 > **Tareas no-código (ADMIN):** ✅ deploy a Vercel + env vars · ✅ save a 0G end-to-end ·
 > ⏳ actualizar la Description del dashboard 0g.ai (versión honesta) ·
@@ -694,6 +695,51 @@ precios/diálogo**. Empezar simple; el regateo con LLM es v2.
 2. El techo no bloquea la cámara en primera persona de forma molesta (subir un poco o
    recortar al entrar).
 3. `tsc` limpio.
+
+---
+
+## Prompt 13 — Relaciones entre players: aliados, enemigos y sabotaje
+
+> Nueva línea de diseño social: que los jugadores puedan declararse **aliados** o
+> **enemigos**, y que eso abra juego emergente real sobre el mundo persistente
+> guardado en 0G. La idea detonadora: permitir que un enemigo pueda **demoler o
+> saquear** parte de lo construido por otro player para obtener recursos, mientras
+> los aliados tengan protecciones o permisos compartidos.
+
+### Objetivo
+Modelar relaciones explícitas entre wallets para que el mundo persistente no sea
+solo “mi aldea privada”, sino un espacio social con cooperación, protección y
+conflicto controlado.
+
+### Primera versión a explorar
+- Añadir una relación por wallet: `neutral | allied | hostile`.
+- UI mínima para marcar a otro player como aliado o enemigo desde el overlay del
+  mundo público o una lista de wallets encontradas.
+- **Aliados**:
+  - pueden recibir permisos futuros sobre construcción/reparación compartida;
+  - podrían quedar excluidos de trampas o de fuego amigo.
+- **Enemigos**:
+  - pueden habilitar mecánicas futuras de raid/sabotaje;
+  - ejemplo inicial: demoler parcialmente edificios del rival y recuperar solo una
+    fracción de la madera, nunca tokens.
+
+### Restricciones / fairness
+- No permitir griefing irreversible offline desde el día 1.
+- Si existe sabotaje, debe ir acompañado de límites: ventanas horarias, costo,
+  enfriamientos, daño lento o necesidad de presencia sostenida.
+- Todo vínculo ally/enemy debe persistirse de forma portable (idealmente en el
+  mismo bundle o en un índice claro por wallet).
+
+### Preguntas abiertas
+- ¿La relación debe ser unilateral o mutua?
+- ¿Puede alguien atacar sin “declarar enemistad” primero?
+- ¿Qué ve el jugador víctima en el replay/log de daños?
+- ¿Cómo se integra con el sistema futuro de NPC trust, guardias y mercado?
+
+### Criterios de aceptación (cuando se implemente)
+1. Un player puede marcar a otro como aliado o enemigo y esa relación persiste.
+2. El mundo/UI refleja esa relación con feedback claro.
+3. Las futuras acciones de sabotaje o cooperación respetan esa relación y quedan auditables.
 
 ---
 
