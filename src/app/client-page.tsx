@@ -15,7 +15,7 @@ import { useWallet } from '@/hooks/useWallet';
 import { NPC_LIST } from '@/lib/npcs';
 import type { NPCName, NPCMemory } from '@/lib/types';
 import { readAllMemories, writeMemory, getBundleRoot } from '@/lib/memory';
-import { initWorld, setWorldPersistence } from '@/lib/world';
+import { addResource, initWorld, setWorldPersistence, useWorld } from '@/lib/world';
 import { createBundleWorldPersistence } from '@/lib/world-0g';
 import { startPublicWorldPolling } from '@/lib/public-world';
 import { Portrait } from '@/components/engram/Art';
@@ -69,12 +69,51 @@ function trustColor(t: number) {
   return '#cc5a4a';
 }
 
+const ALDRIC_WOOD_PRICE = 2;
+
+function clampInt(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, Math.round(value)));
+}
+
+function applyAldricSale(memory: NPCMemory, quantity: number, totalCoins: number): NPCMemory {
+  const trustDelta = clampInt(1 + Math.floor(quantity / 4), 1, 5);
+  const nextTrust = clampInt(memory.trust_level + trustDelta, 0, 100);
+  const emotionalState = nextTrust >= 75 ? 'warm' : nextTrust >= 60 ? 'pleased' : 'interested';
+
+  return {
+    ...memory,
+    trust_level: nextTrust,
+    emotional_state: emotionalState,
+    last_seen: Date.now(),
+    interaction_history: [
+      ...memory.interaction_history,
+      {
+        at: Date.now(),
+        player: `Sold ${quantity} wood for ${totalCoins} coin.`,
+        summary: `Bought ${quantity} wood and paid ${totalCoins} coin without trouble.`,
+        trust_delta: trustDelta,
+      },
+    ].slice(-50),
+  };
+}
+
+function aldricSaleDialogue(trustLevel: number, quantity: number, totalCoins: number) {
+  if (trustLevel >= 75) {
+    return `Aldric counts out ${totalCoins} coin for ${quantity} wood and gives you a knowing nod. "Clean timber, prompt trade. You may yet become one of my preferred sellers."`;
+  }
+  if (trustLevel >= 60) {
+    return `Aldric weighs the bundle, pays ${totalCoins} coin, and tucks the ${quantity} wood aside. "Fair stock. Keep bringing it like this and I'll remember your name kindly."`;
+  }
+  return `Aldric takes the ${quantity} wood, stacks ${totalCoins} coin into your palm, and squints at you over the ledger. "A straight trade. Keep it that way, and we'll get along."`;
+}
+
 // ─── Game ─────────────────────────────────────────────────────────────────────
 
 function Game() {
   const { address, isConnected } = useWallet();
   const { networkType } = useNetwork();
   const { play } = useEngramAudio();
+  const world = useWorld();
 
   const [memories, setMemories] = useState<Record<NPCName, NPCMemory> | null>(null);
   const [active, setActive] = useState<NPCName | null>(null);
@@ -84,6 +123,8 @@ function Game() {
   const [dirty, setDirty] = useState<Partial<Record<NPCName, boolean>>>({});
   const [save, setSave] = useState<SaveState>({ status: 'idle' });
   const [err, setErr] = useState<string | null>(null);
+  const [merchantQty, setMerchantQty] = useState(1);
+  const [merchantMsg, setMerchantMsg] = useState<string | null>(null);
   // "Explore as guest" — roam Aldenmoor without a wallet (no dialogue/saving).
   // The best mobile fallback when there's no injected wallet / WalletConnect.
   const [guest, setGuest] = useState(false);
@@ -151,6 +192,8 @@ function Game() {
 
   function openDialogue(npc: NPCName) {
     void play('dialogue_open');
+    setMerchantQty(1);
+    setMerchantMsg(null);
     setActive(npc);
     setSave({ status: 'idle' });
     setScene({ dialogue: '', options: [], loading: true });
@@ -160,7 +203,34 @@ function Game() {
   function say(npc: NPCName, message: string) {
     if (!message.trim() || scene.loading) return;
     setTyped('');
+    setMerchantMsg(null);
     runTurn(npc, message.trim());
+  }
+
+  async function sellWoodToAldric() {
+    if (!memories || active !== 'aldric' || scene.loading) return;
+    const availableWood = Math.max(0, world.inventory.wood);
+    if (availableWood <= 0) {
+      setMerchantMsg('You have no wood to sell.');
+      return;
+    }
+
+    const quantity = clampInt(merchantQty, 1, availableWood);
+    const totalCoins = quantity * ALDRIC_WOOD_PRICE;
+    const nextMemory = applyAldricSale(memories.aldric, quantity, totalCoins);
+
+    await addResource('wood', -quantity);
+    await addResource('coin', totalCoins);
+
+    setMemories((prev) => (prev ? { ...prev, aldric: nextMemory } : prev));
+    setDirty((d) => ({ ...d, aldric: true }));
+    setMerchantQty((prev) => clampInt(prev, 1, Math.max(1, availableWood - quantity)));
+    setMerchantMsg(`Sold ${quantity} wood for ${totalCoins} coin. Aldric's trust +${nextMemory.trust_level - memories.aldric.trust_level}.`);
+    setScene((s) => ({
+      ...s,
+      dialogue: aldricSaleDialogue(nextMemory.trust_level, quantity, totalCoins),
+      loading: false,
+    }));
   }
 
   // Leaving an NPC persists that conversation to 0G and anchors the new root if needed.
@@ -333,10 +403,55 @@ function Game() {
               <button onClick={() => say(active, typed)} disabled={scene.loading} className="bg-black/40 border border-[#5a4a28] hover:border-[#d6b84a] rounded-md px-3 py-2 text-sm disabled:opacity-40">
                 Say
               </button>
+              {active === 'aldric' && (
+                <button
+                  onClick={sellWoodToAldric}
+                  disabled={scene.loading || world.inventory.wood <= 0}
+                  className="bg-black/40 border border-[#8a6a32] hover:border-[#d6b84a] rounded-md px-3 py-2 text-sm disabled:opacity-40"
+                >
+                  Sell wood
+                </button>
+              )}
               <button onClick={leave} className="bg-black/40 border border-[#5a4a28] hover:border-[#d6b84a] rounded-md px-3 py-2 text-sm text-[#d89]">
                 Leave & save
               </button>
             </div>
+
+            {active === 'aldric' && (
+              <div className="mt-3.5 rounded-xl border border-[#6a5832] bg-black/25 px-4 py-3">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                  <span className="text-[#d6b84a]">Aldric pays {ALDRIC_WOOD_PRICE} coin / wood</span>
+                  <span>Your wood: <strong>{world.inventory.wood}</strong></span>
+                  <span>Your coin: <strong>{world.inventory.coin}</strong></span>
+                  <span>
+                    Reputation: <strong style={{ color: trustColor(memories?.aldric.trust_level ?? 50) }}>{memories?.aldric.trust_level ?? 50}/100</strong>
+                  </span>
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <label className="text-sm text-[#f4e8d0]/85" htmlFor="aldric-sell-qty">
+                    Wood to sell
+                  </label>
+                  <input
+                    id="aldric-sell-qty"
+                    type="number"
+                    min={1}
+                    max={Math.max(1, world.inventory.wood)}
+                    inputMode="numeric"
+                    value={merchantQty}
+                    disabled={scene.loading || world.inventory.wood <= 0}
+                    onChange={(e) => setMerchantQty(clampInt(Number(e.target.value || 1), 1, Math.max(1, world.inventory.wood)))}
+                    className="w-24 bg-black/40 border border-[#5a4a28] focus:border-[#d6b84a] outline-none rounded-md px-3 py-2 text-sm"
+                  />
+                  <span className="text-sm text-[#f4e8d0]/75">
+                    Total: <strong>{clampInt(merchantQty, 1, Math.max(1, world.inventory.wood)) * ALDRIC_WOOD_PRICE}</strong> coin
+                  </span>
+                </div>
+                <div className="mt-2 text-xs text-[#f4e8d0]/65">
+                  Selling updates your local resource draft immediately; Aldric&apos;s memory is persisted when you use <strong>Leave &amp; save</strong>.
+                </div>
+                {merchantMsg && <div className="mt-2 text-sm text-[#d6b84a]">{merchantMsg}</div>}
+              </div>
+            )}
           </div>
         </div>
       )}
