@@ -278,3 +278,20 @@ en `Player`: al presionar Space estando en el suelo, lanza con `JUMP_SPEED` y ca
 por pulsación (sin rebote al mantener). Actualiza el hint de FP. Verifica con `tsc`.
 **Qué se hizo:** binding + refs `jump` + física en el frame del Player; hint "Space jump".
 **Commit:** `745a143`
+
+### 18 jun 2026 · Luz ambiente legible + guardado NPC estable
+**Pedido (humano):** Corregir dos cosas: 1) cuando oscurece, dejar suficiente luz de
+"ambiente" para ver piso, árboles y la escena en general, sin que se sienta todo opaco ni
+de noche ni de día; 2) al hablar con un NPC y usar "leave and save", corregir los errores
+de guardado (`503` / `500`). Hacer cada arreglo en un commit separado.
+**Prompt sintetizado:** Rebalancea `computeDayNight()` para mantener una base de visibilidad
+en la noche y ajustar ambiente/cielo/niebla/luz direccional sin romper la atmósfera.
+Después, arregla el guardado de memoria del juego aislándolo del indexer `standard` de 0G,
+que hoy devuelve `503`: haz que el bundle de NPCs/mundo lea y escriba por Turbo aunque la UI
+esté en Standard, y registra tanto la red solicitada como la efectiva en logs. Verifica con
+`npx tsc --noEmit` y deja los arreglos en commits separados.
+**Qué se hizo:** subí el piso de visibilidad nocturna y rebalanceé ambiente, cielo, niebla
+y luz direccional para que el mundo siga legible. Luego encapsulé la memoria del juego para
+que use Turbo al leer/escribir el bundle aunque el toggle esté en Standard, evitando los
+`503` del indexer deprecated y los `500` posteriores en `leave and save`. **Commit:**
+`c765226`, `c81ec4f`
