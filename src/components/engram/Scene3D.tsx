@@ -2187,6 +2187,7 @@ export interface DayNight {
   dirColor: string;
   turbidity: number;
   rayleigh: number;
+  skyVisible: boolean;
   starsVisible: boolean;
   torchesLit: boolean;
   /** Visible celestial discs (sun by day, moon by night) — both ride an arc and
@@ -2234,7 +2235,7 @@ export function computeDayNight(hour: number): DayNight {
 
   return {
     sunPos: [sunX * 90, sunY * 80, -55], // drives the <Sky> shader (dark when sunY<0)
-    bg: mixColor('#25344f', '#a8caee', visible),
+    bg: mixColor('#020304', '#a8caee', visible),
     fog: mixColor('#31435d', '#b8d0e8', visible),
     ambIntensity: mix(1.18, 1.72, visible),
     ambColor: mixColor('#b4c3e5', '#fff3e0', visible),
@@ -2246,6 +2247,7 @@ export function computeDayNight(hour: number): DayNight {
     dirColor: mixColor('#d3def7', '#fff1d6', visible),
     turbidity: mix(7.2, 10.8, visible),
     rayleigh: mix(0.8, 1.55, visible),
+    skyVisible: sunY > -0.06,
     starsVisible: sunY < 0.05,
     torchesLit: sunY < 0.12,
     sunVisible: sunY > 0.02,
@@ -2766,7 +2768,9 @@ export default function Scene3D({ memories = null, active = null, talking = fals
 
           {/* Skydome — the sun position follows the player's local clock, so the
               drei <Sky> shader paints day, dusk and night automatically. */}
-          <Sky distance={450000} sunPosition={dn.sunPos} turbidity={dn.turbidity} rayleigh={dn.rayleigh} mieCoefficient={0.02} mieDirectionalG={0.86} />
+          {dn.skyVisible && (
+            <Sky distance={450000} sunPosition={dn.sunPos} turbidity={dn.turbidity} rayleigh={dn.rayleigh} mieCoefficient={0.02} mieDirectionalG={0.86} />
+          )}
 
           {/* Lighting scales with time of day: warm strong sun at noon, dim cool
               moonlight at night (the key light follows the same sun/moon arc). */}
