@@ -179,6 +179,32 @@ function isInsideHouseInterior(house: Building, x: number, z: number) {
   );
 }
 
+function resolveStaticCottageCollision(x: number, z: number): [number, number] {
+  let nextX = x;
+  let nextZ = z;
+  for (const cottage of COTTAGES) {
+    const scaledBoxes = HOUSE_WALL_BOXES.map((box) => ({
+      cx: box.cx * cottage.scale,
+      cz: box.cz * cottage.scale,
+      hx: box.hx * cottage.scale,
+      hz: box.hz * cottage.scale,
+    }));
+    for (const box of scaledBoxes) {
+      [nextX, nextZ] = pushOutOfRotatedBox(nextX, nextZ, cottage.x, cottage.z, cottage.rot, box, PLAYER_RADIUS);
+    }
+  }
+  return [nextX, nextZ];
+}
+
+function isInsideStaticCottage(cottage: CottageDef, x: number, z: number) {
+  const local = toLocalXZ(x, z, cottage.x, cottage.z, cottage.rot);
+  return (
+    Math.abs(local.x) < (HOUSE_WIDTH / 2 - HOUSE_WALL_THICKNESS * 1.4) * cottage.scale &&
+    local.z > (-HOUSE_DEPTH / 2 + HOUSE_WALL_THICKNESS * 1.4) * cottage.scale &&
+    local.z < (HOUSE_DEPTH / 2 - HOUSE_WALL_THICKNESS * 1.4) * cottage.scale
+  );
+}
+
 function normalizeBlockBuilding(candidate: Partial<Building> & Pick<Building, 'x' | 'z'>): Building {
   const scaleRaw = typeof candidate.scale === 'number' ? candidate.scale : BLOCK_UNIT;
   const scale = Math.max(BLOCK_SCALE_MIN, Math.min(BLOCK_SCALE_MAX, Math.round(scaleRaw / BLOCK_UNIT) * BLOCK_UNIT));
@@ -234,6 +260,7 @@ function resolveCollision(x: number, z: number): [number, number] {
       z += (dz / dist) * push;
     }
   }
+  [x, z] = resolveStaticCottageCollision(x, z);
   for (const b of getWorld().buildings) {
     if (b.type === 'block') continue;
     if (b.type === 'house') {
@@ -468,6 +495,12 @@ function Player({
     }
     // Follow the terrain: ground height under the feet + eye height + head-bob + jump.
     camera.position.y = getHeightAt(camera.position.x, camera.position.z) + EYE_HEIGHT + bob.current.off + jump.current.y;
+    for (const cottage of COTTAGES) {
+      if (isInsideStaticCottage(cottage, camera.position.x, camera.position.z)) {
+        camera.position.y += HOUSE_INTERIOR_CAMERA_BOOST * cottage.scale * 0.7;
+        break;
+      }
+    }
     for (const house of getWorld().buildings) {
       if (house.type === 'house' && isInsideHouseInterior(house, camera.position.x, camera.position.z)) {
         camera.position.y += HOUSE_INTERIOR_CAMERA_BOOST;
@@ -817,62 +850,71 @@ function Cottage({ def, seed }: { def: CottageDef; seed: number }) {
     <group position={[def.x, y, def.z]} rotation={[0, def.rot, 0]} scale={def.scale}>
       {/* stone plinth */}
       <mesh position={[0, 0.1, 0]} castShadow receiveShadow>
-        <boxGeometry args={[2.7, 0.2, 2.3]} />
+        <boxGeometry args={[3.4, 0.24, 2.8]} />
         <meshStandardMaterial color="#5b5048" map={getTextureVariant('stone', seed)} flatShading />
       </mesh>
-      {/* body */}
-      <mesh position={[0, 1.05, 0]} castShadow receiveShadow>
-        <boxGeometry args={[2.4, 1.8, 2.0]} />
-        <meshStandardMaterial color={def.body} map={getTextureVariant('cottage_wood', seed)} flatShading />
+      <mesh position={[0, 0.03, 0]} receiveShadow rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[HOUSE_WIDTH - 0.14, HOUSE_DEPTH - 0.14]} />
+        <meshStandardMaterial color="#2f2a1f" map={getTextureVariant('terrain_grass', seed)} flatShading />
       </mesh>
+      {HOUSE_WALL_BOXES.map((wall, i) => (
+        <mesh key={i} position={[wall.cx, HOUSE_WALL_HEIGHT / 2, wall.cz]} castShadow receiveShadow>
+          <boxGeometry args={[wall.hx * 2, HOUSE_WALL_HEIGHT, wall.hz * 2]} />
+          <meshStandardMaterial color={def.body} map={getTextureVariant('cottage_wood', seed)} flatShading />
+        </mesh>
+      ))}
       {/* corner beams */}
-      {([[-1.2, -1.0], [1.2, -1.0], [-1.2, 1.0], [1.2, 1.0]] as [number, number][]).map(([x, z], i) => (
-        <mesh key={i} position={[x, 1.05, z]} castShadow>
-          <boxGeometry args={[0.16, 1.85, 0.16]} />
+      {([[-HOUSE_WIDTH / 2, -HOUSE_DEPTH / 2], [HOUSE_WIDTH / 2, -HOUSE_DEPTH / 2], [-HOUSE_WIDTH / 2, HOUSE_DEPTH / 2], [HOUSE_WIDTH / 2, HOUSE_DEPTH / 2]] as [number, number][]).map(([x, z], i) => (
+        <mesh key={i} position={[x, HOUSE_WALL_HEIGHT / 2, z]} castShadow>
+          <boxGeometry args={[0.16, HOUSE_WALL_HEIGHT + 0.05, 0.16]} />
           <meshStandardMaterial color="#4a3424" flatShading />
         </mesh>
       ))}
       {/* gable roof — two slopes meeting at a ridge running along X */}
-      <mesh position={[0, 2.2, -0.66]} rotation={[-0.62, 0, 0]} castShadow>
-        <boxGeometry args={[2.8, 0.14, 1.6]} />
+      <mesh position={[0, 2.34, -0.78]} rotation={[-0.62, 0, 0]} castShadow>
+        <boxGeometry args={[3.6, 0.16, 1.95]} />
         <meshStandardMaterial color={def.roof} map={getTextureVariant('cottage_roof', seed)} flatShading />
       </mesh>
-      <mesh position={[0, 2.2, 0.66]} rotation={[0.62, 0, 0]} castShadow>
-        <boxGeometry args={[2.8, 0.14, 1.6]} />
+      <mesh position={[0, 2.34, 0.78]} rotation={[0.62, 0, 0]} castShadow>
+        <boxGeometry args={[3.6, 0.16, 1.95]} />
         <meshStandardMaterial color={def.roof} map={getTextureVariant('cottage_roof', seed)} flatShading />
       </mesh>
-      <mesh position={[0, 2.62, 0]}>
-        <boxGeometry args={[2.9, 0.12, 0.12]} />
+      <mesh position={[0, 2.86, 0]}>
+        <boxGeometry args={[3.64, 0.13, 0.13]} />
         <meshStandardMaterial color="#3a2a1a" flatShading />
       </mesh>
-      {/* door + frame */}
-      <mesh position={[0, 0.7, 1.04]}>
-        <boxGeometry args={[0.74, 1.44, 0.04]} />
+      {/* door lintel + open doorway */}
+      <mesh position={[0, 1.66, HOUSE_DOOR_OFFSET_Z]}>
+        <boxGeometry args={[HOUSE_DOOR_WIDTH, 0.18, 0.08]} />
         <meshStandardMaterial color="#2a1a10" flatShading />
       </mesh>
-      <mesh position={[0, 0.7, 1.06]}>
-        <boxGeometry args={[0.6, 1.3, 0.04]} />
+      <mesh position={[-0.47, 0.78, 1.06]}>
+        <boxGeometry args={[0.14, 1.42, 0.06]} />
+        <meshStandardMaterial color="#5a3a1f" flatShading />
+      </mesh>
+      <mesh position={[0.47, 0.78, 1.06]}>
+        <boxGeometry args={[0.14, 1.42, 0.06]} />
         <meshStandardMaterial color="#5a3a1f" flatShading />
       </mesh>
       {/* windows: dark frame + warm glow */}
-      {[-0.78, 0.78].map((x, i) => (
-        <group key={i} position={[x, 1.2, 1.01]}>
+      {[-0.92, 0.92].map((x, i) => (
+        <group key={i} position={[x, 1.24, 1.01]}>
           <mesh>
-            <boxGeometry args={[0.5, 0.5, 0.05]} />
+            <boxGeometry args={[0.56, 0.56, 0.05]} />
             <meshStandardMaterial color="#2a1a10" flatShading />
           </mesh>
           <mesh position={[0, 0, 0.04]}>
-            <planeGeometry args={[0.36, 0.36]} />
+            <planeGeometry args={[0.4, 0.4]} />
             <meshBasicMaterial color="#ffcf7a" />
           </mesh>
         </group>
       ))}
       {/* chimney + smoke */}
-      <mesh position={[0.8, 2.55, -0.25]} castShadow>
-        <boxGeometry args={[0.34, 1.1, 0.34]} />
+      <mesh position={[1.0, 2.72, -0.34]} castShadow>
+        <boxGeometry args={[0.38, 1.26, 0.38]} />
         <meshStandardMaterial color="#5a4a40" map={getTextureVariant('stone', seed)} flatShading />
       </mesh>
-      <ChimneySmoke origin={[0.8, 3.15, -0.25]} />
+      <ChimneySmoke origin={[1.0, 3.45, -0.34]} />
     </group>
   );
 }

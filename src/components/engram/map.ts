@@ -62,12 +62,12 @@ export interface CottageDef {
 }
 
 export const COTTAGES: CottageDef[] = [
-  { x: -7, z: -4, body: '#7a5a3a', roof: '#8a3a2a', scale: 1.3, rot: 0.22 },
-  { x: -4.6, z: -7.4, body: '#6a4a32', roof: '#7a4a2a', scale: 1.12, rot: -0.32 },
-  { x: 4.8, z: -6.6, body: '#7a5a3a', roof: '#5a3a6a', scale: 1.18, rot: 0.16 },
-  { x: 8.4, z: -3.2, body: '#6a4a32', roof: '#8a3a2a', scale: 1.34, rot: -0.5 },
-  { x: -9.8, z: 4.6, body: '#785536', roof: '#7a4a2a', scale: 1.16, rot: 0.62 },
-  { x: 9.4, z: 5.4, body: '#6f4f33', roof: '#7a3a2a', scale: 1.22, rot: -0.7 },
+  { x: -7, z: -4, body: '#7a5a3a', roof: '#8a3a2a', scale: 1.95, rot: 0.22 },
+  { x: -4.6, z: -7.4, body: '#6a4a32', roof: '#7a4a2a', scale: 1.72, rot: -0.32 },
+  { x: 4.8, z: -6.6, body: '#7a5a3a', roof: '#5a3a6a', scale: 1.78, rot: 0.16 },
+  { x: 8.4, z: -3.2, body: '#6a4a32', roof: '#8a3a2a', scale: 2.02, rot: -0.5 },
+  { x: -9.8, z: 4.6, body: '#785536', roof: '#7a4a2a', scale: 1.76, rot: 0.62 },
+  { x: 9.4, z: 5.4, body: '#6f4f33', roof: '#7a3a2a', scale: 1.84, rot: -0.7 },
 ];
 
 export const CAMPFIRE: { x: number; z: number } = { x: 0, z: 2.6 };
@@ -123,7 +123,6 @@ export interface Collider {
 }
 
 export const COLLIDERS: Collider[] = [
-  ...COTTAGES.map((c) => ({ x: c.x, z: c.z, r: c.scale * 1.5 })),
   { x: CAMPFIRE.x, z: CAMPFIRE.z, r: 1.0 },
   // Only trees the player can actually reach (inside the boundary) need a collider.
   ...TREES.filter((t) => Math.hypot(t.x, t.z) < WORLD_RADIUS + 2).map((t) => ({
