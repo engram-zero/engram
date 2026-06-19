@@ -16,7 +16,6 @@ import { BLOCK_SCALE_MAX, BLOCK_SCALE_MIN, BLOCK_UNIT, type NPCName, type NPCMem
 import { writeWorldState } from '@/lib/memory';
 import {
   getHeightAt,
-  COLLIDERS,
   COTTAGES,
   TREES,
   CAMPFIRE,
@@ -245,7 +244,9 @@ function resolveCollision(x: number, z: number): [number, number] {
     z = (z / d) * WORLD_RADIUS;
   }
   const obstacles = [
-    ...COLLIDERS,
+    ...COTTAGES.map((c) => ({ x: c.x, z: c.z, r: c.scale * 1.5 })),
+    { x: CAMPFIRE.x, z: CAMPFIRE.z, r: 1.0 },
+    ...TREES.map((t, i) => ({ t, i })).filter(({ i }) => !isChopped(i)).map(({ t }) => ({ x: t.x, z: t.z, r: 0.45 * t.scale })),
     ...(Object.values(dynamicNpcState)).map((state) => ({ x: state.x, z: state.z, r: 0.6 })),
     ...(Object.values(dynamicEnemyState)).filter((s) => !s.dead).map((s) => ({ x: s.x, z: s.z, r: 0.5 })),
   ];
