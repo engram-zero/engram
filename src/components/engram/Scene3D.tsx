@@ -2225,6 +2225,7 @@ export function computeDayNight(hour: number): DayNight {
   // Keep a visibility floor so night still reads as night, but terrain, trees and
   // silhouettes don't collapse into pure black.
   const visible = 0.32 + daylight * 0.68;
+  const skyVisible = Math.max(0, Math.min(1, (sunY - 0.02) / 0.28));
 
   // Moon rides its own arc across the night (sunset → sunrise).
   const nightLen = 24 - dayLen;
@@ -2235,7 +2236,7 @@ export function computeDayNight(hour: number): DayNight {
 
   return {
     sunPos: [sunX * 90, sunY * 80, -55], // drives the <Sky> shader (dark when sunY<0)
-    bg: mixColor('#020304', '#a8caee', visible),
+    bg: mixColor('#000000', '#a8caee', visible),
     fog: mixColor('#31435d', '#b8d0e8', visible),
     ambIntensity: mix(1.18, 1.72, visible),
     ambColor: mixColor('#b4c3e5', '#fff3e0', visible),
@@ -2247,7 +2248,7 @@ export function computeDayNight(hour: number): DayNight {
     dirColor: mixColor('#d3def7', '#fff1d6', visible),
     turbidity: mix(7.2, 10.8, visible),
     rayleigh: mix(0.8, 1.55, visible),
-    skyVisible: sunY > -0.06,
+    skyVisible: skyVisible > 0.02,
     starsVisible: sunY < 0.05,
     torchesLit: sunY < 0.12,
     sunVisible: sunY > 0.02,
