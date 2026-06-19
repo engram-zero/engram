@@ -23,7 +23,9 @@ via `/api/build`, with preview, USD cost estimate + spend cap, and distance-base
 around a protected village core); **world state persisted on 0G** (a *second* real 0G use
 case — inventory/chopped trees/buildings ride the same wallet bundle, with a **Save World**
 button and a read-only **public world** showing other wallets' builds); mobile/touch
-controls (drag joystick, touch look, no-scroll) + a no-wallet **guest mode**.
+controls (drag joystick, touch look, no-scroll) + a no-wallet **guest mode**; **Aldric's
+merchant loop** (sell wood for coin, raising his trust/memory); and **audio scaffolding**
+(silent-safe cues wired for ambience/foley/UI, awaiting assets/mute/positional polish).
 
 ## 0G integration gotchas (READ before touching storage)
 These cost a long debugging session; keep them in mind.
@@ -102,5 +104,5 @@ better pending/saved feedback or a relayer/meta-tx flow.
 - [ ] Update the 0g.ai dashboard **Description** to the corrected, honest copy (no
       "MetaMask signature / no server / cross-device" — see README / chat history).
 - [ ] (Optional) 2–3 min demo video.
-- [ ] Backlog in `docs/ENGRAM_PROMPTS.md`: mobile (4), textures (5), audio (6),
-      deferred 429-UX check (7), richer world loop/economy (8b+).
+- [ ] Backlog in `docs/ENGRAM_PROMPTS.md`: audio polish (6: mute + positional fire),
+      deferred 429-UX check (7), richer world loop/economy follow-ups (8c+, 10 v2, 12).

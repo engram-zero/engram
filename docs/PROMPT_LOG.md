@@ -335,3 +335,19 @@ Verifica con `npx tsc --noEmit` y deja el cambio en commit separado.
 conecté loops de grillos/fogata y one-shots de pasos, salto, caída, hachazo, ataque,
 abrir/cerrar diálogo y save éxito/error; documenté los archivos esperados en
 `docs/AUDIO_ASSETS.md`. **Commit:** `63893ed`
+
+### 18 jun 2026 · Prompt 10: vender madera a Aldric → reputación persistente
+**Pedido (humano):** Implementar el Prompt 10 y luego revisar los docs, sobre todo
+`ENGRAM_PROMPTS.md`, para que todo quede alineado; dejarlo en dos commits con pushes
+separados.
+**Prompt sintetizado:** Cierra el MVP del mercado de Aldric sin añadir infraestructura
+nueva: dentro del diálogo, añade una acción clara para vender madera con precio fijo,
+selector de cantidad, feedback de monedas y reputación, y aplica la venta tanto al
+inventario local del jugador como a la memoria persistente de Aldric. La venta debe subir
+su `trust`, quedar visible en 📜 Memory y guardarse en 0G al usar **Leave & save**. Luego
+alinea `ENGRAM_PROMPTS.md` y los docs de estado para reflejar que Prompt 10 v1 ya existe y
+que Prompt 6 está parcialmente cableado.
+**Qué se hizo:** añadí el panel de venta de Aldric dentro del diálogo (precio fijo, cantidad,
+wood/coin y trust visibles), la venta descuenta madera, da coins y registra una interacción
+positiva en la memoria de Aldric. Después actualicé `ENGRAM_PROMPTS.md` y `STATUS.md` para
+marcar Prompt 10 v1 como hecho y Prompt 6 como parcial. **Commit:** `4221244` (código) + este commit (docs).

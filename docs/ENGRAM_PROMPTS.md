@@ -18,11 +18,11 @@
 3. [Protección de coste/abuso en /api/npc (rate limit)](#prompt-3--rate-limit--anti-abuso-en-apinpc) — ✅ done
 4. [Controles móviles / táctiles (sin pointer lock)](#prompt-4--controles-móviles--táctiles) — ✅ done (joystick de arrastre, look táctil en 1ª persona, toggle de vista, sin scroll iOS, modo demo)
 5. [Texturas PNG en lugar de materiales planos](#prompt-5--texturas-png) — ✅ done (22 texturas en webp; ver [`ART_ASSETS.md`](ART_ASSETS.md))
-6. [Audio ambiental (fogata, pasos, noche)](#prompt-6--audio-ambiental) — ⏳ pendiente
+6. [Audio ambiental (fogata, pasos, noche)](#prompt-6--audio-ambiental) — 🟡 partial: infraestructura + cues cableados; faltan mute y fogata posicional
 7. [Verificar end-to-end la UX del 429 en el cliente](#prompt-7--verificación-diferida-ux-del-429) — ⏳ diferida (ver precondición)
 8. [Visión: gameplay loop, doble vista y mundo persistente en 0G](#prompt-8--visión-gameplay-loop--doble-vista) — 🟡 partial: 8a done, 8b persistencia MVP done (martelaxe)
 9. [Construir edificios + persistir el mundo en 0G](#prompt-9--construir--persistir-el-mundo-en-0g) — ✅ 9a (gameplay + zonas/precios) y 9b (persistencia 0G, martelaxe) hechos
-10. [Mercado: vender recursos a los NPCs → reputación en 0G](#prompt-10--mercado-vender-recursos--reputación) — ⏳ pendiente
+10. [Mercado: vender recursos a los NPCs → reputación en 0G](#prompt-10--mercado-vender-recursos--reputación) — ✅ v1 done (venta simple + reputación); v2 regateo pendiente
 11. [Construcción con IA + tokens (describir y que la IA edifique)](#prompt-11--construcción-con-ia--tokens) — ✅ done (`/api/build` + modal; **bloques voxel**, preview, costo USD, tope de gasto, BYO key)
 12. [Edificios habitables (entrar dentro)](#prompt-12--edificios-habitables-entrar) — ⏳ pendiente
 
@@ -356,6 +356,14 @@ superficies grandes, reutilizando materiales (una textura → un material compar
 
 ## Prompt 6 — Audio ambiental
 
+> **🟡 PARTIAL — 18 jun 2026.** Ya existe la infraestructura cliente en
+> [`src/context/AudioContext.tsx`](../src/context/AudioContext.tsx) +
+> [`src/lib/audio/manifest.ts`](../src/lib/audio/manifest.ts), con fallback silencioso
+> si faltan assets. También están cableados los cues de grillos, fogata, pasos,
+> salto/caída, hachazo, ataque y UI, y documentados en
+> [`AUDIO_ASSETS.md`](AUDIO_ASSETS.md). Lo que sigue pendiente de este prompt es el
+> **mute toggle** y volver la fogata realmente **posicional**.
+
 ```
 # Tarea: ambiente sonoro de Aldenmoor (inmersión barata, gran retorno)
 
@@ -559,6 +567,13 @@ simple queda local hasta publicar mundo.
 ---
 
 ## Prompt 10 — Mercado: vender recursos → reputación
+
+> **✅ v1 DONE — 18 jun 2026.** Aldric ya ofrece una venta simple de madera dentro
+> del diálogo: muestra precio fijo, cantidad, monedas actuales y reputación/trust.
+> La venta modifica el inventario local del jugador y añade una interacción directa
+> a la memoria de Aldric, que se persiste con **Leave & save** como el resto de su
+> historial. Queda pendiente solo la **v2 opcional** de regateo con LLM/precios
+> negociados.
 
 > El gancho del proyecto: que el **gameplay alimente la memoria/reputación en 0G**.
 > Vender al comerciante (Aldric) y regatear cambia tu reputación, que ya vive en 0G.
