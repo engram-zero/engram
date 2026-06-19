@@ -98,6 +98,86 @@ const keyboardMap = [
 
 const JUMP_SPEED = 5.2; // initial upward velocity (m/s)
 const GRAVITY = 16; // m/s²
+const HOUSE_WIDTH = 2.4;
+const HOUSE_DEPTH = 2.0;
+const HOUSE_WALL_HEIGHT = 1.8;
+const HOUSE_WALL_THICKNESS = 0.16;
+const HOUSE_DOOR_WIDTH = 0.82;
+const HOUSE_DOOR_OFFSET_Z = HOUSE_DEPTH / 2 - HOUSE_WALL_THICKNESS / 2;
+const HOUSE_ROOF_Y = 2.2;
+const HOUSE_INTERIOR_CAMERA_BOOST = 0.18;
+
+type OrientedWallBox = { cx: number; cz: number; hx: number; hz: number };
+
+function toLocalXZ(x: number, z: number, originX: number, originZ: number, rot: number) {
+  const dx = x - originX;
+  const dz = z - originZ;
+  const c = Math.cos(rot);
+  const s = Math.sin(rot);
+  return { x: dx * c - dz * s, z: dx * s + dz * c };
+}
+
+function toWorldXZ(localX: number, localZ: number, originX: number, originZ: number, rot: number) {
+  const c = Math.cos(rot);
+  const s = Math.sin(rot);
+  return {
+    x: originX + localX * c + localZ * s,
+    z: originZ - localX * s + localZ * c,
+  };
+}
+
+const HOUSE_WALL_BOXES: OrientedWallBox[] = [
+  { cx: -HOUSE_WIDTH / 2 + HOUSE_WALL_THICKNESS / 2, cz: 0, hx: HOUSE_WALL_THICKNESS / 2, hz: HOUSE_DEPTH / 2 },
+  { cx: HOUSE_WIDTH / 2 - HOUSE_WALL_THICKNESS / 2, cz: 0, hx: HOUSE_WALL_THICKNESS / 2, hz: HOUSE_DEPTH / 2 },
+  { cx: 0, cz: -HOUSE_DEPTH / 2 + HOUSE_WALL_THICKNESS / 2, hx: HOUSE_WIDTH / 2, hz: HOUSE_WALL_THICKNESS / 2 },
+  { cx: -(HOUSE_WIDTH - HOUSE_DOOR_WIDTH) / 4 - HOUSE_DOOR_WIDTH / 2, cz: HOUSE_DOOR_OFFSET_Z, hx: (HOUSE_WIDTH - HOUSE_DOOR_WIDTH) / 4, hz: HOUSE_WALL_THICKNESS / 2 },
+  { cx: (HOUSE_WIDTH - HOUSE_DOOR_WIDTH) / 4 + HOUSE_DOOR_WIDTH / 2, cz: HOUSE_DOOR_OFFSET_Z, hx: (HOUSE_WIDTH - HOUSE_DOOR_WIDTH) / 4, hz: HOUSE_WALL_THICKNESS / 2 },
+];
+
+function pushOutOfRotatedBox(
+  x: number,
+  z: number,
+  originX: number,
+  originZ: number,
+  rot: number,
+  box: OrientedWallBox,
+  radius: number
+): [number, number] {
+  const local = toLocalXZ(x, z, originX, originZ, rot);
+  const hx = box.hx + radius;
+  const hz = box.hz + radius;
+  const dx = local.x - box.cx;
+  const dz = local.z - box.cz;
+  if (Math.abs(dx) >= hx || Math.abs(dz) >= hz) return [x, z];
+
+  let nextLocalX = local.x;
+  let nextLocalZ = local.z;
+  if (hx - Math.abs(dx) < hz - Math.abs(dz)) {
+    nextLocalX = box.cx + (dx >= 0 ? hx : -hx);
+  } else {
+    nextLocalZ = box.cz + (dz >= 0 ? hz : -hz);
+  }
+  const world = toWorldXZ(nextLocalX, nextLocalZ, originX, originZ, rot);
+  return [world.x, world.z];
+}
+
+function resolveHouseCollision(x: number, z: number, house: Building, radius: number): [number, number] {
+  let nextX = x;
+  let nextZ = z;
+  for (const box of HOUSE_WALL_BOXES) {
+    [nextX, nextZ] = pushOutOfRotatedBox(nextX, nextZ, house.x, house.z, house.rot, box, radius);
+  }
+  return [nextX, nextZ];
+}
+
+function isInsideHouseInterior(house: Building, x: number, z: number) {
+  const local = toLocalXZ(x, z, house.x, house.z, house.rot);
+  return (
+    Math.abs(local.x) < HOUSE_WIDTH / 2 - HOUSE_WALL_THICKNESS * 1.4 &&
+    local.z > -HOUSE_DEPTH / 2 + HOUSE_WALL_THICKNESS * 1.4 &&
+    local.z < HOUSE_DEPTH / 2 - HOUSE_WALL_THICKNESS * 1.4
+  );
+}
 
 // Slide the player out of the boundary and any prop/NPC they overlap.
 function resolveCollision(x: number, z: number): [number, number] {
@@ -110,13 +190,28 @@ function resolveCollision(x: number, z: number): [number, number] {
     ...COLLIDERS,
     ...(Object.values(dynamicNpcState)).map((state) => ({ x: state.x, z: state.z, r: 0.6 })),
     ...(Object.values(dynamicEnemyState)).filter((s) => !s.dead).map((s) => ({ x: s.x, z: s.z, r: 0.5 })),
-    ...getWorld().buildings.filter((b) => b.type !== 'block').map((b) => ({ x: b.x, z: b.z, r: BUILD_RADIUS[b.type] })),
   ];
   for (const c of obstacles) {
     const dx = x - c.x;
     const dz = z - c.z;
     const dist = Math.hypot(dx, dz);
     const min = c.r + PLAYER_RADIUS;
+    if (dist < min && dist > 1e-4) {
+      const push = min - dist;
+      x += (dx / dist) * push;
+      z += (dz / dist) * push;
+    }
+  }
+  for (const b of getWorld().buildings) {
+    if (b.type === 'block') continue;
+    if (b.type === 'house') {
+      [x, z] = resolveHouseCollision(x, z, b, PLAYER_RADIUS);
+      continue;
+    }
+    const dx = x - b.x;
+    const dz = z - b.z;
+    const dist = Math.hypot(dx, dz);
+    const min = BUILD_RADIUS[b.type] + PLAYER_RADIUS;
     if (dist < min && dist > 1e-4) {
       const push = min - dist;
       x += (dx / dist) * push;
@@ -131,6 +226,10 @@ function resolveCollision(x: number, z: number): [number, number] {
 function resolveBuildings(x: number, z: number, radius = 0.5): [number, number] {
   for (const b of getWorld().buildings) {
     if (b.type === 'block') continue; // decorative voxels don't block movement
+    if (b.type === 'house') {
+      [x, z] = resolveHouseCollision(x, z, b, radius);
+      continue;
+    }
     const dx = x - b.x;
     const dz = z - b.z;
     const dist = Math.hypot(dx, dz);
@@ -337,6 +436,12 @@ function Player({
     }
     // Follow the terrain: ground height under the feet + eye height + head-bob + jump.
     camera.position.y = getHeightAt(camera.position.x, camera.position.z) + EYE_HEIGHT + bob.current.off + jump.current.y;
+    for (const house of getWorld().buildings) {
+      if (house.type === 'house' && isInsideHouseInterior(house, camera.position.x, camera.position.z)) {
+        camera.position.y += HOUSE_INTERIOR_CAMERA_BOOST;
+        break;
+      }
+    }
 
     // Publish position + facing so the aerial avatar can pick up where we are.
     posRef.current.x = camera.position.x;
@@ -1301,15 +1406,25 @@ function BuildingMesh({ b }: { b: Building }) {
   }
   return (
     <group position={[b.x, y, b.z]} rotation={[0, b.rot, 0]}>
-      <mesh position={[0, 1.0, 0]} castShadow receiveShadow>
-        <boxGeometry args={[2.4, 1.8, 2.0]} />
-        <meshStandardMaterial color="#7a5a3a" map={getTextureVariant('cottage_wood', Math.round(b.x))} flatShading />
+      <mesh position={[0, 0.03, 0]} receiveShadow rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[HOUSE_WIDTH - 0.14, HOUSE_DEPTH - 0.14]} />
+        <meshStandardMaterial color="#2f2a1f" map={getTextureVariant('terrain_grass', Math.round(b.x + b.z))} flatShading />
       </mesh>
-      <mesh position={[0, 2.2, -0.66]} rotation={[-0.62, 0, 0]} castShadow>
+      {HOUSE_WALL_BOXES.map((wall, i) => (
+        <mesh key={i} position={[wall.cx, HOUSE_WALL_HEIGHT / 2, wall.cz]} castShadow receiveShadow>
+          <boxGeometry args={[wall.hx * 2, HOUSE_WALL_HEIGHT, wall.hz * 2]} />
+          <meshStandardMaterial color="#7a5a3a" map={getTextureVariant('cottage_wood', Math.round(b.x))} flatShading />
+        </mesh>
+      ))}
+      <mesh position={[0, 1.66, HOUSE_DOOR_OFFSET_Z]} castShadow receiveShadow>
+        <boxGeometry args={[HOUSE_DOOR_WIDTH, 0.18, 0.08]} />
+        <meshStandardMaterial color="#55341f" flatShading transparent opacity={0.92} />
+      </mesh>
+      <mesh position={[0, HOUSE_ROOF_Y, -0.66]} rotation={[-0.62, 0, 0]} castShadow>
         <boxGeometry args={[2.8, 0.14, 1.6]} />
         <meshStandardMaterial color="#8a3a2a" map={getTextureVariant('cottage_roof', Math.round(b.z))} flatShading />
       </mesh>
-      <mesh position={[0, 2.2, 0.66]} rotation={[0.62, 0, 0]} castShadow>
+      <mesh position={[0, HOUSE_ROOF_Y, 0.66]} rotation={[0.62, 0, 0]} castShadow>
         <boxGeometry args={[2.8, 0.14, 1.6]} />
         <meshStandardMaterial color="#8a3a2a" map={getTextureVariant('cottage_roof', Math.round(b.z))} flatShading />
       </mesh>
@@ -1358,7 +1473,6 @@ function canPlaceBuilding(type: BuildingType, x: number, z: number): boolean {
   if (d < NO_BUILD_RADIUS) return false; // protected village core
   if (d > WORLD_RADIUS) return false;
   if (!isLocalhostFreeBuildWallet() && w.inventory.wood < buildCostAt(type, x, z)) return false;
-  // Blocks are decorative voxels — they may overlap freely (no collision check).
   if (type === 'block') return true;
   const r = BUILD_RADIUS[type];
   const obstacles = [
@@ -1452,7 +1566,7 @@ function BuildController({ mode, onDraftChange }: { mode: BuildingType | 'demoli
       </mesh>
       {isBuild && ghost && (
         <mesh
-          position={[ghost[0], getHeightAt(ghost[0], ghost[1]) + (mode === 'house' ? 1.0 : 0.75), ghost[1]]}
+          position={[ghost[0], getHeightAt(ghost[0], ghost[1]) + (mode === 'house' ? HOUSE_WALL_HEIGHT / 2 : 0.75), ghost[1]]}
           rotation={[0, rot, 0]}
         >
           {mode === 'house' ? <boxGeometry args={[2.4, 1.8, 2.0]} /> : <boxGeometry args={[1.8, 1.5, 0.3]} />}
@@ -1477,7 +1591,7 @@ function MobileBuildGhost({ mode, posRef, rot }: { mode: BuildingType; posRef: P
     const g = ref.current;
     if (!g) return;
     const [x, z] = mobileGhostXZ(posRef.current);
-    g.position.set(x, getHeightAt(x, z) + (mode === 'house' ? 1.0 : 0.75), z);
+    g.position.set(x, getHeightAt(x, z) + (mode === 'house' ? HOUSE_WALL_HEIGHT / 2 : 0.75), z);
     g.rotation.y = rot;
     if (matRef.current) matRef.current.color.set(canPlaceBuilding(mode, x, z) ? '#5fd06a' : '#d05a4a');
   });
@@ -1526,7 +1640,7 @@ function AIPreviewGhosts({ pieces, origin }: { pieces: AIPiece[]; origin: { x: n
           );
         }
         return (
-          <mesh key={i} position={[x, gy + (b.type === 'house' ? 1.0 : 0.75), z]} rotation={[0, b.rot, 0]}>
+          <mesh key={i} position={[x, gy + (b.type === 'house' ? HOUSE_WALL_HEIGHT / 2 : 0.75), z]} rotation={[0, b.rot, 0]}>
             {b.type === 'house' ? <boxGeometry args={[2.4, 1.8, 2.0]} /> : <boxGeometry args={[1.8, 1.5, 0.3]} />}
             <meshStandardMaterial color={ok ? '#7a6ad6' : '#d05a4a'} transparent opacity={0.45} depthWrite={false} />
           </mesh>
