@@ -295,3 +295,14 @@ y luz direccional para que el mundo siga legible. Luego encapsulé la memoria de
 que use Turbo al leer/escribir el bundle aunque el toggle esté en Standard, evitando los
 `503` del indexer deprecated y los `500` posteriores en `leave and save`. **Commit:**
 `c765226`, `c81ec4f`
+
+### 18 jun 2026 · Segunda pasada de legibilidad nocturna
+**Pedido (humano):** Ajustar otra vez la noche porque todavía se sentía algo opaca.
+**Prompt sintetizado:** Haz una segunda pasada sobre `computeDayNight()` para llevar la
+noche desde "dramática pero opaca" a "oscura pero claramente jugable": sube el piso de
+visibilidad, aclara un poco fondo/niebla y refuerza ambiente/hemisphere mientras reduces
+algo del peso de la luz direccional, para que el terreno y los árboles no queden enterrados
+en sombras. Verifica con `npx tsc --noEmit` y deja el cambio en un commit separado.
+**Qué se hizo:** incrementé la base de visibilidad nocturna, aclaré cielo y niebla, subí
+la luz ambiente/hemisphere y bajé la fuerza de la direccional para que el piso siga leyendo
+sin perder el mood nocturno. **Commit:** `d0f4d7a`
