@@ -940,6 +940,65 @@ function Campfire() {
 
 // ─── Enemy characters ─────────────────────────────────────────────────────────
 
+function Fireflies({ active = true }: { active?: boolean }) {
+  const group = useRef<THREE.Group>(null);
+  const flies = useMemo(
+    () =>
+      Array.from({ length: 18 }, (_, i) => {
+        const angle = (i / 18) * Math.PI * 2;
+        const radius = 4 + (i % 6) * 1.7;
+        return {
+          angle,
+          radius,
+          speed: 0.18 + (i % 5) * 0.04,
+          height: 0.7 + (i % 4) * 0.28,
+          phase: i * 0.93,
+        };
+      }),
+    []
+  );
+
+  useFrame((state) => {
+    if (!group.current) return;
+    const t = state.clock.elapsedTime;
+    flies.forEach((fly, index) => {
+      const child = group.current!.children[index];
+      if (!child) return;
+      const angle = fly.angle + t * fly.speed;
+      const x = Math.cos(angle) * fly.radius;
+      const z = Math.sin(angle) * fly.radius;
+      const y = getHeightAt(x, z) + fly.height + Math.sin(t * 2.1 + fly.phase) * 0.18;
+      child.position.set(x, y, z);
+      child.visible = active;
+      child.scale.setScalar(active ? 0.85 + Math.sin(t * 5.2 + fly.phase) * 0.14 : 0.001);
+    });
+  });
+
+  return (
+    <group ref={group}>
+      {flies.map((_, index) => (
+        <group key={index}>
+          <mesh>
+            <sphereGeometry args={[0.045, 8, 8]} />
+            <meshBasicMaterial color="#f6f08a" />
+          </mesh>
+          <pointLight color="#d6ff7a" intensity={active ? 0.3 : 0} distance={2.8} decay={2.4} />
+        </group>
+      ))}
+    </group>
+  );
+}
+
+function NightFillLight({ active = true }: { active?: boolean }) {
+  if (!active) return null;
+  return (
+    <>
+      <pointLight color="#8db8ff" intensity={0.7} distance={40} decay={1.5} position={[0, 9, 8]} />
+      <pointLight color="#6fa0ff" intensity={0.45} distance={34} decay={1.7} position={[-10, 8, -6]} />
+    </>
+  );
+}
+
 function EnemyBody() {
   return (
     <group>
@@ -1147,10 +1206,16 @@ function EnemySpawner() {
 // and local lighting around the village.
 function Torch({ position, lit = true }: { position: [number, number, number]; lit?: boolean }) {
   const light = useRef<THREE.PointLight>(null);
+  const glow = useRef<THREE.Mesh>(null);
   const seed = position[0] * 1.3 + position[2];
   useFrame((s) => {
     if (light.current) {
-      light.current.intensity = lit ? 2.1 + Math.sin(s.clock.elapsedTime * 9 + seed) * 0.4 + Math.random() * 0.12 : 0;
+      light.current.intensity = lit ? 3.3 + Math.sin(s.clock.elapsedTime * 9 + seed) * 0.55 + Math.random() * 0.18 : 0;
+      light.current.distance = lit ? 13.5 : 0;
+    }
+    if (glow.current) {
+      const pulse = lit ? 1 + Math.sin(s.clock.elapsedTime * 7 + seed) * 0.08 : 0.001;
+      glow.current.scale.setScalar(pulse);
     }
   });
   const y = getHeightAt(position[0], position[2]);
@@ -1164,7 +1229,11 @@ function Torch({ position, lit = true }: { position: [number, number, number]; l
         <coneGeometry args={[0.13, 0.4, 8]} />
         <meshBasicMaterial color="#ffb347" />
       </mesh>
-      <pointLight ref={light} color="#ff9a3c" intensity={lit ? 2.1 : 0} distance={9} decay={2} position={[0, 1.45, 0]} />
+      <mesh ref={glow} position={[0, 1.42, 0]} visible={lit}>
+        <sphereGeometry args={[0.22, 10, 10]} />
+        <meshBasicMaterial color="#ffcc73" transparent opacity={0.35} />
+      </mesh>
+      <pointLight ref={light} color="#ffb060" intensity={lit ? 3.3 : 0} distance={13.5} decay={1.8} position={[0, 1.45, 0]} />
     </group>
   );
 }
@@ -2465,6 +2534,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
             shadow-camera-top={26}
             shadow-camera-bottom={-26}
           />
+          <NightFillLight active={dn.torchesLit} />
 
           {dn.starsVisible && <Stars radius={80} depth={45} count={1800} factor={3.2} saturation={0} fade speed={0.5} />}
           {dn.sunVisible && <Celestial position={dn.sunDiscPos} sun />}
@@ -2507,6 +2577,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
           {explorable && active && view === 'fp' && <TalkFraming active={active} />}
 
           <Village torchesLit={dn.torchesLit} />
+          <Fireflies active={dn.torchesLit} />
           {explorable && <Buildings />}
           {explorable && aiPreview && aiOrigin && <AIPreviewGhosts pieces={aiPreview} origin={aiOrigin} />}
           {explorable && <EnemySpawner />}
