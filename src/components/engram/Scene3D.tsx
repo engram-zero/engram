@@ -44,6 +44,7 @@ import {
   type BuildingType,
   type Building,
 } from '@/lib/world';
+import { useEngramAudio } from '@/context/AudioContext';
 import { usePublicWorld } from '@/lib/public-world';
 
 // A tree carries its global index (into TREES) so chopping can target it.
@@ -225,6 +226,9 @@ function Player({
   onNearbyChange,
   onNearbyTreeChange,
   onNearbyEnemyChange,
+  onFootstep,
+  onJump,
+  onLand,
 }: {
   enabled: boolean;
   posRef: PlayerPosRef;
@@ -233,11 +237,15 @@ function Player({
   onNearbyChange: (npc: NPCName | null) => void;
   onNearbyTreeChange?: (treeIdx: number | null) => void;
   onNearbyEnemyChange?: (enemyId: string | null) => void;
+  onFootstep?: () => void;
+  onJump?: () => void;
+  onLand?: () => void;
 }) {
   const { camera } = useThree();
   const [, getKeys] = useKeyboardControls();
   const bob = useRef({ t: 0, off: 0 });
   const jump = useRef({ y: 0, vy: 0, held: false }); // first-person jump (Space)
+  const footstep = useRef(0);
   const nearbyRef = useRef<NPCName | null>(null);
   const treeRef = useRef<number | null>(null);
   const nearbyEnemyRef = useRef<string | null>(null);
@@ -282,12 +290,18 @@ function Player({
 
     // Jump: launch on a fresh Space press while grounded, then fall under gravity.
     const grounded = jump.current.y <= 0.001;
-    if (keys.jump && !jump.current.held && grounded) jump.current.vy = JUMP_SPEED;
+    if (keys.jump && !jump.current.held && grounded) {
+      jump.current.vy = JUMP_SPEED;
+      onJump?.();
+    }
     jump.current.held = !!keys.jump;
     if (!grounded || jump.current.vy > 0) {
       jump.current.vy -= GRAVITY * dt;
       jump.current.y = Math.max(0, jump.current.y + jump.current.vy * dt);
-      if (jump.current.y === 0) jump.current.vy = 0;
+      if (jump.current.y === 0) {
+        if (jump.current.vy < -0.5) onLand?.();
+        jump.current.vy = 0;
+      }
     }
 
     camera.getWorldDirection(forward);
@@ -311,6 +325,15 @@ function Player({
       bob.current.off = Math.sin(bob.current.t) * 0.045;
     } else {
       bob.current.off += (0 - bob.current.off) * Math.min(1, dt * 10);
+    }
+    if (moving && grounded) {
+      footstep.current += dt;
+      if (footstep.current >= 0.42) {
+        footstep.current = 0;
+        onFootstep?.();
+      }
+    } else {
+      footstep.current = 0;
     }
     // Follow the terrain: ground height under the feet + eye height + head-bob + jump.
     camera.position.y = getHeightAt(camera.position.x, camera.position.z) + EYE_HEIGHT + bob.current.off + jump.current.y;
@@ -2115,6 +2138,7 @@ interface Scene3DProps {
 
 export default function Scene3D({ memories = null, active = null, talking = false, onSelect = () => {}, interactive = true, showTitle = false, uiOpen = false }: Scene3DProps) {
   const { networkType } = useNetwork();
+  const { play, setLoopEnabled } = useEngramAudio();
   // Walk-around mode kicks in once the village is interactive (wallet connected
   // and memories loaded). The title screen stays cinematic.
   const explorable = interactive && !showTitle;
@@ -2130,6 +2154,10 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     return () => window.clearInterval(id);
   }, []);
   const dn = useMemo(() => computeDayNight(localHour), [localHour]);
+  useEffect(() => {
+    void setLoopEnabled('night_crickets', explorable && dn.torchesLit, { volume: 0.24 });
+    void setLoopEnabled('campfire_crackle', explorable, { volume: dn.torchesLit ? 0.22 : 0.14 });
+  }, [dn.torchesLit, explorable, setLoopEnabled]);
 
   const [nearby, setNearby] = useState<NPCName | null>(null);
   const [nearbyTree, setNearbyTree] = useState<number | null>(null);
@@ -2355,7 +2383,8 @@ export default function Scene3D({ memories = null, active = null, talking = fals
   };
 
   const activateNearbyNpc = () => {
-    if (nearbyRef.current) onSelect(nearbyRef.current);
+    if (!nearbyRef.current) return;
+    onSelect(nearbyRef.current);
   };
 
   const attackNearbyEnemy = () => {
@@ -2363,6 +2392,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     if (!id) return;
     const enemy = dynamicEnemyState[id];
     if (!enemy || enemy.dead) return;
+    void play('attack_swing');
     enemy.hp -= 25;
     if (enemy.hp <= 0) enemy.dead = true;
     setFlash(true);
@@ -2380,7 +2410,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
         return;
       }
       if (view !== 'fp') return; // interactions are first-person only
-      if (e.code === 'KeyE' && nearbyRef.current) onSelect(nearbyRef.current);
+      if (e.code === 'KeyE' && nearbyRef.current) activateNearbyNpc();
       if (e.code === 'KeyF') fHeldRef.current = true;
     };
     const onUp = (e: KeyboardEvent) => {
@@ -2392,7 +2422,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
       window.removeEventListener('keydown', onDown);
       window.removeEventListener('keyup', onUp);
     };
-  }, [buildDraftDirty, exploring, onSelect, switchView, view]);
+  }, [activateNearbyNpc, buildDraftDirty, exploring, switchView, view]);
 
   // Chopping takes time: hold F near a tree to fill a progress bar, then it falls.
   useEffect(() => {
@@ -2411,6 +2441,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
         chopRef.current = Math.min(100, chopRef.current + (TICK / PER_UNIT_MS) * 100);
         if (chopRef.current >= 100) {
           const { depleted } = harvestTree(tree!); // grant 1 unit; deplete after TREE_WOOD
+          void play('axe_chop');
           chopRef.current = 0;
           if (depleted) setNearbyTree(null); // tree gone; Player repicks next frame
         }
@@ -2420,7 +2451,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
       setChopPct(chopRef.current); // React skips re-render when unchanged
     }, TICK);
     return () => window.clearInterval(id);
-  }, [fpExploring]);
+  }, [fpExploring, play]);
 
   // Player combat listener
   useEffect(() => {
@@ -2430,6 +2461,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
       if (document.pointerLockElement && e.button === 0 && nearbyEnemyRef.current) {
         const enemy = dynamicEnemyState[nearbyEnemyRef.current];
         if (enemy && !enemy.dead) {
+          void play('attack_swing');
           enemy.hp -= 25;
           if (enemy.hp <= 0) enemy.dead = true;
           setFlash(true);
@@ -2439,7 +2471,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     };
     window.addEventListener('mousedown', onMouseDown);
     return () => window.removeEventListener('mousedown', onMouseDown);
-  }, [exploring]);
+  }, [exploring, play]);
   
   // Sync player HP to UI and handle death / respawn
   useEffect(() => {
@@ -2554,6 +2586,9 @@ export default function Scene3D({ memories = null, active = null, talking = fals
               onNearbyChange={setNearby}
               onNearbyTreeChange={setNearbyTree}
               onNearbyEnemyChange={setNearbyEnemy}
+              onFootstep={() => void play('footstep_grass')}
+              onJump={() => void play('jump')}
+              onLand={() => void play('land')}
             />
           )}
           {fpExploring && !isTouchDevice && <PointerLockControls onLock={() => setLocked(true)} onUnlock={() => setLocked(false)} />}

@@ -20,6 +20,7 @@ import { createBundleWorldPersistence } from '@/lib/world-0g';
 import { startPublicWorldPolling } from '@/lib/public-world';
 import { Portrait } from '@/components/engram/Art';
 import dynamic from 'next/dynamic';
+import { useEngramAudio } from '@/context/AudioContext';
 
 // Three.js is client-only and heavy — load it without SSR.
 const Scene3D = dynamic(() => import('@/components/engram/Scene3D'), { ssr: false });
@@ -73,6 +74,7 @@ function trustColor(t: number) {
 function Game() {
   const { address, isConnected } = useWallet();
   const { networkType } = useNetwork();
+  const { play } = useEngramAudio();
 
   const [memories, setMemories] = useState<Record<NPCName, NPCMemory> | null>(null);
   const [active, setActive] = useState<NPCName | null>(null);
@@ -148,6 +150,7 @@ function Game() {
   }
 
   function openDialogue(npc: NPCName) {
+    void play('dialogue_open');
     setActive(npc);
     setSave({ status: 'idle' });
     setScene({ dialogue: '', options: [], loading: true });
@@ -165,14 +168,17 @@ function Game() {
     const npc = active;
     setActive(null);
     setScene({ dialogue: '', options: [], loading: false });
+    void play('dialogue_close');
     if (!npc || !address || !memories || !dirty[npc]) return;
 
     setSave({ status: 'saving' });
     try {
       const { rootHash, txHash } = await writeMemory(address, npc, memories[npc], networkType);
+      void play('save_success');
       setSave({ status: 'saved', txHash, root: rootHash });
       setDirty((d) => ({ ...d, [npc]: false }));
     } catch (e) {
+      void play('save_error');
       setSave({ status: 'error', error: (e as Error).message });
     }
   }

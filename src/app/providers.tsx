@@ -4,6 +4,7 @@ import React, { createContext, useState, useEffect, useContext, useRef } from 'r
 import { WagmiConfig, createConfig } from 'wagmi';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { config } from '@/config/wagmi';
+import { AudioProvider } from '@/context/AudioContext';
 import { WalletProvider } from '@/context/WalletContext';
 
 // Suppress hydration-related console errors
@@ -119,9 +120,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
             // You can render a minimal loading state here if needed
             <div className="min-h-screen" />
           ) : (
-            <WalletProvider>
-              {children}
-            </WalletProvider>
+            <AudioProvider>
+              <WalletProvider>
+                {children}
+              </WalletProvider>
+            </AudioProvider>
           )}
         </NetworkContext.Provider>
       </QueryClientProvider>
