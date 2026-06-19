@@ -33,6 +33,13 @@ import {
 const NPC_NAMES: NPCName[] = ['aldric', 'maren', 'sable'];
 const BUNDLE_VERSION = 1;
 
+function getBundleNetworkType(networkType: NetworkType): NetworkType {
+  // 0G's Standard storage indexer is currently deprecated/503ing; keep the
+  // in-game memory/world bundle on Turbo so dialogue and saves remain reliable.
+  if (networkType === 'standard') return 'turbo';
+  return networkType;
+}
+
 // ─── rootHash pointer cache (localStorage) ────────────────────────────────────
 
 function pointerKey(wallet: string): string {
@@ -51,7 +58,7 @@ function setBundleRoot(wallet: string, rootHash: string): void {
 }
 
 async function resolveBundleRoot(wallet: string, networkType: NetworkType): Promise<string | null> {
-  const { l1Rpc } = getNetworkConfig(networkType);
+  const { l1Rpc } = getNetworkConfig(getBundleNetworkType(networkType));
   const onchainRoot = await readRootOnchain(wallet, l1Rpc);
   if (onchainRoot) {
     setBundleRoot(wallet, onchainRoot);
@@ -133,10 +140,15 @@ async function downloadBundle(
   wallet: string,
   networkType: NetworkType
 ): Promise<MemoryBundle | null> {
-  const { storageRpc } = getNetworkConfig(networkType);
+  const effectiveNetworkType = getBundleNetworkType(networkType);
+  const { storageRpc } = getNetworkConfig(effectiveNetworkType);
   const [data, err] = await downloadByRootHashAPI(root, storageRpc);
   if (err || !data) {
-    console.warn('[engram] could not read bundle from 0G:', err?.message);
+    console.warn('[engram] could not read bundle from 0G:', {
+      requestedNetworkType: networkType,
+      effectiveNetworkType,
+      error: err?.message,
+    });
     return null;
   }
 
@@ -254,9 +266,11 @@ async function uploadBundleAndAnchor(
   bundle: MemoryBundle,
   previousRoot: string | null
 ): Promise<WriteResult> {
+  const effectiveNetworkType = getBundleNetworkType(networkType);
   console.info('[engram] uploadBundleAndAnchor POST /api/save', {
     wallet,
     networkType,
+    effectiveNetworkType,
     previousRoot,
     hasWorld: !!bundle.world,
     buildings: bundle.world?.buildings.length ?? 0,
@@ -265,7 +279,7 @@ async function uploadBundleAndAnchor(
   const res = await fetch('/api/save', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ walletAddress: wallet, networkType, bundle }),
+    body: JSON.stringify({ walletAddress: wallet, networkType: effectiveNetworkType, bundle }),
   });
   const data = await res.json().catch(() => ({}));
   console.info('[engram] uploadBundleAndAnchor /api/save response', {
