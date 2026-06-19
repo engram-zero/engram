@@ -351,3 +351,19 @@ que Prompt 6 está parcialmente cableado.
 wood/coin y trust visibles), la venta descuenta madera, da coins y registra una interacción
 positiva en la memoria de Aldric. Después actualicé `ENGRAM_PROMPTS.md` y `STATUS.md` para
 marcar Prompt 10 v1 como hecho y Prompt 6 como parcial. **Commit:** `4221244` (código) + este commit (docs).
+
+### 18 jun 2026 · Prompt 12: casas habitables + refino de bloques voxel IA
+**Pedido (humano):** Hacer el Prompt 12 para que las casas sean habitables/huecas y, al
+terminar, refinar el sistema de construcción por IA para usar cubos mucho más pequeños,
+sin superposición entre sí pero sí pegados cara con cara, de modo que las formas se sientan
+más armónicas y menos como cubos grandes malformados.
+**Prompt sintetizado:** (1) Convierte las `house` construidas por el jugador en casas
+huecas dentro de la misma escena: reemplaza el volumen sólido por paredes finas, deja una
+puerta libre y cambia la colisión para que el jugador pueda entrar sin atravesar muros. (2)
+Refina el modo voxel de `/api/build`: usa un grid fino compartido entre servidor y cliente,
+reduce el tamaño por defecto de los cubos y prohíbe que se solapen entre sí, permitiendo
+solo contacto cara con cara para obtener figuras más limpias y escultóricas.
+**Qué se hizo:** rehice las casas de jugador como estructuras huecas con colisión por muros y
+puerta abierta, de forma que ya se puede caminar dentro. Después afiné los bloques IA con una
+grilla pequeña (`BLOCK_UNIT`), normalización cliente/servidor y validación anti-overlap entre
+voxels, manteniendo el encastre sin huecos. **Commit:** `6a8175f`, `edc01e9` (código) + este commit (docs).

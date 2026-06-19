@@ -23,8 +23,8 @@
 8. [Visión: gameplay loop, doble vista y mundo persistente en 0G](#prompt-8--visión-gameplay-loop--doble-vista) — 🟡 partial: 8a done, 8b persistencia MVP done (martelaxe)
 9. [Construir edificios + persistir el mundo en 0G](#prompt-9--construir--persistir-el-mundo-en-0g) — ✅ 9a (gameplay + zonas/precios) y 9b (persistencia 0G, martelaxe) hechos
 10. [Mercado: vender recursos a los NPCs → reputación en 0G](#prompt-10--mercado-vender-recursos--reputación) — ✅ v1 done (venta simple + reputación); v2 regateo pendiente
-11. [Construcción con IA + tokens (describir y que la IA edifique)](#prompt-11--construcción-con-ia--tokens) — ✅ done (`/api/build` + modal; **bloques voxel**, preview, costo USD, tope de gasto, BYO key)
-12. [Edificios habitables (entrar dentro)](#prompt-12--edificios-habitables-entrar) — ⏳ pendiente
+11. [Construcción con IA + tokens (describir y que la IA edifique)](#prompt-11--construcción-con-ia--tokens) — ✅ done (`/api/build` + modal; **bloques voxel** refinados a grid fino, preview, costo USD, tope de gasto, BYO key)
+12. [Edificios habitables (entrar dentro)](#prompt-12--edificios-habitables-entrar) — ✅ done (casas huecas con puerta libre)
 
 > **Tareas no-código (ADMIN):** ✅ deploy a Vercel + env vars · ✅ save a 0G end-to-end ·
 > ⏳ actualizar la Description del dashboard 0g.ai (versión honesta) ·
@@ -616,6 +616,12 @@ precios/diálogo**. Empezar simple; el regateo con LLM es v2.
 
 ## Prompt 11 — Construcción con IA + tokens
 
+> **✅ REFINADO — 18 jun 2026.** Los bloques voxel del modo IA quedaron más finos y
+> consistentes: el endpoint ya cuantiza offsets/alturas/escalas a una grilla pequeña,
+> el cliente normaliza esos bloques al mismo grid y evita que se superpongan entre sí.
+> Se permiten cubos adyacentes al ras, pero no uno dentro de otro, para que las
+> formas salgan más limpias y menos “Minecraft tosco”.
+
 > Idea de AriiBen: el jugador **describe** lo que quiere construir en un chat, y la IA
 > lo edifica. La **cantidad de tokens** que gasta determina lo elaborado/grande del
 > resultado (igual que el diálogo: pocos tokens → menos detalle; aquí además acota el
@@ -660,6 +666,11 @@ precios/diálogo**. Empezar simple; el regateo con LLM es v2.
 ---
 
 ## Prompt 12 — Edificios habitables (entrar)
+
+> **✅ DONE — 18 jun 2026.** Las `house` construidas por el jugador ya son huecas en la
+> misma escena: se renderizan como paredes finas + techo, con hueco de puerta libre.
+> La colisión usa la envolvente de esos muros en vez de un disco sólido, así que se
+> puede entrar y caminar dentro sin atravesar paredes.
 
 > Idea de AriiBen: poder **entrar** a los edificios, no que sean props sólidos.
 > **Recomendación (baja complejidad):** hacer las casas **huecas** — 4 muros + techo +

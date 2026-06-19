@@ -26,6 +26,9 @@ button and a read-only **public world** showing other wallets' builds); mobile/t
 controls (drag joystick, touch look, no-scroll) + a no-wallet **guest mode**; **Aldric's
 merchant loop** (sell wood for coin, raising his trust/memory); and **audio scaffolding**
 (silent-safe cues wired for ambience/foley/UI, awaiting assets/mute/positional polish).
+Player-built **houses are now enterable** (hollow walls + door gap), and AI voxel
+construction now snaps to a **fine anti-overlap grid** so generated shapes read more
+like deliberate sculptures than coarse overlapping cubes.
 
 ## 0G integration gotchas (READ before touching storage)
 These cost a long debugging session; keep them in mind.
