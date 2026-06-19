@@ -1915,7 +1915,7 @@ export function computeDayNight(hour: number): DayNight {
   const daylight = Math.max(0, sunY);
   // Keep a visibility floor so night still reads as night, but terrain, trees and
   // silhouettes don't collapse into pure black.
-  const visible = 0.22 + daylight * 0.78;
+  const visible = 0.32 + daylight * 0.68;
 
   // Moon rides its own arc across the night (sunset → sunrise).
   const nightLen = 24 - dayLen;
@@ -1926,16 +1926,16 @@ export function computeDayNight(hour: number): DayNight {
 
   return {
     sunPos: [sunX * 90, sunY * 80, -55], // drives the <Sky> shader (dark when sunY<0)
-    bg: mixColor('#1b2740', '#a8caee', visible),
-    fog: mixColor('#24324a', '#b8d0e8', visible),
-    ambIntensity: mix(0.92, 1.7, visible),
-    ambColor: mixColor('#97add8', '#fff3e0', visible),
-    hemiSky: mixColor('#506892', '#d7e6ff', visible),
-    hemiGround: mixColor('#3d4934', '#93a073', visible),
-    hemiIntensity: mix(0.95, 1.58, visible),
+    bg: mixColor('#25344f', '#a8caee', visible),
+    fog: mixColor('#31435d', '#b8d0e8', visible),
+    ambIntensity: mix(1.18, 1.72, visible),
+    ambColor: mixColor('#b4c3e5', '#fff3e0', visible),
+    hemiSky: mixColor('#6f84ac', '#d7e6ff', visible),
+    hemiGround: mixColor('#4f5c45', '#93a073', visible),
+    hemiIntensity: mix(1.22, 1.56, visible),
     dirPos: [sunX * 60, Math.max(18, sunY * 60), -40], // key light follows the sun; min height keeps moonlight
-    dirIntensity: mix(0.7, 2.25, visible),
-    dirColor: mixColor('#c1d0f5', '#fff1d6', visible),
+    dirIntensity: mix(0.45, 2.05, visible),
+    dirColor: mixColor('#d3def7', '#fff1d6', visible),
     turbidity: mix(7.2, 10.8, visible),
     rayleigh: mix(0.8, 1.55, visible),
     starsVisible: sunY < 0.05,
