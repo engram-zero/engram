@@ -62,12 +62,12 @@ export interface CottageDef {
 }
 
 export const COTTAGES: CottageDef[] = [
-  { x: -7, z: -4, body: '#7a5a3a', roof: '#8a3a2a', scale: 1.95, rot: 0.22 },
-  { x: -4.6, z: -7.4, body: '#6a4a32', roof: '#7a4a2a', scale: 1.72, rot: -0.32 },
-  { x: 4.8, z: -6.6, body: '#7a5a3a', roof: '#5a3a6a', scale: 1.78, rot: 0.16 },
-  { x: 8.4, z: -3.2, body: '#6a4a32', roof: '#8a3a2a', scale: 2.02, rot: -0.5 },
-  { x: -9.8, z: 4.6, body: '#785536', roof: '#7a4a2a', scale: 1.76, rot: 0.62 },
-  { x: 9.4, z: 5.4, body: '#6f4f33', roof: '#7a3a2a', scale: 1.84, rot: -0.7 },
+  { x: -10.4, z: -4.6, body: '#7a5a3a', roof: '#8a3a2a', scale: 1.95, rot: 0.22 },
+  { x: -4.2, z: -10.8, body: '#6a4a32', roof: '#7a4a2a', scale: 1.72, rot: -0.32 },
+  { x: 4.9, z: -10.1, body: '#7a5a3a', roof: '#5a3a6a', scale: 1.78, rot: 0.16 },
+  { x: 11.2, z: -4.4, body: '#6a4a32', roof: '#8a3a2a', scale: 2.02, rot: -0.5 },
+  { x: -12.4, z: 6.8, body: '#785536', roof: '#7a4a2a', scale: 1.76, rot: 0.62 },
+  { x: 12.1, z: 7.4, body: '#6f4f33', roof: '#7a3a2a', scale: 1.84, rot: -0.7 },
 ];
 
 export const CAMPFIRE: { x: number; z: number } = { x: 0, z: 2.6 };
