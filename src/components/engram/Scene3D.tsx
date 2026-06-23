@@ -38,6 +38,7 @@ import {
   placeBuilding,
   removeBuilding,
   damageBuilding,
+  recordEnemyKill,
   BUILD_COST,
   BUILD_RADIUS,
   isLocalhostFreeBuildWallet,
@@ -2743,7 +2744,10 @@ export default function Scene3D({ memories = null, active = null, talking = fals
         if (enemy && !enemy.dead) {
           void play('attack_swing');
           enemy.hp -= 25;
-          if (enemy.hp <= 0) enemy.dead = true;
+          if (enemy.hp <= 0) {
+            enemy.dead = true;
+            recordEnemyKill();
+          }
           setFlash(true);
           setTimeout(() => setFlash(false), 80);
         }

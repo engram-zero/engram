@@ -38,6 +38,8 @@ export interface WorldState {
   choppedTrees: number[];
   /** Structures the player has built. */
   buildings: Building[];
+  /** Enemies the player has killed. */
+  enemiesKilled: number;
 }
 
 /**
@@ -147,6 +149,8 @@ export interface NPCChatRequest {
   memory: NPCMemory;
   /** Other NPCs' memories — only sent for Sable, who aggregates them. */
   crossMemory?: Partial<Record<NPCName, NPCMemory>>;
+  /** Player's global kill count. */
+  enemiesKilled?: number;
 }
 
 /** Response from /api/npc. The client persists `memory` to 0G on dialogue end. */

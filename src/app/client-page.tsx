@@ -44,12 +44,13 @@ async function chat(
   npcName: NPCName,
   message: string,
   memory: NPCMemory,
-  crossMemory?: Partial<Record<NPCName, NPCMemory>>
+  crossMemory?: Partial<Record<NPCName, NPCMemory>>,
+  enemiesKilled?: number
 ) {
   const res = await fetch('/api/npc', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ walletAddress, npcName, message, memory, crossMemory }),
+    body: JSON.stringify({ walletAddress, npcName, message, memory, crossMemory, enemiesKilled }),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -167,7 +168,7 @@ function Game() {
     setErr(null);
     setScene((s) => ({ ...s, loading: true }));
     try {
-      const data = await chat(address, npc, message, memories[npc], crossFor(npc));
+      const data = await chat(address, npc, message, memories[npc], crossFor(npc), world.enemiesKilled);
       setMemories((prev) => (prev ? { ...prev, [npc]: data.memory } : prev));
       setDirty((d) => ({ ...d, [npc]: true }));
       setScene({ dialogue: data.response, options: data.options, loading: false });

@@ -30,7 +30,7 @@ export const BUILD_COST: Record<BuildingType, number> = { wall: 3, house: 10, bl
  * Blocks are decorative voxels — they don't collide (radius 0). */
 export const BUILD_RADIUS: Record<BuildingType, number> = { wall: 0.9, house: 1.8, block: 0 };
 
-export const EMPTY_WORLD: WorldState = { inventory: { wood: 0, stone: 0, coin: 0 }, choppedTrees: [], buildings: [] };
+export const EMPTY_WORLD: WorldState = { inventory: { wood: 0, stone: 0, coin: 0 }, choppedTrees: [], buildings: [], enemiesKilled: 0 };
 
 const LOCALHOST_FREE_BUILD_WALLETS = new Set([
   '0xc77b3982d324c6e812119eea7dc94f0a856da59e',
@@ -96,6 +96,7 @@ export function normalizeWorldState(raw: unknown): WorldState {
     },
     choppedTrees,
     buildings: normalizeBuildings(p?.buildings),
+    enemiesKilled: Math.max(0, Number(p?.enemiesKilled ?? 0)),
   };
 }
 
@@ -104,6 +105,7 @@ export function cloneWorldState(value: WorldState = EMPTY_WORLD): WorldState {
     inventory: { ...value.inventory },
     choppedTrees: [...value.choppedTrees],
     buildings: value.buildings.map((b) => ({ ...b })),
+    enemiesKilled: value.enemiesKilled,
   };
 }
 
@@ -189,6 +191,10 @@ export function replaceWorldState(next: WorldState) {
 
 export function addResource(type: ResourceType, amount: number) {
   return commit({ ...state, inventory: { ...state.inventory, [type]: Math.max(0, state.inventory[type] + amount) } });
+}
+
+export function recordEnemyKill() {
+  return commit({ ...state, enemiesKilled: state.enemiesKilled + 1 });
 }
 
 /** Chop a tree (by its TREES index): mark it chopped + grant wood (capped at

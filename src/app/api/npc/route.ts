@@ -58,9 +58,11 @@ function clamp(n: number, lo: number, hi: number): number {
 
 // Build the final system prompt: inject this player's memory (and, for Sable,
 // what the other NPCs know) into the persona template.
-function buildSystem(npcName: NPCName, memory: NPCMemory, crossMemory?: NPCChatRequest['crossMemory']): string {
+function buildSystem(npcName: NPCName, memory: NPCMemory, crossMemory?: NPCChatRequest['crossMemory'], enemiesKilled: number = 0): string {
   const npc = getNPC(npcName)!;
   let prompt = npc.systemPrompt.replace('{MEMORY_JSON}', JSON.stringify(memory, null, 2));
+
+  prompt = prompt.replace('{ENEMIES_KILLED}', enemiesKilled.toString());
 
   if (prompt.includes('{CROSS_MEMORY}')) {
     const lines = crossMemory
@@ -195,7 +197,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Invalid JSON body.' }, { status: 400 });
   }
 
-  const { walletAddress, npcName, message, memory, crossMemory } = body;
+  const { walletAddress, npcName, message, memory, crossMemory, enemiesKilled } = body;
 
   if (!isAddress(walletAddress)) return NextResponse.json({ error: 'Invalid wallet address.' }, { status: 400 });
   if (!getNPC(npcName)) return NextResponse.json({ error: 'Unknown NPC.' }, { status: 400 });
@@ -224,7 +226,7 @@ export async function POST(req: Request) {
       : 'The player has just approached you. Greet them.';
 
   try {
-    const system = buildSystem(npcName, memory, crossMemory);
+    const system = buildSystem(npcName, memory, crossMemory, enemiesKilled);
     const npcDisplayName = getNPC(npcName)!.name;
     const turn = anthropic
       ? await runClaude(system, userContent, npcDisplayName)
