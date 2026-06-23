@@ -83,3 +83,58 @@ real work **twice** (memory *and* the built world):
 ## 30-second cut (if a shorter version is needed)
 Hook (5s) → one interaction "remember my name" (8s) → Leave & save ✓ (5s) → reload →
 NPC greets by name + Memory panel (10s) → end card (2s).
+
+---
+
+## ElevenLabs voiceover (AI narration, synced to the cut)
+
+The demo narration is generated with ElevenLabs (the video is vibe-coded, so an AI
+voice is on-brand and avoids accent issues). **Each line is generated as its own
+clip** and dropped onto its exact start timecode in Kdenlive — that's how you get
+the voice to start *exactly* on the subtitle. The clip's END can drift slightly;
+fix overruns by nudging ElevenLabs **Speed** up a notch or trimming trailing silence.
+
+### Voice & model settings (set once)
+- **Voice:** a deep, calm, cinematic male narrator (e.g. *Brian*, *George* or
+  *Daniel* from the ElevenLabs library — pick one and keep it for ALL clips so the
+  timbre matches).
+- **Model:** *Eleven Multilingual v2* (best quality) — or *Turbo v2.5* if you iterate a lot.
+- **Stability ~45–55%** (steady but not flat) · **Similarity 75%** · **Style 0–15%**
+  (low = neutral narrator) · **Speaker boost ON** · **Speed ~0.95** (slightly slow = gravitas).
+- **Pronunciation:** in the ElevenLabs text box write **"zero-G"** everywhere the
+  subtitle shows **"0G"**, so it says *"zero gee"* and not *"oh gee"*. (Subtitles keep "0G".)
+
+### Workflow
+1. Paste each line below into ElevenLabs **separately**, generate, and download the clip.
+   Name each file by its index/timecode (e.g. `vo-11_42-18.mp3`).
+2. In Kdenlive, enable **snapping** and place each clip so its **start** sits on the
+   listed timecode (these are the manual subtitle marks already in the project).
+3. If a clip is longer than the gap to the next line, bump its Speed or shorten the
+   wording; if shorter, the gap of silence is fine (the narration is sparse on purpose).
+
+### Lines (start timecode → TTS text)
+Keep the em-dashes and periods — ElevenLabs uses them for the pauses.
+
+| # | Start | TTS text (write "zero-G" for 0G) |
+|---|---|---|
+| 1 | `00:19` | In most games, NPCs forget you. |
+| 2 | `03:14` | Engram's don't — and no one can make them forget. |
+| 3 | `07:05` | Your wallet is your identity. |
+| 4 | `09:05` | Walk up to a villager and talk. |
+| 5 | `14:10` | Real AI dialogue — but with persistent state. |
+| 6 | `17:22` | Trust, debts, mood, and past interactions are tracked per player. |
+| 7 | `24:22` | When you leave, the memory bundle is written to zero-G Storage: |
+| 8 | `28:24` | content-addressed, auditable, and anchored by its root hash. |
+| 9 | `33:20` | Reload. New session. Same wallet. |
+| 10 | `37:06` | The NPC still remembers — because the state doesn't live in our database. |
+| 11 | `42:18` | It lives on zero-G. |
+| 12 | `48:07` | This RPG is the proof of concept. |
+| 13 | `51:04` | Engram is a portable state layer for AI-native game objects: |
+| 14 | `55:10` | NPCs, items, terrains, environments, and agents. |
+| 15 | `01:00:17` | Each object can expose a memory bundle, |
+| 16 | `01:03:19` | anchored on-chain and reusable across games, simulations, and player-owned worlds. |
+
+> Tip: lines 7→8 and 10→11 are a single sentence split across two clips — read each
+> half with the matching rising/falling intonation so they join naturally. To make
+> that easier you can instead generate 7+8 (and 10+11) as ONE clip and place it at
+> the first timecode; only split if you need the exact start on the second half.

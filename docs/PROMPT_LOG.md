@@ -505,3 +505,16 @@ del proyecto que un `git add -A` podría commitear) y el `.claude/settings.json`
 claves en código), verificado README/LICENSE/demo 200; añadidos `.tmp*` y
 `.claude/settings*.json` a `.gitignore`. Informe de hallazgos entregado al humano.
 **Commit:** _(este commit)_
+
+### 22 jun 2026 · Guía de voiceover ElevenLabs (sincronizada al video)
+**Pedido (humano):** Cambiar la narración a voz IA (ElevenLabs) por pronunciación/vibecode;
+dar la instrucción para generarla de modo que cada frase inicie EXACTO en su timecode del
+video (subtítulos hechos a mano en Kdenlive), y documentarlo en el repo.
+**Prompt sintetizado:** Documenta en `DEMO_SCRIPT.md` cómo generar la narración con
+ElevenLabs sincronizada: voz/modelo/ajustes (narrador grave, Multilingual v2, stability
+~50, speed ~0.95), la regla de pronunciar "0G" como "zero-G", y el flujo de generar CADA
+frase como clip independiente para colocar su INICIO exacto en el timecode en Kdenlive
+(el final puede ajustarse con speed/trim). Incluye la tabla de 16 líneas con sus timecodes
+de inicio tal como están marcados en el proyecto.
+**Qué se hizo:** sección "ElevenLabs voiceover" en `DEMO_SCRIPT.md` con ajustes de voz,
+workflow de sincronización y la tabla timecode→texto. **Commit:** _(este commit)_
