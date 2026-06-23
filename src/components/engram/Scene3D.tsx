@@ -921,10 +921,36 @@ function ChimneySmoke({ origin }: { origin: [number, number, number] }) {
 
 // ── Cottage ── bigger, gabled, with corner beams, a framed door, glowing
 // windows and a smoking chimney. Anchored to the terrain height at its spot.
+// How far the terrain drops from the cottage centre to its lowest footprint
+// corner — used to sink a foundation so a cottage on a slope doesn't float.
+function cottageFoundationDrop(def: CottageDef): number {
+  const yc = getHeightAt(def.x, def.z);
+  const hx = 1.8 * def.scale;
+  const hz = 1.45 * def.scale;
+  const cos = Math.cos(def.rot);
+  const sin = Math.sin(def.rot);
+  let minY = yc;
+  for (const [lx, lz] of [[-hx, -hz], [hx, -hz], [-hx, hz], [hx, hz]] as [number, number][]) {
+    const wx = def.x + lx * cos - lz * sin;
+    const wz = def.z + lx * sin + lz * cos;
+    minY = Math.min(minY, getHeightAt(wx, wz));
+  }
+  return Math.max(0, yc - minY);
+}
+
 function Cottage({ def, seed }: { def: CottageDef; seed: number }) {
   const y = getHeightAt(def.x, def.z);
+  // Foundation depth (local units): cover the slope gap on the downhill side plus
+  // a margin, so the base always meets the ground instead of floating.
+  const foundH = (cottageFoundationDrop(def) + 0.7) / def.scale;
   return (
     <group position={[def.x, y, def.z]} rotation={[0, def.rot, 0]} scale={def.scale}>
+      {/* sunken stone foundation — buried on the uphill side, reaches the ground
+          on the downhill side so a hillside cottage doesn't float. */}
+      <mesh position={[0, 0.06 - foundH / 2, -0.14]} receiveShadow castShadow>
+        <boxGeometry args={[3.36, foundH, 2.38]} />
+        <meshStandardMaterial color="#4a4038" map={getTextureVariant('stone', seed)} flatShading />
+      </mesh>
       {/* stone plinth with an open front doorway/porch gap */}
       <mesh position={[0, 0.06, -0.14]} castShadow receiveShadow>
         <boxGeometry args={[3.4, 0.12, 2.42]} />

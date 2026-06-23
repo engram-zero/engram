@@ -555,3 +555,13 @@ su propio radio de alcance. Siguen siendo night-only. Así se oyen "al azar" por
 de noche, pero el centro queda en silencio.
 **Qué se hizo:** `makeCricketEmitters()` con PRNG sembrado genera 16 puntos esparcidos;
 `AUDIO_EMITTERS` los incluye. tsc limpio. **Commit:** _(este commit)_
+
+### 23 jun 2026 · Casa flotante en la colina: cimiento hundido
+**Pedido (humano):** Una de las seis casas se ve "flotando" por estar en una colina.
+**Prompt sintetizado:** El cottage se posiciona a la altura del terreno en su CENTRO, así
+que en pendiente el lado cuesta-abajo queda en el aire. Añade un cimiento de piedra que se
+hunda: calcula la caída del terreno del centro al rincón más bajo del footprint y extiende
+una caja de cimiento hacia abajo (esa caída + margen), enterrada en el lado alto y tocando
+el suelo en el lado bajo, para que ninguna casa flote.
+**Qué se hizo:** helper `cottageFoundationDrop` (muestrea el terreno en los 4 rincones) y
+una caja de cimiento por casa en `Cottage`. tsc limpio. **Commit:** _(este commit)_
