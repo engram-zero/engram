@@ -37,6 +37,7 @@ import {
   MAX_WOOD,
   placeBuilding,
   removeBuilding,
+  damageBuilding,
   BUILD_COST,
   BUILD_RADIUS,
   isLocalhostFreeBuildWallet,
@@ -1276,15 +1277,15 @@ function Enemy({ id }: { id: string }) {
     
     if (!dyn || dyn.dead) return;
 
-    // Find closest alive NPC
-    let closestNpcId: NPCName | null = null;
+    // Find closest alive target
+    let closestId: string | null = null;
     let closestDist = Infinity;
     for (const [id, npcState] of Object.entries(dynamicNpcState)) {
       if (npcState.knockedOut) continue;
       const d = Math.hypot(npcState.x - dyn.x, npcState.z - dyn.z);
       if (d < closestDist) {
         closestDist = d;
-        closestNpcId = id as NPCName;
+        closestId = id;
       }
     }
     
@@ -1293,7 +1294,19 @@ function Enemy({ id }: { id: string }) {
       const pDist = Math.hypot(dynamicPlayerState.x - dyn.x, dynamicPlayerState.z - dyn.z);
       if (pDist < closestDist) {
         closestDist = pDist;
-        closestNpcId = 'player' as any;
+        closestId = 'player';
+      }
+    }
+
+    // Check distance to buildings
+    const buildings = getWorld().buildings;
+    for (let i = 0; i < buildings.length; i++) {
+      const b = buildings[i];
+      if (b.hp === undefined || b.hp <= 0) continue;
+      const bDist = Math.hypot(b.x - dyn.x, b.z - dyn.z);
+      if (bDist < closestDist) {
+        closestDist = bDist;
+        closestId = `building_${i}`;
       }
     }
 
@@ -1301,9 +1314,9 @@ function Enemy({ id }: { id: string }) {
     let targetZ = 0;
     let isMoving = false;
 
-    if (closestNpcId && closestDist < 12) {
+    if (closestId && closestDist < 12) {
       // Chase target
-      if (closestNpcId === ('player' as any)) {
+      if (closestId === 'player') {
         targetX = dynamicPlayerState.x;
         targetZ = dynamicPlayerState.z;
         if (closestDist < 1.4) {
@@ -1318,8 +1331,25 @@ function Enemy({ id }: { id: string }) {
         } else {
           isMoving = true;
         }
+      } else if (closestId.startsWith('building_')) {
+        const bIndex = parseInt(closestId.replace('building_', ''), 10);
+        const b = buildings[bIndex];
+        if (b) {
+          targetX = b.x;
+          targetZ = b.z;
+          const attackRange = BUILD_RADIUS[b.type] + 1.2;
+          if (closestDist < attackRange) {
+            dyn.attackTimer -= dt;
+            if (dyn.attackTimer <= 0) {
+              damageBuilding(bIndex, 15);
+              dyn.attackTimer = 1.0;
+            }
+          } else {
+            isMoving = true;
+          }
+        }
       } else {
-        const npcState = dynamicNpcState[closestNpcId];
+        const npcState = dynamicNpcState[closestId as NPCName];
         targetX = npcState.x;
         targetZ = npcState.z;
         if (closestDist < 1.4) {

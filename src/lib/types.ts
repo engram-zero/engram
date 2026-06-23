@@ -26,6 +26,10 @@ export interface Building {
   color?: string;
   /** Block only: cube size. */
   scale?: number;
+  /** HP of the building */
+  hp?: number;
+  /** Maximum HP of the building */
+  maxHp?: number;
 }
 
 export interface WorldState {

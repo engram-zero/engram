@@ -63,6 +63,14 @@ function normalizeBuildings(raw: unknown): Building[] {
         rot: typeof b.rot === 'number' ? b.rot : 0,
         woodCost: typeof b.woodCost === 'number' ? Math.max(0, Math.round(b.woodCost)) : undefined,
       };
+
+      let defaultHp = 50;
+      if (b.type === 'house') defaultHp = 150;
+      if (b.type === 'wall') defaultHp = 80;
+
+      base.maxHp = typeof (b as any).maxHp === 'number' ? (b as any).maxHp : defaultHp;
+      base.hp = typeof (b as any).hp === 'number' ? (b as any).hp : base.maxHp;
+
       if (b.type === 'block') {
         base.y = typeof b.y === 'number' ? b.y : 0;
         base.scale = typeof b.scale === 'number' ? b.scale : BLOCK_UNIT;
@@ -238,7 +246,12 @@ export function harvestTree(index: number): { depleted: boolean; gained: boolean
 export function placeBuilding(b: Building, cost: number = BUILD_COST[b.type]): boolean {
   const freeBuild = isLocalhostFreeBuildWallet();
   if (!freeBuild && state.inventory.wood < cost) return false;
-  const nextBuilding: Building = { ...b, woodCost: freeBuild ? 0 : cost };
+
+  let maxHp = 50;
+  if (b.type === 'house') maxHp = 150;
+  if (b.type === 'wall') maxHp = 80;
+
+  const nextBuilding: Building = { ...b, woodCost: freeBuild ? 0 : cost, hp: maxHp, maxHp };
   commit({
     ...state,
     inventory: { ...state.inventory, wood: freeBuild ? MAX_WOOD : state.inventory.wood - cost },
@@ -258,6 +271,28 @@ export function removeBuilding(index: number) {
     inventory: { ...state.inventory, wood: Math.min(MAX_WOOD, state.inventory.wood + refund) },
     buildings: state.buildings.filter((_, i) => i !== index),
   });
+}
+
+/** Damage a building by index, optionally removing it if destroyed. */
+export function damageBuilding(index: number, amount: number) {
+  if (index < 0 || index >= state.buildings.length) return;
+  const built = state.buildings[index];
+  if (built.hp === undefined) return;
+  
+  const newHp = built.hp - amount;
+  if (newHp <= 0) {
+    commit({
+      ...state,
+      buildings: state.buildings.filter((_, i) => i !== index),
+    });
+  } else {
+    const newBuildings = [...state.buildings];
+    newBuildings[index] = { ...built, hp: newHp };
+    commit({
+      ...state,
+      buildings: newBuildings,
+    });
+  }
 }
 
 // ── React hooks ───────────────────────────────────────────────────────────────
