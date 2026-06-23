@@ -107,16 +107,36 @@ const GRAVITY = 16; // m/s²
 // loudest emitter per cue based on the player's distance and sets the loop's
 // volume each tick. `nightOnly` cues are muted during the day.
 type AudioEmitter = { cue: AudioCueId; x: number; z: number; radius: number; volume: number; nightOnly?: boolean };
+
+// Scatter many night-cricket pockets across the map (deterministic, like the
+// forest) so crickets are heard "randomly" all around — but never in the village
+// core. Each is a soft point source with its own radius; overlaps fade together.
+function makeCricketEmitters(): AudioEmitter[] {
+  let a = 0x9e3779b9; // seeded PRNG → same layout every run
+  const rng = () => {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const CORE = 16; // keep the village centre quiet (clearing radius ~9 + margin)
+  const out: AudioEmitter[] = [];
+  for (let i = 0; out.length < 16 && i < 200; i++) {
+    const ang = rng() * Math.PI * 2;
+    const rad = CORE + rng() * 44; // 16..60 from centre
+    const x = Math.cos(ang) * rad;
+    const z = Math.sin(ang) * rad;
+    if (Math.hypot(x, z) < CORE) continue; // never in the core
+    out.push({ cue: 'night_crickets', x, z, radius: 16 + rng() * 12, volume: 0.32, nightOnly: true });
+  }
+  return out;
+}
+
 const AUDIO_EMITTERS: AudioEmitter[] = [
   // Campfire crackle — only audible around the village fire.
   { cue: 'campfire_crackle', x: CAMPFIRE.x, z: CAMPFIRE.z, radius: 12, volume: 0.5 },
-  // Cricket pockets out in the woods/meadow (night only). Their radii overlap so
-  // crickets are present across the wilderness and fade in as you leave the
-  // village core (clearing radius ~9); they're silent in the centre.
-  { cue: 'night_crickets', x: 0, z: 34, radius: 40, volume: 0.34, nightOnly: true },
-  { cue: 'night_crickets', x: -32, z: -18, radius: 38, volume: 0.34, nightOnly: true },
-  { cue: 'night_crickets', x: 32, z: -14, radius: 38, volume: 0.34, nightOnly: true },
-  { cue: 'night_crickets', x: 28, z: 30, radius: 36, volume: 0.34, nightOnly: true },
+  // Many randomly-scattered cricket pockets (night only), everywhere but the core.
+  ...makeCricketEmitters(),
 ];
 const SPATIAL_AUDIO_CUES = Array.from(new Set(AUDIO_EMITTERS.map((e) => e.cue)));
 const HOUSE_WIDTH = 2.4;

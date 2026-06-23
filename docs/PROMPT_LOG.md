@@ -544,3 +544,14 @@ bloqueado y el delta supera un umbral (~200px en un evento), haga `stopImmediate
 para que el control no procese ese evento. Las vueltas rápidas normales quedan por debajo.
 **Qué se hizo:** efecto con filtro de spikes en captura en `Scene3D`. tsc limpio.
 **Commit:** _(este commit)_
+
+### 23 jun 2026 · Grillos: muchos puntos aleatorios por el mapa (excepto el centro)
+**Pedido (humano):** Aún no se oyen los grillos; poner varios puntos aleatorios en el mapa
+donde se escuchen, menos en el centro.
+**Prompt sintetizado:** Reemplaza las 4 bolsas de grillos hechas a mano por un generador
+determinista (PRNG con semilla, como el bosque) que disperse ~16 emisores de `night_crickets`
+por todo el anillo (radio 16..60 del centro), nunca dentro del core (radio <16), cada uno con
+su propio radio de alcance. Siguen siendo night-only. Así se oyen "al azar" por todo el mapa
+de noche, pero el centro queda en silencio.
+**Qué se hizo:** `makeCricketEmitters()` con PRNG sembrado genera 16 puntos esparcidos;
+`AUDIO_EMITTERS` los incluye. tsc limpio. **Commit:** _(este commit)_
