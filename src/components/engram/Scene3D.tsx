@@ -2480,6 +2480,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
   const [publishStatus, setPublishStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [publishMsg, setPublishMsg] = useState<string | null>(null);
   const [buildDraftDirty, setBuildDraftDirty] = useState(false);
+  const [confirmLeave, setConfirmLeave] = useState(false); // in-game "unsaved changes" prompt (replaces window.confirm)
   const aerialDraftBaseRef = useRef(cloneWorldState());
   const fHeldRef = useRef(false); // is the chop key (F) held down
   const chopRef = useRef(0); // chop progress 0..100
@@ -2529,6 +2530,20 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     }
   };
 
+  // Actually leave aerial view for first person. `discard` reverts the draft to
+  // the snapshot taken on entry (used by the "Discard & leave" path).
+  const leaveAerial = useCallback((discard: boolean) => {
+    if (discard) {
+      void replaceWorldState(aerialDraftBaseRef.current);
+      setBuildDraftDirty(false);
+      setPublishStatus('idle');
+      setPublishMsg('Unsaved changes discarded.');
+    }
+    setConfirmLeave(false);
+    setBuildMode(null);
+    setView('fp');
+  }, []);
+
   const switchView = useCallback(() => {
     if (view === 'fp') {
       aerialDraftBaseRef.current = cloneWorldState(getWorld());
@@ -2538,14 +2553,10 @@ export default function Scene3D({ memories = null, active = null, talking = fals
       setView('aerial');
       return;
     }
-
+    // Leaving aerial with unsaved builds: ask in-game (no native confirm).
     if (buildDraftDirty) {
-      const discard = window.confirm('You have unsaved building changes. If you leave aerial view now, those changes will be discarded. Leave without saving?');
-      if (!discard) return;
-      void replaceWorldState(aerialDraftBaseRef.current);
-      setBuildDraftDirty(false);
-      setPublishStatus('idle');
-      setPublishMsg('Unsaved changes discarded.');
+      setConfirmLeave(true);
+      return;
     }
     setBuildMode(null);
     setView('fp');
@@ -2566,27 +2577,35 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     }
   };
 
-  const publishWorld = async () => {
+  const publishWorld = async (): Promise<boolean> => {
     const wallet = getWorldWallet();
-    if (!wallet || publishStatus === 'saving') return;
+    if (!wallet || publishStatus === 'saving') return false;
 
     setPublishStatus('saving');
-    setPublishMsg('Saving world...');
+    setPublishMsg('Saving world…');
     try {
       const result = await writeWorldState(wallet, getWorld(), networkType);
       setPublishStatus('saved');
       setBuildDraftDirty(false);
       aerialDraftBaseRef.current = cloneWorldState(getWorld());
-      setPublishMsg(result.skipped ? 'World already saved.' : `World saved (${result.rootHash.slice(0, 10)}...${result.rootHash.slice(-6)})`);
+      setPublishMsg(result.skipped ? 'World already saved.' : `Saved to 0G (${result.rootHash.slice(0, 10)}…${result.rootHash.slice(-6)})`);
       window.setTimeout(() => {
-        setPublishStatus('idle');
-        setPublishMsg(null);
+        setPublishStatus((s) => (s === 'saved' ? 'idle' : s));
+        setPublishMsg((m) => (m && m.startsWith('Saved to 0G') ? null : m));
       }, 5000);
+      return true;
     } catch (error) {
       console.warn('[engram] publish world failed:', error);
       setPublishStatus('error');
       setPublishMsg((error as Error).message || 'Save failed.');
+      return false;
     }
+  };
+
+  // "Save & leave": persist to 0G, and only switch to first person if it worked.
+  const saveAndLeave = async () => {
+    const ok = await publishWorld();
+    if (ok) leaveAerial(false);
   };
 
   // AI construction: describe → /api/build returns pieces relative to the avatar
@@ -2984,21 +3003,76 @@ export default function Scene3D({ memories = null, active = null, talking = fals
                 🤖 Build with AI
               </button>
               <button
-                onClick={publishWorld}
-                disabled={publishStatus === 'saving'}
-                className="rounded-md border bg-black/50 px-3 py-1.5 text-sm text-[#f4e8d0] hover:border-[#70d6ff] disabled:cursor-wait disabled:opacity-70"
-                style={{ borderColor: publishStatus === 'saved' ? '#8fd06a' : publishStatus === 'error' ? '#d06a5f' : '#4a8aa8' }}
+                onClick={() => void publishWorld()}
+                disabled={publishStatus === 'saving' || (!buildDraftDirty && publishStatus !== 'error')}
+                className="rounded-md border bg-black/50 px-3 py-1.5 text-sm text-[#f4e8d0] hover:border-[#70d6ff] disabled:cursor-not-allowed disabled:opacity-50"
+                style={{
+                  borderColor:
+                    publishStatus === 'saving' ? '#4a8aa8'
+                    : publishStatus === 'error' ? '#d06a5f'
+                    : buildDraftDirty ? '#d6b84a'
+                    : '#8fd06a',
+                  boxShadow: buildDraftDirty && publishStatus !== 'saving' ? '0 0 0 1px rgba(214,184,74,0.55)' : undefined,
+                }}
               >
-                {publishStatus === 'saving' ? 'Saving...' : 'Save World'}
+                {publishStatus === 'saving' ? '⏳ Saving…' : buildDraftDirty ? '💾 Save World ●' : '✓ Saved'}
               </button>
-              <span className="max-w-[15rem] rounded bg-black/60 px-2 py-1 text-right text-xs text-[#f4e8d0]/75">
-                {publishMsg ?? (buildDraftDirty ? 'Unsaved changes.' : 'Save before leaving aerial view.')}
-              </span>
+              {/* Clear, persistent save-state pill. */}
+              {(() => {
+                const tone =
+                  publishStatus === 'saving' ? { c: '#9fd0e6', t: '⏳ Saving to 0G…' }
+                  : publishStatus === 'error' ? { c: '#ffb3a8', t: `⚠️ ${publishMsg ?? 'Save failed — try again.'}` }
+                  : buildDraftDirty ? { c: '#ffe39a', t: '● Unsaved changes — Save before leaving' }
+                  : { c: '#aee5a6', t: publishMsg ?? '✓ All changes saved' };
+                return (
+                  <span className="max-w-[15rem] rounded bg-black/65 px-2 py-1 text-right text-xs" style={{ color: tone.c }}>
+                    {tone.t}
+                  </span>
+                );
+              })()}
               {buildMode && (
                 <span className="rounded bg-black/60 px-2 py-1 text-xs text-[#f4e8d0]/80">
                   {buildMode === 'demolish' ? 'Tap a building to demolish' : 'Tap ground to place · tap tool to cancel'}
                 </span>
               )}
+            </div>
+          )}
+
+          {/* In-game "unsaved changes" prompt when leaving aerial view (replaces
+              the native window.confirm). Offers Save & leave / Discard / Stay. */}
+          {confirmLeave && (
+            <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/50 p-4">
+              <div className="w-full max-w-sm rounded-2xl border border-[#5a4a28] bg-[rgba(20,16,10,0.97)] p-5 text-[#f4e8d0] shadow-2xl">
+                <div className="mb-1 text-lg font-bold text-[#d6b84a]">Unsaved changes</div>
+                <p className="mb-4 text-sm text-[#f4e8d0]/80">
+                  You have building changes that aren&apos;t saved to 0G yet. Leaving the aerial
+                  view now will discard them.
+                </p>
+                <div className="flex flex-col gap-2">
+                  <button
+                    onClick={() => void saveAndLeave()}
+                    disabled={publishStatus === 'saving'}
+                    className="rounded-lg border border-[#8fd06a] bg-[#2c4a26]/70 px-3 py-2 text-sm font-semibold hover:bg-[#375c2f]/70 disabled:cursor-wait disabled:opacity-70"
+                  >
+                    {publishStatus === 'saving' ? '⏳ Saving…' : '💾 Save & leave'}
+                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => leaveAerial(true)}
+                      disabled={publishStatus === 'saving'}
+                      className="flex-1 rounded-lg border border-[#7a5a4a] bg-black/40 px-3 py-2 text-sm hover:border-[#d06a5f] disabled:opacity-50"
+                    >
+                      Discard &amp; leave
+                    </button>
+                    <button
+                      onClick={() => setConfirmLeave(false)}
+                      className="flex-1 rounded-lg border border-[#5a4a28] bg-black/40 px-3 py-2 text-sm hover:border-[#d6b84a]"
+                    >
+                      Keep editing
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 

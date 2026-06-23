@@ -407,3 +407,20 @@ el navegador no recuerde lo tecleado.
 se oculta con `aerial={view === 'aerial' || uiOpen}`; `mergeMovement` ignora el teclado vía
 `isTypingTarget()`; textarea de prompt e input de key con autocompletado/corrector apagados.
 tsc limpio. **Commit:** _(este commit)_
+
+### 22 jun 2026 · UX de "Save World": estado claro y confirmación in-game
+**Pedido (humano):** Pulir el flujo de Save World (que sentía con pasos de más): que
+quede claro cuándo hay cambios sin guardar vs. guardados, y reemplazar el `window.confirm`
+nativo al salir de la vista aérea por algo integrado.
+**Prompt sintetizado:** Mantén el guardado por lotes (un solo Save World = una tx on-chain),
+pero arregla el feedback: (1) píldora de estado persistente y con color — Saving / ✓ guardado /
+● cambios sin guardar / ⚠ error; (2) el botón Save World refleja el estado (deshabilitado y "✓
+Saved" cuando no hay cambios, resaltado en ámbar con "💾 Save World ●" cuando los hay); (3)
+reemplaza el `window.confirm` de `switchView` por un modal in-game con tres acciones —
+"Save & leave" (guarda a 0G y solo sale si tuvo éxito), "Discard & leave" (revierte al
+snapshot de entrada) y "Keep editing". `publishWorld` ahora devuelve boolean para encadenar
+el guardar-y-salir.
+**Qué se hizo:** añadí estado `confirmLeave`, refactoré `switchView`/`leaveAerial`,
+`publishWorld` retorna éxito, nuevo `saveAndLeave`, píldora de estado con tono e icono, botón
+de guardar con estado dirty/saved y el modal de confirmación in-game. tsc limpio.
+**Commit:** _(este commit)_
