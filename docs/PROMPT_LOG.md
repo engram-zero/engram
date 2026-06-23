@@ -439,3 +439,10 @@ emisor más cercano y caída lineal hasta el borde del radio; silencia al desmon
 **Qué se hizo:** `setLoopVolume` en `AudioContext`, tipo `AudioEmitter` + tabla de emisores,
 driver espacial en `Scene3D` que reemplaza el loop global anterior, y nota en `STATUS.md`.
 tsc limpio. **Commit:** _(este commit)_
+
+### 22 jun 2026 · LICENSE MIT para el submission del hackathon
+**Pedido (humano):** Crear el archivo LICENSE para que el repo no se vea pobre en el
+dashboard del Zero Cup y los jurados tengan claro el licenciamiento.
+**Prompt sintetizado:** Añade un archivo `LICENSE` en la raíz con la licencia MIT
+(permisiva, estándar de hackathon), con copyright 2026 a nombre de Engram.
+**Qué se hizo:** creé `LICENSE` (MIT, © 2026 Engram). **Commit:** _(este commit)_
