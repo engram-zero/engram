@@ -119,6 +119,25 @@ function sameWorldState(a: WorldState | undefined, b: WorldState): boolean {
   return JSON.stringify(normalizeWorldState(a)) === JSON.stringify(normalizeWorldState(b));
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      reject(new Error(`${label} timed out after ${ms}ms`));
+    }, ms);
+
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
+}
+
 // ─── reads (no signature, just an HTTP fetch from 0G) ─────────────────────────
 
 /**
@@ -179,8 +198,13 @@ export async function readAllMemories(
   wallet: string,
   networkType: NetworkType
 ): Promise<Record<NPCName, NPCMemory>> {
-  const bundle = (await readBundle(wallet, networkType)) ?? emptyBundle(wallet);
-  return bundle.npcs;
+  let bundle: MemoryBundle | null = null;
+  try {
+    bundle = await withTimeout(readBundle(wallet, networkType), 8000, '0G memory read');
+  } catch (error) {
+    console.warn('[engram] memory load timed out or failed; using defaults:', error);
+  }
+  return (bundle ?? emptyBundle(wallet)).npcs;
 }
 
 // ─── write (sponsored server-side upload to 0G) ───────────────────────────────
