@@ -111,11 +111,12 @@ const AUDIO_EMITTERS: AudioEmitter[] = [
   // Campfire crackle — only audible around the village fire.
   { cue: 'campfire_crackle', x: CAMPFIRE.x, z: CAMPFIRE.z, radius: 12, volume: 0.5 },
   // Cricket pockets out in the woods/meadow (night only). Their radii overlap so
-  // crickets are present across the wilderness but absent in the village core.
-  { cue: 'night_crickets', x: 0, z: 42, radius: 30, volume: 0.34, nightOnly: true },
-  { cue: 'night_crickets', x: -36, z: -20, radius: 28, volume: 0.34, nightOnly: true },
-  { cue: 'night_crickets', x: 34, z: -16, radius: 28, volume: 0.34, nightOnly: true },
-  { cue: 'night_crickets', x: 30, z: 30, radius: 26, volume: 0.34, nightOnly: true },
+  // crickets are present across the wilderness and fade in as you leave the
+  // village core (clearing radius ~9); they're silent in the centre.
+  { cue: 'night_crickets', x: 0, z: 34, radius: 40, volume: 0.34, nightOnly: true },
+  { cue: 'night_crickets', x: -32, z: -18, radius: 38, volume: 0.34, nightOnly: true },
+  { cue: 'night_crickets', x: 32, z: -14, radius: 38, volume: 0.34, nightOnly: true },
+  { cue: 'night_crickets', x: 28, z: 30, radius: 36, volume: 0.34, nightOnly: true },
 ];
 const SPATIAL_AUDIO_CUES = Array.from(new Set(AUDIO_EMITTERS.map((e) => e.cue)));
 const HOUSE_WIDTH = 2.4;
@@ -2814,19 +2815,27 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     }
     const PER_UNIT_MS = 5000; // ~5s of holding F = 1 unit of wood
     const TICK = 80;
+    const SWING_MS = 620; // play an axe-hit roughly every ~0.6s while chopping
+    let sinceSwing = SWING_MS; // swing immediately on the first chopping tick
     const id = window.setInterval(() => {
       const tree = nearbyTreeRef.current;
       const canChop = fHeldRef.current && tree !== null && !isChopped(tree) && !woodIsFull();
       if (canChop) {
+        // Audible swings throughout the chop, not just when a unit completes.
+        sinceSwing += TICK;
+        if (sinceSwing >= SWING_MS) {
+          void play('axe_chop');
+          sinceSwing = 0;
+        }
         chopRef.current = Math.min(100, chopRef.current + (TICK / PER_UNIT_MS) * 100);
         if (chopRef.current >= 100) {
           const { depleted } = harvestTree(tree!); // grant 1 unit; deplete after TREE_WOOD
-          void play('axe_chop');
           chopRef.current = 0;
           if (depleted) setNearbyTree(null); // tree gone; Player repicks next frame
         }
-      } else if (chopRef.current !== 0) {
-        chopRef.current = 0;
+      } else {
+        sinceSwing = SWING_MS; // reset so the next chop swings right away
+        if (chopRef.current !== 0) chopRef.current = 0;
       }
       setChopPct(chopRef.current); // React skips re-render when unchanged
     }, TICK);
@@ -2976,7 +2985,15 @@ export default function Scene3D({ memories = null, active = null, talking = fals
               onLand={() => void play('land')}
             />
           )}
-          {fpExploring && !isTouchDevice && <PointerLockControls pointerSpeed={0.55} onLock={() => setLocked(true)} onUnlock={() => setLocked(false)} />}
+          {fpExploring && !isTouchDevice && (
+            <PointerLockControls
+              pointerSpeed={0.55}
+              minPolarAngle={0.22 * Math.PI}
+              maxPolarAngle={0.82 * Math.PI}
+              onLock={() => setLocked(true)}
+              onUnlock={() => setLocked(false)}
+            />
+          )}
           {aerialExploring && (
             <>
               <AerialRig

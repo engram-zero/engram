@@ -33,12 +33,9 @@ export const AUDIO_CUES: Record<AudioCueId, AudioCue> = {
   },
   footstep_grass: {
     label: 'Footsteps on grass/dirt',
-    src: [
-      '/audio/foley/footstep-grass-01.mp3',
-      '/audio/foley/footstep-grass-02.mp3',
-      '/audio/foley/footstep-grass-03.mp3',
-      '/audio/foley/footstep-grass-04.mp3',
-    ],
+    // Only list files that actually exist — a missing variant 404s and would stall
+    // playback. Add '-02'…'-04' here once those files are in public/audio/foley/.
+    src: ['/audio/foley/footstep-grass-01.mp3'],
     volume: 0.34,
   },
   jump: {

@@ -80,9 +80,18 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
       const managed = getCue(cueId);
       if (!managed || managed.elements.length === 0) return;
 
-      const element = managed.elements[managed.nextIndex % managed.elements.length];
-      if (unavailableRef.current.has(element.currentSrc || element.src)) return;
-      managed.nextIndex += 1;
+      // Pick the next element that isn't known-unavailable. Always advance the
+      // cursor so a 404'd variant can't permanently stall the rotation.
+      let element: HTMLAudioElement | null = null;
+      for (let i = 0; i < managed.elements.length; i++) {
+        const candidate = managed.elements[managed.nextIndex % managed.elements.length];
+        managed.nextIndex += 1;
+        if (!unavailableRef.current.has(candidate.currentSrc || candidate.src)) {
+          element = candidate;
+          break;
+        }
+      }
+      if (!element) return;
       if (options?.restart !== false) element.currentTime = 0;
       element.loop = !!cue.loop;
       element.volume = options?.volume ?? cue.volume;

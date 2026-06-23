@@ -518,3 +518,18 @@ frase como clip independiente para colocar su INICIO exacto en el timecode en Kd
 de inicio tal como están marcados en el proyecto.
 **Qué se hizo:** sección "ElevenLabs voiceover" en `DEMO_SCRIPT.md` con ajustes de voz,
 workflow de sincronización y la tabla timecode→texto. **Commit:** _(este commit)_
+
+### 23 jun 2026 · Fix audio (pasos/hachazo/grillos) + tirón de cámara
+**Pedido (humano):** No se oyen pasos, hachazos ni grillos; y la cámara en primera persona
+a veces pega un salto violento de ángulo al mirar con el mouse mientras se camina.
+**Prompt sintetizado:** (1) Pasos: el cue `footstep_grass` listaba 4 variantes pero solo
+existe `-01`; las 404 atascaban el cursor de reproducción → deja el manifest con solo el
+archivo existente y endurece `AudioContext.play` para que SIEMPRE avance el índice y salte
+elementos no disponibles. (2) Hachazo: sólo sonaba al completar 1 unidad (~5s) → reproduce
+`axe_chop` en cada golpe (~0.6s) mientras se tala. (3) Grillos: son night-only + por zona;
+ensancha los radios de `AUDIO_EMITTERS` para que se oigan al salir del pueblo de noche.
+(4) Cámara: limita `minPolarAngle`/`maxPolarAngle` del PointerLockControls para eliminar el
+tirón de gimbal al mirar casi recto arriba/abajo.
+**Qué se hizo:** manifest a 1 variante de paso, `play()` robusto, swing de hacha periódico
+durante la tala, radios de grillos mayores, clamp vertical de la cámara. tsc limpio.
+**Commit:** _(este commit)_
