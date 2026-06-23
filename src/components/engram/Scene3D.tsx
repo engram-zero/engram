@@ -1941,6 +1941,15 @@ function CharacterBody({ npc, accent }: { npc: NPCName; accent: string }) {
           <boxGeometry args={[0.08, 0.34, 0.12]} />
           <meshStandardMaterial color="#b6433a" flatShading />
         </mesh>
+        {/* face: alert eyes + a stern brow under the helm */}
+        <mesh position={[-0.1, 1.55, 0.27]}><sphereGeometry args={[0.03, 8, 8]} /><meshBasicMaterial color="#1c2026" /></mesh>
+        <mesh position={[0.1, 1.55, 0.27]}><sphereGeometry args={[0.03, 8, 8]} /><meshBasicMaterial color="#1c2026" /></mesh>
+        <mesh position={[0, 1.605, 0.27]}><boxGeometry args={[0.34, 0.045, 0.05]} /><meshStandardMaterial color="#3a3026" flatShading /></mesh>
+        {/* short captain's cape off the shoulders */}
+        <mesh castShadow position={[0, 0.92, -0.36]} rotation={[0.14, 0, 0]}>
+          <boxGeometry args={[0.78, 0.95, 0.06]} />
+          <meshStandardMaterial color={accent} flatShading roughness={0.7} metalness={0.2} />
+        </mesh>
         {/* spear, gripped to the right */}
         <mesh position={[0.5, 1.0, 0.12]}>
           <cylinderGeometry args={[0.04, 0.04, 2.4, 6]} />
@@ -1991,6 +2000,15 @@ function CharacterBody({ npc, accent }: { npc: NPCName; accent: string }) {
           <sphereGeometry args={[0.04, 8, 8]} />
           <meshBasicMaterial color="#b98bff" />
         </mesh>
+        {/* lower-face scarf/mask + a faint glowing brooch at the throat */}
+        <mesh position={[0, 1.4, 0.19]} rotation={[0.22, 0, 0]}>
+          <boxGeometry args={[0.3, 0.17, 0.12]} />
+          <meshStandardMaterial color="#352a4f" flatShading />
+        </mesh>
+        <mesh position={[0, 1.12, 0.32]}>
+          <octahedronGeometry args={[0.06, 0]} />
+          <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={0.5} flatShading />
+        </mesh>
       </group>
     );
   }
@@ -2028,6 +2046,13 @@ function CharacterBody({ npc, accent }: { npc: NPCName; accent: string }) {
         <cylinderGeometry args={[0.26, 0.3, 0.18, 10]} />
         <meshStandardMaterial color="#8a3a2a" flatShading />
       </mesh>
+      {/* face: eyes, nose, ruddy cheeks, jolly grey merchant beard */}
+      <mesh position={[-0.1, 1.53, 0.27]}><sphereGeometry args={[0.035, 8, 8]} /><meshBasicMaterial color="#2a2018" /></mesh>
+      <mesh position={[0.1, 1.53, 0.27]}><sphereGeometry args={[0.035, 8, 8]} /><meshBasicMaterial color="#2a2018" /></mesh>
+      <mesh position={[0, 1.47, 0.31]}><sphereGeometry args={[0.05, 8, 8]} /><meshStandardMaterial color="#d49a6a" flatShading /></mesh>
+      <mesh position={[-0.17, 1.45, 0.24]}><sphereGeometry args={[0.05, 8, 8]} /><meshStandardMaterial color="#d98e74" flatShading /></mesh>
+      <mesh position={[0.17, 1.45, 0.24]}><sphereGeometry args={[0.05, 8, 8]} /><meshStandardMaterial color="#d98e74" flatShading /></mesh>
+      <mesh castShadow position={[0, 1.34, 0.16]} scale={[1, 0.8, 0.78]}><sphereGeometry args={[0.24, 12, 12]} /><meshStandardMaterial color="#d8d2c4" flatShading /></mesh>
       {/* floating gold coin over the open hand */}
       <mesh position={[0.62, 1.05, 0.1]} rotation={[Math.PI / 2, 0, 0]}>
         <cylinderGeometry args={[0.1, 0.1, 0.03, 16]} />

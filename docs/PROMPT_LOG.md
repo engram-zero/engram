@@ -596,3 +596,14 @@ de día no suenan — probar con `?shot=20` o de noche.) tsc limpio. **Commit:**
 sin tocar la iluminación del terreno (que mantiene su piso para que se siga viendo).
 **Qué se hizo:** `bg`/`fog` interpolados desde `#000000` con `daylight`. tsc limpio.
 **Commit:** _(este commit)_
+
+### 23 jun 2026 · Avatares de NPC más estilizados (caras + detalles)
+**Pedido (humano):** Mejorar los avatares de los NPC, estilizarlos/detallarlos para que no
+se sientan genéricos.
+**Prompt sintetizado:** Los avatares estaban sin cara (solo Sable tenía ojos), por eso se
+sentían insípidos. Añade rasgos faciales y detalles de carácter, sin tocar gameplay:
+Aldric (mercader) ojos, nariz, mejillas rosadas y barba gris jovial; Maren (capitana) ojos,
+ceño severo bajo el yelmo y una capa corta de color de acento; Sable (informante) pañuelo que
+cubre media cara y un broche luminoso en el cuello.
+**Qué se hizo:** mallas aditivas de rostro/detalle en `CharacterBody` para los tres NPC.
+tsc limpio. (Revisar visualmente tras el deploy.) **Commit:** _(este commit)_
