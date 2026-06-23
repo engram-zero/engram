@@ -462,3 +462,14 @@ persona junto a la fogata) y toma el screenshot.
 **Qué se hizo:** `photoMode` en `Scene3D` (param `?shot`, hora pinneada vía
 `computeDayNight`) y en `client-page` (header/banner/title-gate); todos los bloques de HUD
 gateados con `!photoMode`. tsc limpio. **Commit:** _(este commit)_
+
+### 22 jun 2026 · Documentar assets del showcase (logo + copy de YouTube)
+**Pedido (humano):** Dejar documentado el prompt del logo (la "E" de fuego ya elegida)
+y la descripción/título de YouTube para el submission.
+**Prompt sintetizado:** En `docs/ART_ASSETS.md` añade una sección "Showcase assets" con:
+el prompt de imagen del logo cuadrado (E de hilos de fuego sobre sello rúnico índigo),
+la guía del thumbnail vía photo mode `?shot` (portada elegida = primera persona al
+atardecer con los tres NPC junto a la fogata), y el título + descripción listos para
+pegar en YouTube.
+**Qué se hizo:** sección "Showcase assets (logo · thumbnail · video copy)" en
+`ART_ASSETS.md` con prompt de logo, guía de thumbnail y copy de YouTube. **Commit:** _(este commit)_

@@ -139,3 +139,68 @@ Cuando entiendas, dime "listo" y te pediré la primera.
 
 After generating: drop the PNGs in `public/textures/`, run the optimize snippet above
 (→ `.webp`), and register the `.webp` names in `TEXTURE_MANIFEST`.
+
+---
+
+# Showcase assets (logo · thumbnail · video copy)
+
+For the 0G Zero Cup submission page (`my project` tab) and the YouTube upload.
+
+## Logo (LOGO URL — square)
+Square app icon, **512×512** (the generator can output larger; downscale). The
+chosen logo is a fire-thread "E" on a midnight-indigo rune seal. Prompt used:
+
+```
+Square app icon for a fantasy browser RPG called "Engram". A single stylized
+glowing letter "E" formed from interwoven threads of warm amber light, like a
+memory etched in firelight, centered on a deep midnight-indigo background.
+Subtle medieval rune / seal aesthetic, soft inner glow, minimal, flat-ish with a
+slight emboss. No text other than the "E". Clean edges, centered composition,
+suitable as a small app icon. 512x512.
+```
+
+## Thumbnail (THUMBNAIL URL — cover, ~1200×630 / 1280×720)
+**Capture it in-game with photo mode** — visit the live demo with the `?shot`
+query param, which hides ALL UI chrome, skips the title screen (no wallet needed)
+and pins a flattering time of day:
+
+- `…/?shot` → golden dusk with torches lit (default; best for the cover)
+- `…/?shot=12` noon · `…/?shot=20` night with stars · `…/?shot=7` sunrise
+
+Chosen cover = **first-person, golden dusk**, framing the three NPCs (Aldric /
+Maren / Sable, with their name+role labels) around the campfire — it reads as
+"NPC game" at a glance. (Aerial `?shot=18.6` is the alternative wide shot; the
+dark *night* aerial reads too murky as a small gallery card.) When compositing,
+brighten slightly and overlay the tagline + the fire-"E" logo in a corner.
+
+## YouTube — title & description
+**Title:** `Engram — NPCs that truly remember you, on 0G | Zero Cup 2026`
+
+**Description (paste as-is):**
+```
+Engram is a browser RPG where the villagers of Aldenmoor keep a persistent,
+player-owned memory of you — stored on 0G Storage, where not even we, the
+developers, can reset or edit it.
+
+Talk to three NPCs, each with their own memory of you:
+• Aldric — merchant
+• Maren — guard captain
+• Sable — information broker (she aggregates what the others know about you)
+
+Your trust, debts, mood and history persist across sessions and devices: every
+conversation is written back to 0G, auditable by its root hash and anchored
+on-chain with your own wallet signature — so you truly own the memory.
+Remove 0G and the whole premise collapses.
+
+Explore Aldenmoor in first or third person, chop wood, build walls and houses
+(by hand or with an AI that designs voxel structures from a text prompt), and
+watch a living day/night cycle over the village.
+
+▶ Play the live demo: https://engram-bay.vercel.app
+▶ Code: https://github.com/engram-zero/engram
+
+Built for the 0G Zero Cup 2026. Live on the 0G Galileo Testnet (Chain ID 16602)
+with real on-chain uploads.
+
+#0G #web3gaming #AI #NPC #blockchain
+```
