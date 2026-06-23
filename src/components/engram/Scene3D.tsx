@@ -2987,10 +2987,23 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     return () => window.removeEventListener('mousemove', onMove, { capture: true });
   }, [isTouchDevice]);
 
+  // Free the cursor in the aerial view: mouse-look only makes sense in first
+  // person, so when we're NOT in FP, release any pointer lock so the player can
+  // click the build tools without first pressing Esc.
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    if (!fpExploring && document.pointerLockElement) document.exitPointerLock();
+  }, [fpExploring]);
+
   const nearbyNpc = nearby ? NPC_LIST.find((n) => n.id === nearby) : null;
 
   return (
-    <div className="absolute inset-0">
+    <div
+      className="absolute inset-0"
+      // Custom aerial cursor (a soft pointer/reticle). Falls back to the system
+      // crosshair until /assets/cursor-aerial.png exists (see docs/ART_ASSETS.md).
+      style={aerialExploring && !isTouchDevice ? { cursor: 'url(/assets/cursor-aerial.png) 8 8, crosshair' } : undefined}
+    >
       <KeyboardControls map={keyboardMap}>
         <Canvas
           shadows

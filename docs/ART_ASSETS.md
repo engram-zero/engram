@@ -186,6 +186,20 @@ Maren / Sable, with their name+role labels) around the campfire — it reads as
 dark *night* aerial reads too murky as a small gallery card.) When compositing,
 brighten slightly and overlay the tagline + the fire-"E" logo in a corner.
 
+## Aerial cursor (optional polish)
+In the aerial/build view the game uses a custom mouse cursor if the file
+**`public/assets/cursor-aerial.png`** exists (otherwise it falls back to the system
+crosshair). Specs: **32×32 PNG, transparent background**, the visible mark centered
+(the hotspot is set to 8,8). Prompt to generate it:
+
+```
+A small 32x32 game cursor icon, transparent background, for a cozy low-poly
+medieval village strategy/build view. A simple glowing amber pointer-reticle: a
+soft golden arrowhead with a thin diamond/cross reticle, subtle outer glow,
+crisp edges, centered, no text. Fantasy UI style, reads clearly at 32px.
+```
+Drop the PNG at `public/assets/cursor-aerial.png`, commit, and it goes live next deploy.
+
 ## YouTube — title & description
 **Title:** `Engram — NPCs that truly remember you, on 0G | Zero Cup 2026`
 

@@ -565,3 +565,16 @@ una caja de cimiento hacia abajo (esa caída + margen), enterrada en el lado alt
 el suelo en el lado bajo, para que ninguna casa flote.
 **Qué se hizo:** helper `cottageFoundationDrop` (muestrea el terreno en los 4 rincones) y
 una caja de cimiento por casa en `Cottage`. tsc limpio. **Commit:** _(este commit)_
+
+### 23 jun 2026 · Vista aérea: liberar el mouse + cursor personalizado
+**Pedido (humano):** Al pasar a vista aérea el puntero queda secuestrado por el pointer-lock
+(había que apretar Esc para usar las herramientas); además, estaría padre un cursor
+personalizado en aérea (con prompt documentado para crear la imagen).
+**Prompt sintetizado:** Como el mouse-look solo aplica en primera persona, libera el
+pointer-lock siempre que NO estés en FP (efecto: si `!fpExploring` y hay `pointerLockElement`,
+`exitPointerLock`), para que en aérea el puntero esté libre sin apretar Esc. Y aplica un
+cursor CSS personalizado en aérea (`url(/assets/cursor-aerial.png) 8 8, crosshair`), con
+fallback a crosshair hasta que exista el PNG; documenta el prompt para generarlo (32×32,
+transparente) en `ART_ASSETS.md`.
+**Qué se hizo:** efecto de liberación de pointer-lock fuera de FP, cursor aéreo en el root
+div, y sección "Aerial cursor" en `ART_ASSETS.md`. tsc limpio. **Commit:** _(este commit)_
