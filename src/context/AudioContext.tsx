@@ -16,6 +16,12 @@ type AudioContextValue = {
   audioReady: boolean;
   play: (cueId: AudioCueId, options?: PlayOptions) => Promise<void>;
   setLoopEnabled: (cueId: AudioCueId, enabled: boolean, options?: LoopOptions) => Promise<void>;
+  /**
+   * Continuously set a loop's volume for distance-based (spatial) ambience. A
+   * volume at/below ~0 pauses the loop; any positive volume ensures it's playing
+   * and adjusts gain WITHOUT restarting it — safe to call every frame/tick.
+   */
+  setLoopVolume: (cueId: AudioCueId, volume: number) => Promise<void>;
 };
 
 const AudioContext = createContext<AudioContextValue | undefined>(undefined);
@@ -117,13 +123,42 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     [audioReady, getCue]
   );
 
+  const setLoopVolume = useCallback(
+    async (cueId: AudioCueId, volume: number) => {
+      const cue = AUDIO_CUES[cueId];
+      if (!cue.loop) return;
+      const managed = getCue(cueId);
+      if (!managed) return;
+      const v = Math.max(0, Math.min(1, volume));
+
+      for (const element of managed.elements) {
+        if (unavailableRef.current.has(element.currentSrc || element.src)) continue;
+        element.loop = true;
+        if (v <= 0.001) {
+          if (!element.paused) element.pause();
+          continue;
+        }
+        element.volume = v;
+        if (!audioReady) continue;
+        if (!element.paused) continue;
+        try {
+          await element.play();
+        } catch {
+          unavailableRef.current.add(element.currentSrc || element.src);
+        }
+      }
+    },
+    [audioReady, getCue]
+  );
+
   const value = useMemo<AudioContextValue>(
     () => ({
       audioReady,
       play,
       setLoopEnabled,
+      setLoopVolume,
     }),
-    [audioReady, play, setLoopEnabled]
+    [audioReady, play, setLoopEnabled, setLoopVolume]
   );
 
   return <AudioContext.Provider value={value}>{children}</AudioContext.Provider>;

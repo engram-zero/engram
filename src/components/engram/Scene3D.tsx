@@ -45,6 +45,7 @@ import {
   type Building,
 } from '@/lib/world';
 import { useEngramAudio } from '@/context/AudioContext';
+import type { AudioCueId } from '@/lib/audio/manifest';
 import { usePublicWorld } from '@/lib/public-world';
 
 // A tree carries its global index (into TREES) so chopping can target it.
@@ -98,6 +99,24 @@ const keyboardMap = [
 
 const JUMP_SPEED = 5.2; // initial upward velocity (m/s)
 const GRAVITY = 16; // m/s²
+
+// ─── Spatial ambience emitters ────────────────────────────────────────────────
+// Point sources of looping ambience, like light but for sound: each is heard only
+// within `radius`, fading linearly to silence at the rim. The driver picks the
+// loudest emitter per cue based on the player's distance and sets the loop's
+// volume each tick. `nightOnly` cues are muted during the day.
+type AudioEmitter = { cue: AudioCueId; x: number; z: number; radius: number; volume: number; nightOnly?: boolean };
+const AUDIO_EMITTERS: AudioEmitter[] = [
+  // Campfire crackle — only audible around the village fire.
+  { cue: 'campfire_crackle', x: CAMPFIRE.x, z: CAMPFIRE.z, radius: 12, volume: 0.5 },
+  // Cricket pockets out in the woods/meadow (night only). Their radii overlap so
+  // crickets are present across the wilderness but absent in the village core.
+  { cue: 'night_crickets', x: 0, z: 42, radius: 30, volume: 0.34, nightOnly: true },
+  { cue: 'night_crickets', x: -36, z: -20, radius: 28, volume: 0.34, nightOnly: true },
+  { cue: 'night_crickets', x: 34, z: -16, radius: 28, volume: 0.34, nightOnly: true },
+  { cue: 'night_crickets', x: 30, z: 30, radius: 26, volume: 0.34, nightOnly: true },
+];
+const SPATIAL_AUDIO_CUES = Array.from(new Set(AUDIO_EMITTERS.map((e) => e.cue)));
 const HOUSE_WIDTH = 2.4;
 const HOUSE_DEPTH = 2.0;
 const HOUSE_WALL_HEIGHT = 1.8;
@@ -2431,7 +2450,7 @@ interface Scene3DProps {
 
 export default function Scene3D({ memories = null, active = null, talking = false, onSelect = () => {}, interactive = true, showTitle = false, uiOpen = false }: Scene3DProps) {
   const { networkType } = useNetwork();
-  const { play, setLoopEnabled } = useEngramAudio();
+  const { play, setLoopVolume } = useEngramAudio();
   // Walk-around mode kicks in once the village is interactive (wallet connected
   // and memories loaded). The title screen stays cinematic.
   const explorable = interactive && !showTitle;
@@ -2447,10 +2466,43 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     return () => window.clearInterval(id);
   }, []);
   const dn = useMemo(() => computeDayNight(localHour), [localHour]);
+
+  // Distance-based ambience: a light tick reads the live player position and sets
+  // each loop's volume from the nearest emitter (see AUDIO_EMITTERS). Runs off a
+  // timer (not useFrame) so it works in both views and needs no context bridge
+  // into the r3f canvas; `dynamicPlayerState` is updated every frame by Player.
+  const isNightRef = useRef(dn.torchesLit);
+  isNightRef.current = dn.torchesLit;
+  const explorableRef = useRef(explorable);
+  explorableRef.current = explorable;
   useEffect(() => {
-    void setLoopEnabled('night_crickets', explorable && dn.torchesLit, { volume: 0.24 });
-    void setLoopEnabled('campfire_crackle', explorable, { volume: dn.torchesLit ? 0.22 : 0.14 });
-  }, [dn.torchesLit, explorable, setLoopEnabled]);
+    const tick = () => {
+      const active = explorableRef.current;
+      const night = isNightRef.current;
+      const px = dynamicPlayerState.x;
+      const pz = dynamicPlayerState.z;
+      for (const cue of SPATIAL_AUDIO_CUES) {
+        let vol = 0;
+        if (active) {
+          for (const e of AUDIO_EMITTERS) {
+            if (e.cue !== cue) continue;
+            if (e.nightOnly && !night) continue;
+            const d = Math.hypot(px - e.x, pz - e.z);
+            if (d >= e.radius) continue;
+            const falloff = 1 - d / e.radius; // linear fade to the rim
+            vol = Math.max(vol, e.volume * falloff);
+          }
+        }
+        void setLoopVolume(cue, vol);
+      }
+    };
+    tick();
+    const id = window.setInterval(tick, 200);
+    return () => {
+      window.clearInterval(id);
+      for (const cue of SPATIAL_AUDIO_CUES) void setLoopVolume(cue, 0);
+    };
+  }, [setLoopVolume]);
 
   const [nearby, setNearby] = useState<NPCName | null>(null);
   const [nearbyTree, setNearbyTree] = useState<number | null>(null);

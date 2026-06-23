@@ -424,3 +424,18 @@ el guardar-y-salir.
 `publishWorld` retorna éxito, nuevo `saveAndLeave`, píldora de estado con tono e icono, botón
 de guardar con estado dirty/saved y el modal de confirmación in-game. tsc limpio.
 **Commit:** _(este commit)_
+
+### 22 jun 2026 · Audio ambiental por distancia (espacial)
+**Pedido (humano):** Implementar audio con alcance "como si fuera luz, pero sonido":
+un crepitar en la fogata y grillos solo en ciertas áreas, atenuados por distancia.
+**Prompt sintetizado:** Añade ambiente espacial sin requerir un puente de contexto al
+canvas r3f. (1) En `AudioContext`, agrega `setLoopVolume(cue, volume)` que ajusta el
+volumen del loop de forma continua sin reiniciarlo (volumen ~0 pausa, positivo asegura
+play). (2) En la escena, define `AUDIO_EMITTERS` (emisores puntuales con `x,z,radius,
+volume,nightOnly`): `campfire_crackle` en `CAMPFIRE` y varias bolsas de `night_crickets`
+en el bosque/pradera, solo de noche. (3) Un driver por timer (200ms, no `useFrame`, para
+que sirva en ambas vistas) lee `dynamicPlayerState` y fija el volumen de cada loop con el
+emisor más cercano y caída lineal hasta el borde del radio; silencia al desmontar.
+**Qué se hizo:** `setLoopVolume` en `AudioContext`, tipo `AudioEmitter` + tabla de emisores,
+driver espacial en `Scene3D` que reemplaza el loop global anterior, y nota en `STATUS.md`.
+tsc limpio. **Commit:** _(este commit)_
