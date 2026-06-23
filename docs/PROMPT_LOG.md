@@ -484,3 +484,12 @@ documentado.
 las rutas desde `docs/ART_ASSETS.md`. El usuario solo suelta los dos PNG con esos nombres.
 **Qué se hizo:** creé `public/assets/README.md` con la tabla de rutas/specs y añadí la
 sección "Where the files live" en `ART_ASSETS.md`. **Commit:** _(este commit)_
+
+### 22 jun 2026 · Favicon nuevo del sitio
+**Pedido (humano):** Puse un `public/favico.ico`; ¿carga solo o hay que commitear algo?
+**Prompt sintetizado:** El favicon del sitio lo resuelve la convención del App Router
+(`src/app/favicon.ico`), no `public/`. Reemplaza `src/app/favicon.ico` con el ícono nuevo
+y elimina el `public/favico.ico` (mal nombrado, sin la "n", y además sin efecto porque
+gana el de `app/`).
+**Qué se hizo:** sustituí `src/app/favicon.ico` por el ícono nuevo y borré
+`public/favico.ico`. **Commit:** _(este commit)_
