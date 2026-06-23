@@ -2379,8 +2379,10 @@ export function computeDayNight(hour: number): DayNight {
 
   return {
     sunPos: [sunX * 90, sunY * 80, -55], // drives the <Sky> shader (dark when sunY<0)
-    bg: mixColor('#000000', '#a8caee', visible),
-    fog: mixColor('#31435d', '#b8d0e8', visible),
+    // Sky + horizon fade to PURE BLACK at night (driven by daylight, not the
+    // lit-floor `visible`, so there's no blue/grey night sky) and back to day blue.
+    bg: mixColor('#000000', '#a8caee', daylight),
+    fog: mixColor('#000000', '#b8d0e8', daylight),
     ambIntensity: mix(1.18, 1.72, visible),
     ambColor: mixColor('#b4c3e5', '#fff3e0', visible),
     hemiSky: mixColor('#6f84ac', '#d7e6ff', visible),

@@ -587,3 +587,12 @@ el radio por si era muy pequeño.
 en cualquier lugar fuera del centro.
 **Qué se hizo:** 30 emisores, radios 24..40, vol 0.4, CORE 14. (Recordatorio: son night-only;
 de día no suenan — probar con `?shot=20` o de noche.) tsc limpio. **Commit:** _(este commit)_
+
+### 23 jun 2026 · Cielo nocturno totalmente negro
+**Pedido (humano):** Que de noche el cielo sea lo más negro posible (no azul, no gris; NEGRO).
+**Prompt sintetizado:** En `computeDayNight`, el fondo y la niebla usaban el factor `visible`
+(con piso 0.32) → de noche quedaban azul-grisáceos. Cámbialos para que dependan de `daylight`
+(0 de noche) y así `bg` y `fog` lleguen a negro puro en la noche y vuelvan al azul de día,
+sin tocar la iluminación del terreno (que mantiene su piso para que se siga viendo).
+**Qué se hizo:** `bg`/`fog` interpolados desde `#000000` con `daylight`. tsc limpio.
+**Commit:** _(este commit)_
