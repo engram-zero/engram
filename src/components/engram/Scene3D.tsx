@@ -46,6 +46,7 @@ import {
   type Building,
 } from '@/lib/world';
 import { useEngramAudio } from '@/context/AudioContext';
+import type { AudioCueId } from '@/lib/audio/manifest';
 import { usePublicWorld } from '@/lib/public-world';
 
 // A tree carries its global index (into TREES) so chopping can target it.
@@ -99,6 +100,24 @@ const keyboardMap = [
 
 const JUMP_SPEED = 5.2; // initial upward velocity (m/s)
 const GRAVITY = 16; // m/s²
+
+// ─── Spatial ambience emitters ────────────────────────────────────────────────
+// Point sources of looping ambience, like light but for sound: each is heard only
+// within `radius`, fading linearly to silence at the rim. The driver picks the
+// loudest emitter per cue based on the player's distance and sets the loop's
+// volume each tick. `nightOnly` cues are muted during the day.
+type AudioEmitter = { cue: AudioCueId; x: number; z: number; radius: number; volume: number; nightOnly?: boolean };
+const AUDIO_EMITTERS: AudioEmitter[] = [
+  // Campfire crackle — only audible around the village fire.
+  { cue: 'campfire_crackle', x: CAMPFIRE.x, z: CAMPFIRE.z, radius: 12, volume: 0.5 },
+  // Cricket pockets out in the woods/meadow (night only). Their radii overlap so
+  // crickets are present across the wilderness but absent in the village core.
+  { cue: 'night_crickets', x: 0, z: 42, radius: 30, volume: 0.34, nightOnly: true },
+  { cue: 'night_crickets', x: -36, z: -20, radius: 28, volume: 0.34, nightOnly: true },
+  { cue: 'night_crickets', x: 34, z: -16, radius: 28, volume: 0.34, nightOnly: true },
+  { cue: 'night_crickets', x: 30, z: 30, radius: 26, volume: 0.34, nightOnly: true },
+];
+const SPATIAL_AUDIO_CUES = Array.from(new Set(AUDIO_EMITTERS.map((e) => e.cue)));
 const HOUSE_WIDTH = 2.4;
 const HOUSE_DEPTH = 2.0;
 const HOUSE_WALL_HEIGHT = 1.8;
@@ -324,7 +343,21 @@ function trustColor(t: number) {
   return '#cc5a4a';
 }
 
+/** True while the user is typing in a form field (AI-build prompt, API key,
+ * budget…). KeyboardControls listens on window, so without this guard a "W" typed
+ * into an input also walks the avatar north. */
+function isTypingTarget() {
+  if (typeof document === 'undefined') return false;
+  const el = document.activeElement as HTMLElement | null;
+  if (!el) return false;
+  const tag = el.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
+}
+
 function mergeMovement(keyboard: MovementInput, touch: MovementInput) {
+  if (isTypingTarget()) {
+    return { forward: touch.forward, backward: touch.backward, left: touch.left, right: touch.right };
+  }
   return {
     forward: keyboard.forward || touch.forward,
     backward: keyboard.backward || touch.backward,
@@ -2191,10 +2224,12 @@ function Character({
         <CharacterBody npc={npc} accent={accent} />
       </DimGroup>
 
-      {/* Floating label + trust bar. Hidden in the aerial view: drei <Html>
-          distanceFactor scales by the camera zoom, and under the high-zoom
-          orthographic aerial camera it blows the labels up to giant overlapping
-          text across the screen (the "stray letters"). */}
+      {/* Floating label + trust bar. Hidden in the aerial view (drei <Html>
+          distanceFactor blows the labels up to giant overlapping text under the
+          high-zoom orthographic camera — the "stray letters") and whenever a 2D
+          GUI overlay is open, so NPC names don't float over the Memory panel
+          (drei <Html> portals to a very high z-index, above the DOM overlays).
+          The caller folds `uiOpen` into the `aerial` prop for this. */}
       {!aerial && (
         <Html position={[0, 2.15, 0]} center distanceFactor={9} pointerEvents="none" style={{ opacity: dim ? 0.3 : 1, transition: 'opacity 0.3s' }}>
           <div ref={htmlRef} style={{ textAlign: 'center', fontFamily: 'var(--engram-serif, serif)', color: '#f4e8d0', textShadow: '0 2px 6px #000', userSelect: 'none', width: 120 }}>
@@ -2416,7 +2451,7 @@ interface Scene3DProps {
 
 export default function Scene3D({ memories = null, active = null, talking = false, onSelect = () => {}, interactive = true, showTitle = false, uiOpen = false }: Scene3DProps) {
   const { networkType } = useNetwork();
-  const { play, setLoopEnabled } = useEngramAudio();
+  const { play, setLoopVolume } = useEngramAudio();
   // Walk-around mode kicks in once the village is interactive (wallet connected
   // and memories loaded). The title screen stays cinematic.
   const explorable = interactive && !showTitle;
@@ -2432,10 +2467,43 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     return () => window.clearInterval(id);
   }, []);
   const dn = useMemo(() => computeDayNight(localHour), [localHour]);
+
+  // Distance-based ambience: a light tick reads the live player position and sets
+  // each loop's volume from the nearest emitter (see AUDIO_EMITTERS). Runs off a
+  // timer (not useFrame) so it works in both views and needs no context bridge
+  // into the r3f canvas; `dynamicPlayerState` is updated every frame by Player.
+  const isNightRef = useRef(dn.torchesLit);
+  isNightRef.current = dn.torchesLit;
+  const explorableRef = useRef(explorable);
+  explorableRef.current = explorable;
   useEffect(() => {
-    void setLoopEnabled('night_crickets', explorable && dn.torchesLit, { volume: 0.24 });
-    void setLoopEnabled('campfire_crackle', explorable, { volume: dn.torchesLit ? 0.22 : 0.14 });
-  }, [dn.torchesLit, explorable, setLoopEnabled]);
+    const tick = () => {
+      const active = explorableRef.current;
+      const night = isNightRef.current;
+      const px = dynamicPlayerState.x;
+      const pz = dynamicPlayerState.z;
+      for (const cue of SPATIAL_AUDIO_CUES) {
+        let vol = 0;
+        if (active) {
+          for (const e of AUDIO_EMITTERS) {
+            if (e.cue !== cue) continue;
+            if (e.nightOnly && !night) continue;
+            const d = Math.hypot(px - e.x, pz - e.z);
+            if (d >= e.radius) continue;
+            const falloff = 1 - d / e.radius; // linear fade to the rim
+            vol = Math.max(vol, e.volume * falloff);
+          }
+        }
+        void setLoopVolume(cue, vol);
+      }
+    };
+    tick();
+    const id = window.setInterval(tick, 200);
+    return () => {
+      window.clearInterval(id);
+      for (const cue of SPATIAL_AUDIO_CUES) void setLoopVolume(cue, 0);
+    };
+  }, [setLoopVolume]);
 
   const [nearby, setNearby] = useState<NPCName | null>(null);
   const [nearbyTree, setNearbyTree] = useState<number | null>(null);
@@ -2465,6 +2533,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
   const [publishStatus, setPublishStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [publishMsg, setPublishMsg] = useState<string | null>(null);
   const [buildDraftDirty, setBuildDraftDirty] = useState(false);
+  const [confirmLeave, setConfirmLeave] = useState(false); // in-game "unsaved changes" prompt (replaces window.confirm)
   const aerialDraftBaseRef = useRef(cloneWorldState());
   const fHeldRef = useRef(false); // is the chop key (F) held down
   const chopRef = useRef(0); // chop progress 0..100
@@ -2514,6 +2583,20 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     }
   };
 
+  // Actually leave aerial view for first person. `discard` reverts the draft to
+  // the snapshot taken on entry (used by the "Discard & leave" path).
+  const leaveAerial = useCallback((discard: boolean) => {
+    if (discard) {
+      void replaceWorldState(aerialDraftBaseRef.current);
+      setBuildDraftDirty(false);
+      setPublishStatus('idle');
+      setPublishMsg('Unsaved changes discarded.');
+    }
+    setConfirmLeave(false);
+    setBuildMode(null);
+    setView('fp');
+  }, []);
+
   const switchView = useCallback(() => {
     if (view === 'fp') {
       aerialDraftBaseRef.current = cloneWorldState(getWorld());
@@ -2523,14 +2606,10 @@ export default function Scene3D({ memories = null, active = null, talking = fals
       setView('aerial');
       return;
     }
-
+    // Leaving aerial with unsaved builds: ask in-game (no native confirm).
     if (buildDraftDirty) {
-      const discard = window.confirm('You have unsaved building changes. If you leave aerial view now, those changes will be discarded. Leave without saving?');
-      if (!discard) return;
-      void replaceWorldState(aerialDraftBaseRef.current);
-      setBuildDraftDirty(false);
-      setPublishStatus('idle');
-      setPublishMsg('Unsaved changes discarded.');
+      setConfirmLeave(true);
+      return;
     }
     setBuildMode(null);
     setView('fp');
@@ -2551,27 +2630,35 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     }
   };
 
-  const publishWorld = async () => {
+  const publishWorld = async (): Promise<boolean> => {
     const wallet = getWorldWallet();
-    if (!wallet || publishStatus === 'saving') return;
+    if (!wallet || publishStatus === 'saving') return false;
 
     setPublishStatus('saving');
-    setPublishMsg('Saving world...');
+    setPublishMsg('Saving world…');
     try {
       const result = await writeWorldState(wallet, getWorld(), networkType);
       setPublishStatus('saved');
       setBuildDraftDirty(false);
       aerialDraftBaseRef.current = cloneWorldState(getWorld());
-      setPublishMsg(result.skipped ? 'World already saved.' : `World saved (${result.rootHash.slice(0, 10)}...${result.rootHash.slice(-6)})`);
+      setPublishMsg(result.skipped ? 'World already saved.' : `Saved to 0G (${result.rootHash.slice(0, 10)}…${result.rootHash.slice(-6)})`);
       window.setTimeout(() => {
-        setPublishStatus('idle');
-        setPublishMsg(null);
+        setPublishStatus((s) => (s === 'saved' ? 'idle' : s));
+        setPublishMsg((m) => (m && m.startsWith('Saved to 0G') ? null : m));
       }, 5000);
+      return true;
     } catch (error) {
       console.warn('[engram] publish world failed:', error);
       setPublishStatus('error');
       setPublishMsg((error as Error).message || 'Save failed.');
+      return false;
     }
+  };
+
+  // "Save & leave": persist to 0G, and only switch to first person if it worked.
+  const saveAndLeave = async () => {
+    const ok = await publishWorld();
+    if (ok) leaveAerial(false);
   };
 
   // AI construction: describe → /api/build returns pieces relative to the avatar
@@ -2877,7 +2964,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
               onLand={() => void play('land')}
             />
           )}
-          {fpExploring && !isTouchDevice && <PointerLockControls onLock={() => setLocked(true)} onUnlock={() => setLocked(false)} />}
+          {fpExploring && !isTouchDevice && <PointerLockControls pointerSpeed={0.55} onLock={() => setLocked(true)} onUnlock={() => setLocked(false)} />}
           {aerialExploring && (
             <>
               <AerialRig
@@ -2920,7 +3007,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
               dim={!!active && active !== npc.id}
               talking={talking && active === npc.id}
               interactive={interactive && (!explorable || isTouchDevice)}
-              aerial={view === 'aerial'}
+              aerial={view === 'aerial' || uiOpen}
               onSelect={onSelect}
             />
           ))}
@@ -2972,21 +3059,76 @@ export default function Scene3D({ memories = null, active = null, talking = fals
                 🤖 Build with AI
               </button>
               <button
-                onClick={publishWorld}
-                disabled={publishStatus === 'saving'}
-                className="rounded-md border bg-black/50 px-3 py-1.5 text-sm text-[#f4e8d0] hover:border-[#70d6ff] disabled:cursor-wait disabled:opacity-70"
-                style={{ borderColor: publishStatus === 'saved' ? '#8fd06a' : publishStatus === 'error' ? '#d06a5f' : '#4a8aa8' }}
+                onClick={() => void publishWorld()}
+                disabled={publishStatus === 'saving' || (!buildDraftDirty && publishStatus !== 'error')}
+                className="rounded-md border bg-black/50 px-3 py-1.5 text-sm text-[#f4e8d0] hover:border-[#70d6ff] disabled:cursor-not-allowed disabled:opacity-50"
+                style={{
+                  borderColor:
+                    publishStatus === 'saving' ? '#4a8aa8'
+                    : publishStatus === 'error' ? '#d06a5f'
+                    : buildDraftDirty ? '#d6b84a'
+                    : '#8fd06a',
+                  boxShadow: buildDraftDirty && publishStatus !== 'saving' ? '0 0 0 1px rgba(214,184,74,0.55)' : undefined,
+                }}
               >
-                {publishStatus === 'saving' ? 'Saving...' : 'Save World'}
+                {publishStatus === 'saving' ? '⏳ Saving…' : buildDraftDirty ? '💾 Save World ●' : '✓ Saved'}
               </button>
-              <span className="max-w-[15rem] rounded bg-black/60 px-2 py-1 text-right text-xs text-[#f4e8d0]/75">
-                {publishMsg ?? (buildDraftDirty ? 'Unsaved changes.' : 'Save before leaving aerial view.')}
-              </span>
+              {/* Clear, persistent save-state pill. */}
+              {(() => {
+                const tone =
+                  publishStatus === 'saving' ? { c: '#9fd0e6', t: '⏳ Saving to 0G…' }
+                  : publishStatus === 'error' ? { c: '#ffb3a8', t: `⚠️ ${publishMsg ?? 'Save failed — try again.'}` }
+                  : buildDraftDirty ? { c: '#ffe39a', t: '● Unsaved changes — Save before leaving' }
+                  : { c: '#aee5a6', t: publishMsg ?? '✓ All changes saved' };
+                return (
+                  <span className="max-w-[15rem] rounded bg-black/65 px-2 py-1 text-right text-xs" style={{ color: tone.c }}>
+                    {tone.t}
+                  </span>
+                );
+              })()}
               {buildMode && (
                 <span className="rounded bg-black/60 px-2 py-1 text-xs text-[#f4e8d0]/80">
                   {buildMode === 'demolish' ? 'Tap a building to demolish' : 'Tap ground to place · tap tool to cancel'}
                 </span>
               )}
+            </div>
+          )}
+
+          {/* In-game "unsaved changes" prompt when leaving aerial view (replaces
+              the native window.confirm). Offers Save & leave / Discard / Stay. */}
+          {confirmLeave && (
+            <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/50 p-4">
+              <div className="w-full max-w-sm rounded-2xl border border-[#5a4a28] bg-[rgba(20,16,10,0.97)] p-5 text-[#f4e8d0] shadow-2xl">
+                <div className="mb-1 text-lg font-bold text-[#d6b84a]">Unsaved changes</div>
+                <p className="mb-4 text-sm text-[#f4e8d0]/80">
+                  You have building changes that aren&apos;t saved to 0G yet. Leaving the aerial
+                  view now will discard them.
+                </p>
+                <div className="flex flex-col gap-2">
+                  <button
+                    onClick={() => void saveAndLeave()}
+                    disabled={publishStatus === 'saving'}
+                    className="rounded-lg border border-[#8fd06a] bg-[#2c4a26]/70 px-3 py-2 text-sm font-semibold hover:bg-[#375c2f]/70 disabled:cursor-wait disabled:opacity-70"
+                  >
+                    {publishStatus === 'saving' ? '⏳ Saving…' : '💾 Save & leave'}
+                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => leaveAerial(true)}
+                      disabled={publishStatus === 'saving'}
+                      className="flex-1 rounded-lg border border-[#7a5a4a] bg-black/40 px-3 py-2 text-sm hover:border-[#d06a5f] disabled:opacity-50"
+                    >
+                      Discard &amp; leave
+                    </button>
+                    <button
+                      onClick={() => setConfirmLeave(false)}
+                      className="flex-1 rounded-lg border border-[#5a4a28] bg-black/40 px-3 py-2 text-sm hover:border-[#d6b84a]"
+                    >
+                      Keep editing
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -3014,6 +3156,9 @@ export default function Scene3D({ memories = null, active = null, talking = fals
                   onChange={(e) => setAiPrompt(e.target.value)}
                   maxLength={300}
                   rows={3}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
                   placeholder="e.g. a small walled compound with two houses and a gate"
                   className="w-full rounded-lg border border-[#5a4a28] bg-black/40 p-2 text-sm outline-none focus:border-[#b98bff]"
                 />
@@ -3023,6 +3168,10 @@ export default function Scene3D({ memories = null, active = null, talking = fals
                     value={aiKey}
                     onChange={(e) => setAiKey(e.target.value)}
                     type="password"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    name="engram-ai-key"
                     placeholder="sk-ant-…  (sent to the server for this request only, never stored)"
                     className="mt-2 w-full rounded-lg border border-[#5a4a28] bg-black/40 p-2 text-sm outline-none focus:border-[#b98bff]"
                   />

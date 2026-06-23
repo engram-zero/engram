@@ -24,8 +24,11 @@ around a protected village core); **world state persisted on 0G** (a *second* re
 case — inventory/chopped trees/buildings ride the same wallet bundle, with a **Save World**
 button and a read-only **public world** showing other wallets' builds); mobile/touch
 controls (drag joystick, touch look, no-scroll) + a no-wallet **guest mode**; **Aldric's
-merchant loop** (sell wood for coin, raising his trust/memory); and **audio scaffolding**
-(silent-safe cues wired for ambience/foley/UI, awaiting assets/mute/positional polish).
+merchant loop** (sell wood for coin, raising his trust/memory); and **audio** (silent-safe
+cues wired for ambience/foley/UI, with **distance-based spatial ambience** — the
+campfire crackle and night-cricket pockets fade in/out by the player's distance to
+each emitter, like light but for sound; still awaiting the actual asset files + a
+mute toggle).
 Player-built **houses are now enterable** (hollow walls + door gap), the six
 **village cottages are also larger and hollow**, AI voxel construction now snaps to a
 **fine anti-overlap grid** with `BLOCK_UNIT = 0.2`, and demolition refunds **half of the
