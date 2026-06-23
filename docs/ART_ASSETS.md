@@ -146,6 +146,19 @@ After generating: drop the PNGs in `public/textures/`, run the optimize snippet 
 
 For the 0G Zero Cup submission page (`my project` tab) and the YouTube upload.
 
+## Where the files live (public routes)
+Anything in `public/` is served from the site root. Drop the two PNGs in
+**`public/assets/`** (see [`public/assets/README.md`](../public/assets/README.md))
+with these exact names:
+
+| Save as | Public URL | Field |
+|---|---|---|
+| `public/assets/logo.png` | `https://engram-bay.vercel.app/assets/logo.png` | LOGO URL |
+| `public/assets/cover.png` | `https://engram-bay.vercel.app/assets/cover.png` | THUMBNAIL URL |
+
+Commit the PNGs and the URLs go live on the next Vercel deploy; then paste those
+URLs into the submission's Logo/Thumbnail fields.
+
 ## Logo (LOGO URL — square)
 Square app icon, **512×512** (the generator can output larger; downscale). The
 chosen logo is a fire-thread "E" on a midnight-indigo rune seal. Prompt used:

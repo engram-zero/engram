@@ -473,3 +473,14 @@ atardecer con los tres NPC junto a la fogata), y el título + descripción listo
 pegar en YouTube.
 **Qué se hizo:** sección "Showcase assets (logo · thumbnail · video copy)" en
 `ART_ASSETS.md` con prompt de logo, guía de thumbnail y copy de YouTube. **Commit:** _(este commit)_
+
+### 22 jun 2026 · Rutas públicas para logo/cover del submission
+**Pedido (humano):** Crear las rutas donde irán logo.png y cover.png (servidos en
+engram-bay.vercel.app/.../logo.png y /cover.png), indicar dónde guardarlos y dejarlo
+documentado.
+**Prompt sintetizado:** Establece `public/assets/` como carpeta de assets del showcase
+(Next sirve `public/` desde la raíz → `/assets/logo.png` y `/assets/cover.png`). Crea
+`public/assets/README.md` con la convención (nombres exactos, URLs, specs) y referencia
+las rutas desde `docs/ART_ASSETS.md`. El usuario solo suelta los dos PNG con esos nombres.
+**Qué se hizo:** creé `public/assets/README.md` con la tabla de rutas/specs y añadí la
+sección "Where the files live" en `ART_ASSETS.md`. **Commit:** _(este commit)_
