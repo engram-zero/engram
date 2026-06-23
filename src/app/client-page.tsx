@@ -7,7 +7,7 @@
 // Memory is written once, when you leave an NPC; the storage write is sponsored
 // server-side and the player signs the registry pointer only when the root changes.
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Providers, useNetwork } from './providers';
 import ConnectButton from '@/components/ConnectButton';
 import NetworkToggle from '@/components/NetworkToggle';
@@ -129,6 +129,12 @@ function Game() {
   // "Explore as guest" — roam Aldenmoor without a wallet (no dialogue/saving).
   // The best mobile fallback when there's no injected wallet / WalletConnect.
   const [guest, setGuest] = useState(false);
+  // Photo mode (?shot): hide the page chrome too (header/banners) so the scene
+  // can be captured clean for the showcase thumbnail. Scene3D reads the same param.
+  const photoMode = useMemo(
+    () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('shot'),
+    []
+  );
 
   // Latest active NPC, readable from inside a delayed retry without stale closure.
   const activeRef = useRef<NPCName | null>(active);
@@ -254,8 +260,9 @@ function Game() {
     }
   }
 
-  // ── Title screen ──
-  if ((!isConnected || !address) && !guest) {
+  // ── Title screen ── (skipped in photo mode so ?shot jumps straight into the
+  // explorable village for a clean thumbnail, no wallet needed).
+  if ((!isConnected || !address) && !guest && !photoMode) {
     return (
       <div className="relative w-screen h-[100dvh] overflow-hidden engram-serif">
         {/* key forces a full remount vs the in-game Scene3D so nothing lingers
@@ -308,7 +315,8 @@ function Game() {
         uiOpen={panelOpen}
       />
 
-      {/* Top bar */}
+      {/* Top bar (hidden in photo mode for clean thumbnail captures). */}
+      {!photoMode && (
       <header className="absolute top-0 inset-x-0 z-20 flex justify-between items-center px-4 py-3 bg-gradient-to-b from-black/55 to-transparent">
         <div className="font-bold tracking-[0.15em] text-[#d6b84a]">ENGRAM · Aldenmoor</div>
         <div className="flex items-center gap-2">
@@ -332,9 +340,10 @@ function Game() {
           )}
         </div>
       </header>
+      )}
 
       {/* Save-to-0G status banner */}
-      {save.status !== 'idle' && (
+      {!photoMode && save.status !== 'idle' && (
         <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20 text-sm rounded-lg px-4 py-2 border"
           style={{
             background: 'rgba(20,16,10,0.92)',

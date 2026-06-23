@@ -446,3 +446,19 @@ dashboard del Zero Cup y los jurados tengan claro el licenciamiento.
 **Prompt sintetizado:** Añade un archivo `LICENSE` en la raíz con la licencia MIT
 (permisiva, estándar de hackathon), con copyright 2026 a nombre de Engram.
 **Qué se hizo:** creé `LICENSE` (MIT, © 2026 Engram). **Commit:** _(este commit)_
+
+### 22 jun 2026 · Modo foto (?shot) para capturar el thumbnail del showcase
+**Pedido (humano):** Preparar algo para el thumbnail (cover) del submission: idealmente
+una escena/entorno único y limpio para tomar una captura del juego sin UI encima.
+**Prompt sintetizado:** Añade un "modo foto" activado por el query param `?shot` que
+deje el mundo listo para una captura limpia del showcase. (1) Oculta TODO el chrome:
+HUD del juego (inventario, paleta de build, hints, crosshair, joystick, banners) en
+`Scene3D` y el header/banners de la página en `client-page`. (2) Salta la pantalla de
+título y entra directo a la aldea explorable sin requerir wallet. (3) Fija una hora
+favorecedora: `?shot` solo → atardecer dorado con antorchas encendidas (18.6h); `?shot=12`
+mediodía, `?shot=20` noche con estrellas, etc., parseando el valor como hora. El usuario
+abre `engram-bay.vercel.app/?shot`, encuadra (V para vista aérea del pueblo o primera
+persona junto a la fogata) y toma el screenshot.
+**Qué se hizo:** `photoMode` en `Scene3D` (param `?shot`, hora pinneada vía
+`computeDayNight`) y en `client-page` (header/banner/title-gate); todos los bloques de HUD
+gateados con `!photoMode`. tsc limpio. **Commit:** _(este commit)_

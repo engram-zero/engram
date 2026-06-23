@@ -2466,7 +2466,19 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     const id = window.setInterval(() => setLocalHour(quantHour(new Date())), 30000);
     return () => window.clearInterval(id);
   }, []);
-  const dn = useMemo(() => computeDayNight(localHour), [localHour]);
+  // Photo mode (for capturing the showcase thumbnail/logo): visiting with a
+  // `?shot` query param hides the whole HUD and pins a flattering time of day.
+  // `?shot` alone → golden dusk (torches lit); `?shot=12` noon, `?shot=20` night,
+  // etc. so you can frame a clean screenshot with no UI chrome.
+  const photo = useMemo(() => {
+    if (typeof window === 'undefined') return null;
+    const sp = new URLSearchParams(window.location.search);
+    if (!sp.has('shot')) return null;
+    const h = parseFloat(sp.get('shot') || '');
+    return { hour: Number.isFinite(h) ? Math.max(0, Math.min(24, h)) : 18.6 };
+  }, []);
+  const photoMode = !!photo;
+  const dn = useMemo(() => computeDayNight(photoMode ? photo!.hour : localHour), [localHour, photoMode, photo]);
 
   // Distance-based ambience: a light tick reads the live player position and sets
   // each loop's volume from the nearest emitter (see AUDIO_EMITTERS). Runs off a
@@ -3014,8 +3026,9 @@ export default function Scene3D({ memories = null, active = null, talking = fals
         </Canvas>
       </KeyboardControls>
 
-      {/* Shared HUD while exploring (either view): inventory + view toggle. */}
-      {exploring && (
+      {/* Shared HUD while exploring (either view): inventory + view toggle.
+          Hidden entirely in photo mode (?shot) for clean thumbnail captures. */}
+      {exploring && !photoMode && (
         <>
           <div className="pointer-events-none absolute top-20 left-4 z-10 flex flex-col items-start gap-1.5 text-sm text-[#f4e8d0]">
             <span className="inline-flex items-center rounded-md bg-black/45 px-2.5 py-1" title="Wood"><WoodIcon />{world.inventory.wood}/{MAX_WOOD}</span>
@@ -3228,7 +3241,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
       )}
 
       {/* First-person HUD (crosshair, proximity prompts, controls). */}
-      {fpExploring && (
+      {fpExploring && !photoMode && (
         <>
           <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2">
             <div className="h-1.5 w-1.5 rounded-full bg-white/70 shadow-[0_0_4px_rgba(0,0,0,0.8)]" />
@@ -3346,12 +3359,12 @@ export default function Scene3D({ memories = null, active = null, talking = fals
       )}
 
       {/* Aerial HUD. */}
-      {aerialExploring && !isTouchDevice && (
+      {aerialExploring && !isTouchDevice && !photoMode && (
         <div className="pointer-events-none absolute bottom-4 left-4 z-10 text-xs text-[#f4e8d0]/60">
           WASD move (W=north) · Scroll to zoom · V back to first person
         </div>
       )}
-      {isTouchDevice && exploring && (
+      {isTouchDevice && exploring && !photoMode && (
         <>
           {/* Drag the left zone to move; in first person drag the right zone to look. */}
           <TouchJoystick onChange={setTouchMove} />
