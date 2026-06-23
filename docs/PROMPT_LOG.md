@@ -578,3 +578,12 @@ fallback a crosshair hasta que exista el PNG; documenta el prompt para generarlo
 transparente) en `ART_ASSETS.md`.
 **Qué se hizo:** efecto de liberación de pointer-lock fuera de FP, cursor aéreo en el root
 div, y sección "Aerial cursor" en `ART_ASSETS.md`. tsc limpio. **Commit:** _(este commit)_
+
+### 23 jun 2026 · Grillos: más puntos y radios mayores
+**Pedido (humano):** Sigo sin escuchar grillos; poner más cantidad de puntos y/o aumentar
+el radio por si era muy pequeño.
+**Prompt sintetizado:** Sube `makeCricketEmitters` a ~30 puntos con radios 24..40 y volumen
+0.4, manteniéndolos night-only y fuera del core (radio <14), para que de noche se oigan casi
+en cualquier lugar fuera del centro.
+**Qué se hizo:** 30 emisores, radios 24..40, vol 0.4, CORE 14. (Recordatorio: son night-only;
+de día no suenan — probar con `?shot=20` o de noche.) tsc limpio. **Commit:** _(este commit)_

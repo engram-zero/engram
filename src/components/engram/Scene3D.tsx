@@ -119,15 +119,17 @@ function makeCricketEmitters(): AudioEmitter[] {
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
-  const CORE = 16; // keep the village centre quiet (clearing radius ~9 + margin)
+  const CORE = 14; // keep the village centre quiet (clearing radius ~9 + margin)
   const out: AudioEmitter[] = [];
-  for (let i = 0; out.length < 16 && i < 200; i++) {
+  // Many overlapping pockets with generous radii → at night, crickets are audible
+  // almost anywhere outside the core.
+  for (let i = 0; out.length < 30 && i < 400; i++) {
     const ang = rng() * Math.PI * 2;
-    const rad = CORE + rng() * 44; // 16..60 from centre
+    const rad = CORE + rng() * 48; // 14..62 from centre
     const x = Math.cos(ang) * rad;
     const z = Math.sin(ang) * rad;
     if (Math.hypot(x, z) < CORE) continue; // never in the core
-    out.push({ cue: 'night_crickets', x, z, radius: 16 + rng() * 12, volume: 0.32, nightOnly: true });
+    out.push({ cue: 'night_crickets', x, z, radius: 24 + rng() * 16, volume: 0.4, nightOnly: true });
   }
   return out;
 }
