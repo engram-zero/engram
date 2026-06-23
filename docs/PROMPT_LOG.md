@@ -533,3 +533,14 @@ tirón de gimbal al mirar casi recto arriba/abajo.
 **Qué se hizo:** manifest a 1 variante de paso, `play()` robusto, swing de hacha periódico
 durante la tala, radios de grillos mayores, clamp vertical de la cámara. tsc limpio.
 **Commit:** _(este commit)_
+
+### 23 jun 2026 · Cámara: filtrar spikes del pointer-lock
+**Pedido (humano):** El salto violento de la cámara en primera persona sigue (menos
+frecuente) pese al clamp de ángulo.
+**Prompt sintetizado:** El residuo no es gimbal sino un mousemove con `movementX/Y`
+atípicamente grande (spike del pointer-lock) que PointerLockControls convierte en un
+tirón. Añade un listener de `mousemove` en fase de captura que, cuando el pointer está
+bloqueado y el delta supera un umbral (~200px en un evento), haga `stopImmediatePropagation`
+para que el control no procese ese evento. Las vueltas rápidas normales quedan por debajo.
+**Qué se hizo:** efecto con filtro de spikes en captura en `Scene3D`. tsc limpio.
+**Commit:** _(este commit)_

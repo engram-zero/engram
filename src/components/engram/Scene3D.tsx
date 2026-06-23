@@ -2923,6 +2923,24 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     return () => document.removeEventListener('pointerlockchange', release);
   }, [exploring]);
 
+  // Pointer-lock sometimes delivers a single mousemove with an absurd movementX/Y
+  // (a browser/OS spike), which PointerLockControls turns into a violent camera
+  // snap "teleporting" the view. Drop those outlier events in the capture phase
+  // before the controls' own document listener sees them; normal fast flicks are
+  // well under this threshold.
+  useEffect(() => {
+    if (isTouchDevice) return;
+    const MAX_DELTA = 200; // px within one event; above this = a spike, not a real turn
+    const onMove = (e: MouseEvent) => {
+      if (!document.pointerLockElement) return;
+      if (Math.abs(e.movementX) > MAX_DELTA || Math.abs(e.movementY) > MAX_DELTA) {
+        e.stopImmediatePropagation();
+      }
+    };
+    window.addEventListener('mousemove', onMove, { capture: true });
+    return () => window.removeEventListener('mousemove', onMove, { capture: true });
+  }, [isTouchDevice]);
+
   const nearbyNpc = nearby ? NPC_LIST.find((n) => n.id === nearby) : null;
 
   return (
