@@ -388,3 +388,22 @@ hice que la demolición reembolse la mitad de la madera realmente pagada, añad�
 aliados/enemigos y amplié el backlog estratégico de `ENGRAM_PROMPTS.md`; además actualicé
 `STATUS.md` con el estado real del proyecto. **Commit:** `7160b24`, `a2f9ca9`, `85e4e16`,
 `6b7ad1a`, `46c68ac`, `e262ca7` + este commit (docs).
+
+### 22 jun 2026 · Pulido pre-demo: sensibilidad de mouse, labels sobre la GUI y teclado al escribir
+**Pedido (humano):** Antes de grabar el video, arreglar tres detalles: (1) la cámara
+en primera persona se mueve demasiado fuerte con un leve movimiento del mouse; (2) los
+nombres flotantes de los NPC quedan por encima del panel de Memory y ensucian la lectura;
+(3) al escribir en el panel "build with AI" el avatar camina (una "W" lo manda al norte) y
+hay que evitar además que lo tecleado quede en almacenamiento del navegador.
+**Prompt sintetizado:** Baja la sensibilidad del PointerLockControls de primera persona a
+~0.55. Oculta las etiquetas flotantes `<Html>` de los NPC siempre que haya un overlay 2D
+abierto (no solo en aerial), porque drei las portalea a un z-index altísimo por encima del
+panel de Memory; reutiliza el prop `aerial` plegándole `uiOpen`. Y como `KeyboardControls`
+escucha en window, añade un guard `isTypingTarget()` dentro de `mergeMovement` que anule el
+movimiento por teclado mientras el foco esté en un input/textarea/select/contentEditable;
+marca los campos de prompt y API key con `autoComplete/autoCorrect/spellCheck` off para que
+el navegador no recuerde lo tecleado.
+**Qué se hizo:** `pointerSpeed={0.55}` en el `PointerLockControls`; el label del NPC ahora
+se oculta con `aerial={view === 'aerial' || uiOpen}`; `mergeMovement` ignora el teclado vía
+`isTypingTarget()`; textarea de prompt e input de key con autocompletado/corrector apagados.
+tsc limpio. **Commit:** _(este commit)_

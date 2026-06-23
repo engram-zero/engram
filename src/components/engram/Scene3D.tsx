@@ -323,7 +323,21 @@ function trustColor(t: number) {
   return '#cc5a4a';
 }
 
+/** True while the user is typing in a form field (AI-build prompt, API key,
+ * budget…). KeyboardControls listens on window, so without this guard a "W" typed
+ * into an input also walks the avatar north. */
+function isTypingTarget() {
+  if (typeof document === 'undefined') return false;
+  const el = document.activeElement as HTMLElement | null;
+  if (!el) return false;
+  const tag = el.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
+}
+
 function mergeMovement(keyboard: MovementInput, touch: MovementInput) {
+  if (isTypingTarget()) {
+    return { forward: touch.forward, backward: touch.backward, left: touch.left, right: touch.right };
+  }
   return {
     forward: keyboard.forward || touch.forward,
     backward: keyboard.backward || touch.backward,
@@ -2190,10 +2204,12 @@ function Character({
         <CharacterBody npc={npc} accent={accent} />
       </DimGroup>
 
-      {/* Floating label + trust bar. Hidden in the aerial view: drei <Html>
-          distanceFactor scales by the camera zoom, and under the high-zoom
-          orthographic aerial camera it blows the labels up to giant overlapping
-          text across the screen (the "stray letters"). */}
+      {/* Floating label + trust bar. Hidden in the aerial view (drei <Html>
+          distanceFactor blows the labels up to giant overlapping text under the
+          high-zoom orthographic camera — the "stray letters") and whenever a 2D
+          GUI overlay is open, so NPC names don't float over the Memory panel
+          (drei <Html> portals to a very high z-index, above the DOM overlays).
+          The caller folds `uiOpen` into the `aerial` prop for this. */}
       {!aerial && (
         <Html position={[0, 2.15, 0]} center distanceFactor={9} pointerEvents="none" style={{ opacity: dim ? 0.3 : 1, transition: 'opacity 0.3s' }}>
           <div ref={htmlRef} style={{ textAlign: 'center', fontFamily: 'var(--engram-serif, serif)', color: '#f4e8d0', textShadow: '0 2px 6px #000', userSelect: 'none', width: 120 }}>
@@ -2873,7 +2889,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
               onLand={() => void play('land')}
             />
           )}
-          {fpExploring && !isTouchDevice && <PointerLockControls onLock={() => setLocked(true)} onUnlock={() => setLocked(false)} />}
+          {fpExploring && !isTouchDevice && <PointerLockControls pointerSpeed={0.55} onLock={() => setLocked(true)} onUnlock={() => setLocked(false)} />}
           {aerialExploring && (
             <>
               <AerialRig
@@ -2916,7 +2932,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
               dim={!!active && active !== npc.id}
               talking={talking && active === npc.id}
               interactive={interactive && (!explorable || isTouchDevice)}
-              aerial={view === 'aerial'}
+              aerial={view === 'aerial' || uiOpen}
               onSelect={onSelect}
             />
           ))}
@@ -3010,6 +3026,9 @@ export default function Scene3D({ memories = null, active = null, talking = fals
                   onChange={(e) => setAiPrompt(e.target.value)}
                   maxLength={300}
                   rows={3}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
                   placeholder="e.g. a small walled compound with two houses and a gate"
                   className="w-full rounded-lg border border-[#5a4a28] bg-black/40 p-2 text-sm outline-none focus:border-[#b98bff]"
                 />
@@ -3019,6 +3038,10 @@ export default function Scene3D({ memories = null, active = null, talking = fals
                     value={aiKey}
                     onChange={(e) => setAiKey(e.target.value)}
                     type="password"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    name="engram-ai-key"
                     placeholder="sk-ant-…  (sent to the server for this request only, never stored)"
                     className="mt-2 w-full rounded-lg border border-[#5a4a28] bg-black/40 p-2 text-sm outline-none focus:border-[#b98bff]"
                   />
