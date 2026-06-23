@@ -493,3 +493,15 @@ y elimina el `public/favico.ico` (mal nombrado, sin la "n", y además sin efecto
 gana el de `app/`).
 **Qué se hizo:** sustituí `src/app/favicon.ico` por el ícono nuevo y borré
 `public/favico.ico`. **Commit:** _(este commit)_
+
+### 22 jun 2026 · Auditoría pre-submission + ignore de worktrees/harness
+**Pedido (humano):** Revisión general del proyecto contra la documentación del hackathon,
+buscando cosas por las que podríamos ser descalificados o no tomados en cuenta.
+**Prompt sintetizado:** Audita riesgos de descalificación: secretos filtrados (claves en
+git, .env), licencia, que 0G haga trabajo real, honestidad de la descripción, README y
+demo en vivo. Como arreglo seguro, ignora en git los worktrees `.tmp*` (copias completas
+del proyecto que un `git add -A` podría commitear) y el `.claude/settings.json` per-máquina.
+**Qué se hizo:** escaneo de secretos (limpio: solo placeholders en `.env.example`, sin
+claves en código), verificado README/LICENSE/demo 200; añadidos `.tmp*` y
+`.claude/settings*.json` a `.gitignore`. Informe de hallazgos entregado al humano.
+**Commit:** _(este commit)_
