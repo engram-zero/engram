@@ -3045,27 +3045,63 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     return () => window.clearInterval(id);
   }, [fpExploring, play]);
 
-  // Player combat listener
+  // Player combat / action listener. Left-click while locked attacks (combat).
+  // Right-click is a context "action" button in first person: attack a nearby
+  // enemy, else talk to a nearby NPC, else chop a nearby tree (while held).
+  const onSelectRef = useRef(onSelect);
+  onSelectRef.current = onSelect;
+  const fpExploringRef = useRef(fpExploring);
+  fpExploringRef.current = fpExploring;
+  const rightChopRef = useRef(false);
   useEffect(() => {
     if (!exploring) return;
+    const attack = () => {
+      const id = nearbyEnemyRef.current;
+      if (!id) return false;
+      const enemy = dynamicEnemyState[id];
+      if (!enemy || enemy.dead) return false;
+      void play('attack_swing');
+      enemy.hp -= 25;
+      if (enemy.hp <= 0) {
+        enemy.dead = true;
+        recordEnemyKill();
+      }
+      setFlash(true);
+      setTimeout(() => setFlash(false), 80);
+      return true;
+    };
     const onMouseDown = (e: MouseEvent) => {
-      // Only trigger if locked (first person) and left click
+      // Left-click attack (only while pointer-locked) — unchanged combat.
       if (document.pointerLockElement && e.button === 0 && nearbyEnemyRef.current) {
-        const enemy = dynamicEnemyState[nearbyEnemyRef.current];
-        if (enemy && !enemy.dead) {
-          void play('attack_swing');
-          enemy.hp -= 25;
-          if (enemy.hp <= 0) {
-            enemy.dead = true;
-            recordEnemyKill();
-          }
-          setFlash(true);
-          setTimeout(() => setFlash(false), 80);
+        attack();
+        return;
+      }
+      // Right-click = action button in first person (works locked or not).
+      if (e.button === 2 && fpExploringRef.current) {
+        e.preventDefault();
+        if (attack()) return;
+        if (nearbyRef.current) {
+          onSelectRef.current(nearbyRef.current); // talk
+          return;
+        }
+        if (nearbyTreeRef.current !== null) {
+          fHeldRef.current = true; // hold the right button to keep chopping
+          rightChopRef.current = true;
         }
       }
     };
+    const onMouseUp = (e: MouseEvent) => {
+      if (e.button === 2 && rightChopRef.current) {
+        fHeldRef.current = false;
+        rightChopRef.current = false;
+      }
+    };
     window.addEventListener('mousedown', onMouseDown);
-    return () => window.removeEventListener('mousedown', onMouseDown);
+    window.addEventListener('mouseup', onMouseUp);
+    return () => {
+      window.removeEventListener('mousedown', onMouseDown);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
   }, [exploring, play]);
   
   // Sync player HP to UI and handle death / respawn
@@ -3157,11 +3193,17 @@ export default function Scene3D({ memories = null, active = null, talking = fals
   return (
     <div
       className="absolute inset-0"
-      // Custom aerial cursor (a soft pointer/reticle). Falls back to the system
-      // crosshair until /assets/cursor-aerial.png exists (see docs/ART_ASSETS.md).
-      style={aerialExploring && !isTouchDevice ? { cursor: 'url(/assets/cursor-aerial.png) 8 8, crosshair' } : undefined}
-      // Right-click is "move here" in aerial — suppress the browser context menu.
-      onContextMenu={(e) => { if (aerialExploring) e.preventDefault(); }}
+      // Custom cursor (a soft pointer/reticle) in aerial, and in first person
+      // while the pointer ISN'T locked (left-click then engages mouse-look).
+      // Falls back to the system crosshair until /assets/cursor-aerial.png exists.
+      style={
+        !isTouchDevice && (aerialExploring || (fpExploring && !locked))
+          ? { cursor: 'url(/assets/cursor-aerial.png) 8 8, crosshair' }
+          : undefined
+      }
+      // Right-click is an action (aerial: move here · FP: attack/talk/chop) —
+      // suppress the browser context menu while exploring.
+      onContextMenu={(e) => { if (aerialExploring || fpExploring) e.preventDefault(); }}
     >
       <KeyboardControls map={keyboardMap}>
         <Canvas
@@ -3590,7 +3632,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
           {!controlsArmed && (
             <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
               <div className="rounded-full bg-black/55 px-5 py-2 text-sm text-[#f4e8d0]/90">
-                Click to look around · WASD to walk · V for aerial view
+Left-click to look around · right-click to act · WASD to walk · V for aerial
               </div>
             </div>
           )}
@@ -3633,7 +3675,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
 
           {!isTouchDevice && (
             <div className="pointer-events-none absolute bottom-4 left-4 z-10 text-xs text-[#f4e8d0]/55">
-              WASD move · Space jump · Mouse look · E talk · F chop · Click attack · V aerial · Esc release cursor
+              WASD move · Space jump · Mouse look · Right-click action (attack/talk/chop) · E talk · F chop · V aerial · Esc release
             </div>
           )}
         </>

@@ -698,3 +698,17 @@ apaga a los 12s; la píldora "✓ All changes saved" solo se muestra mientras es
 (las de saving/error/unsaved siguen siempre). Incluye el `night-crickets-loop.mp3` actualizado.
 **Qué se hizo:** auto-dismiss del banner de memoria (12s) y de la píldora de mundo (12s);
 mp3 de grillos actualizado. tsc limpio. **Commit:** _(este commit)_
+
+### 23 jun 2026 · FP: cursor cuando no está secuestrado + click derecho = acción
+**Pedido (humano):** Que el cursor PNG aparezca también en primera persona cuando la cámara
+no tenga secuestrado el puntero; click izquierdo activa el modo cámara (lock), y click derecho
+sea un botón de acción (atacar enemigos, hablar con NPCs, talar árboles).
+**Prompt sintetizado:** (1) Muestra el cursor custom en FP cuando `!locked` (el left-click ya
+hace lock vía PointerLockControls). (2) Suprime el menú contextual también en FP. (3) En el
+listener de mouse, añade botón derecho como acción contextual (funcione con o sin lock):
+prioridad enemigo→atacar (con `recordEnemyKill`), si no NPC→hablar (`onSelect`), si no árbol→
+talar manteniendo (setea `fHeldRef` en mousedown derecho y lo suelta en mouseup). Mantén el
+left-click de ataque (combate de henrique) intacto. Actualiza los hints.
+**Qué se hizo:** cursor FP sin lock, context-menu suprimido en FP, click derecho de acción
+(atacar/hablar/talar) vía refs sin closures stale, hints actualizados. tsc limpio.
+**Commit:** _(este commit)_
