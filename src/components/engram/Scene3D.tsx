@@ -1585,6 +1585,59 @@ function Torch({ position, lit = true }: { position: [number, number, number]; l
   );
 }
 
+// A meandering creek that crosses the map north of the village. It's a thin
+// translucent water ribbon draped over the terrain (each vertex sits on the
+// ground height), so it follows the hills without carving terrain or affecting
+// collision/pathing. Skirts the central clearing so it never cuts the village.
+function riverCenterZ(x: number): number {
+  return 24 + Math.sin(x * 0.045) * 15 + Math.cos(x * 0.11) * 4;
+}
+function River() {
+  const geom = useMemo(() => {
+    const STEPS = 140;
+    const HALF_W = 3.2; // creek half-width
+    const x0 = -GROUND_RADIUS + 4;
+    const x1 = GROUND_RADIUS - 4;
+    const positions: number[] = [];
+    const uvs: number[] = [];
+    const indices: number[] = [];
+    for (let i = 0; i <= STEPS; i++) {
+      const t = i / STEPS;
+      const x = x0 + (x1 - x0) * t;
+      const cz = riverCenterZ(x);
+      for (const s of [-1, 1] as const) {
+        const z = cz + s * HALF_W;
+        positions.push(x, getHeightAt(x, z) + 0.08, z); // drape just above ground
+        uvs.push(s < 0 ? 0 : 1, t * 24);
+      }
+    }
+    for (let i = 0; i < STEPS; i++) {
+      const a = i * 2;
+      indices.push(a, a + 1, a + 3, a, a + 3, a + 2);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    g.setIndex(indices);
+    g.computeVertexNormals();
+    return g;
+  }, []);
+  return (
+    <mesh geometry={geom} receiveShadow renderOrder={1}>
+      <meshStandardMaterial
+        color="#2f6f8f"
+        transparent
+        opacity={0.74}
+        roughness={0.15}
+        metalness={0.35}
+        emissive="#10303f"
+        emissiveIntensity={0.25}
+        depthWrite={false}
+      />
+    </mesh>
+  );
+}
+
 function Village({ torchesLit = true }: { torchesLit?: boolean }) {
   return (
     <group>
@@ -3124,6 +3177,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
           {explorable && active && view === 'fp' && <TalkFraming active={active} />}
 
           <Village torchesLit={dn.torchesLit} />
+          <River />
           <Fireflies active={dn.torchesLit} />
           {explorable && <Buildings />}
           {explorable && aiPreview && aiOrigin && <AIPreviewGhosts pieces={aiPreview} origin={aiOrigin} />}

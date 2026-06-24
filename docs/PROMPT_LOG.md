@@ -627,3 +627,14 @@ driver espacial (`if (e.dayOnly && night) continue`) para que suene de día en t
 apague de noche (cuando entran los grillos). Tolerante a archivo faltante.
 **Qué se hizo:** cue `day_ambience` en manifest + TODO, emisor global dayOnly, flag `dayOnly`
 en `AudioEmitter` y en el driver. tsc limpio. (Falta poner el mp3.) **Commit:** _(este commit)_
+
+### 23 jun 2026 · Riachuelo que atraviesa el mapa
+**Pedido (humano):** Poner un riachuelo que atraviese el mapa.
+**Prompt sintetizado:** Añade un arroyo translúcido que cruce el mapa por el norte,
+bordeando la aldea (sin pasar por el claro central). Hazlo como una cinta de agua que se
+drapea sobre el terreno (cada vértice a la altura del suelo `getHeightAt`+offset), para no
+tallar el terreno ni afectar colisión/pathing (no toca `map.ts`). Curva suave (meandro),
+material azul translúcido con leve emisión, `depthWrite:false`.
+**Qué se hizo:** componente `River` con BufferGeometry tipo cinta siguiendo `riverCenterZ(x)`,
+renderizado en la escena tras `Village`. tsc limpio. (Revisar a ojo; reroutear si hace falta.)
+**Commit:** _(este commit)_
