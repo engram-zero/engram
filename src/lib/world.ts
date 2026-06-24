@@ -219,10 +219,11 @@ export function woodIsFull(): boolean {
   return state.inventory.wood >= MAX_WOOD;
 }
 
-/** Hold-cycles needed to fell a tree (keeps the chop time the same), and how much
- * wood each cycle grants. A full tree now yields TREE_WOOD = 20. */
-export const TREE_CHOPS = 5;
-export const WOOD_PER_CHOP = 4;
+/** Each fill of the chop bar grants ONE unit of wood (like the original pacing);
+ * the tree is felled after TREE_CHOPS fills, so a full tree yields 20 wood but
+ * takes ~4x longer than before to chop down. */
+export const TREE_CHOPS = 20;
+export const WOOD_PER_CHOP = 1;
 export const TREE_WOOD = TREE_CHOPS * WOOD_PER_CHOP; // 20
 
 // Transient per-tree extraction progress (not persisted — only the final

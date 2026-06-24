@@ -665,3 +665,11 @@ con `TREE_WOOD = TREE_CHOPS*WOOD_PER_CHOP = 20`; `harvestTree` agota tras `TREE_
 `WOOD_PER_CHOP` por ciclo (capado a MAX_WOOD).
 **Qué se hizo:** `TREE_CHOPS`/`WOOD_PER_CHOP`/`TREE_WOOD=20` en `world.ts`; `harvestTree`
 actualizado. tsc limpio. **Commit:** _(este commit)_
+
+### 23 jun 2026 · Tala: 1 madera por ciclo, árbol cae a los 20
+**Pedido (humano):** Corrección: que cada vez que se llena la barrita dé 1 unidad (no las
+cinco/cuatro del cambio anterior), y el árbol desaparezca tras 20 unidades — así el tiempo
+por unidad es como antes, pero talar el árbol entero toma más.
+**Prompt sintetizado:** Ajusta `WOOD_PER_CHOP=1` y `TREE_CHOPS=20` (TREE_WOOD sigue 20), para
+que cada ciclo de la barra otorgue 1 madera y el árbol se agote tras 20 ciclos.
+**Qué se hizo:** constantes de tala a 1/20 en `world.ts`. tsc limpio. **Commit:** _(este commit)_
