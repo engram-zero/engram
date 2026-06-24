@@ -638,3 +638,11 @@ material azul translúcido con leve emisión, `depthWrite:false`.
 **Qué se hizo:** componente `River` con BufferGeometry tipo cinta siguiendo `riverCenterZ(x)`,
 renderizado en la escena tras `Village`. tsc limpio. (Revisar a ojo; reroutear si hace falta.)
 **Commit:** _(este commit)_
+
+### 23 jun 2026 · Grillos: bajar volumen (~50%) y reducir área
+**Pedido (humano):** Ya se escuchan los grillos; bajarles el volumen ~50% y reducir el área
+donde se oyen.
+**Prompt sintetizado:** En `makeCricketEmitters`, baja el volumen de 0.4 a 0.2, reduce el
+número de bolsas (30→14) y sus radios (24..40 → 12..20), manteniéndolos night-only y fuera
+del core, para que los grillos se oigan aquí y allá (no cubriendo todo el mapa) y más suave.
+**Qué se hizo:** 14 emisores, radios 12..20, vol 0.2. tsc limpio. **Commit:** _(este commit)_
