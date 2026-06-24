@@ -607,3 +607,13 @@ ceño severo bajo el yelmo y una capa corta de color de acento; Sable (informant
 cubre media cara y un broche luminoso en el cuello.
 **Qué se hizo:** mallas aditivas de rostro/detalle en `CharacterBody` para los tres NPC.
 tsc limpio. (Revisar visualmente tras el deploy.) **Commit:** _(este commit)_
+
+### 23 jun 2026 · Ícono de madera en botones de construcción (en vez del □)
+**Pedido (humano):** En los botones de la derecha de la vista aérea, el costo de madera
+sale como un cuadro □ en vez del emoji.
+**Prompt sintetizado:** El □ es el emoji 🪵 (Unicode reciente) que la fuente de Windows del
+usuario no tiene. Reemplaza el 🪵 en los botones Wall/House por el componente SVG `WoodIcon`
+(que siempre se ve), reestructurando el label a JSX `<icon label> ({cost}<WoodIcon/>)`; y
+cambia el 🪵 del mensaje de la IA por la palabra "wood".
+**Qué se hizo:** botones de construcción con `WoodIcon` SVG y costo; mensaje IA sin emoji.
+tsc limpio. **Commit:** _(este commit)_

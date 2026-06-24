@@ -2835,7 +2835,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     setAiPreview(null);
     setAiOrigin(null);
     if (placed > 0) markBuildDraftDirty();
-    setAiMsg(placed > 0 ? `Built ${placed} piece${placed === 1 ? '' : 's'} (−${wood}🪵).` : 'Nothing fit / not enough wood. Drive to open ground and re-generate.');
+    setAiMsg(placed > 0 ? `Built ${placed} piece${placed === 1 ? '' : 's'} (−${wood} wood).` : 'Nothing fit / not enough wood. Drive to open ground and re-generate.');
   };
 
   const activateNearbyNpc = () => {
@@ -3168,20 +3168,23 @@ export default function Scene3D({ memories = null, active = null, talking = fals
           {aerialExploring && (
             <div className="absolute top-32 right-4 z-10 flex flex-col items-end gap-1.5">
               {([
-                ['wall', `🧱 Wall (${BUILD_COST.wall}+🪵)`],
-                ['house', `🏠 House (${BUILD_COST.house}+🪵)`],
-                ['demolish', '🧨 Demolish'],
-              ] as const).map(([m, label]) => (
+                ['wall', '🧱', 'Wall', BUILD_COST.wall],
+                ['house', '🏠', 'House', BUILD_COST.house],
+                ['demolish', '🧨', 'Demolish', null],
+              ] as const).map(([m, icon, label, cost]) => (
                 <button
                   key={m}
                   onClick={() => setBuildMode((cur) => (cur === m ? null : m))}
-                  className="rounded-md border px-3 py-1.5 text-sm text-[#f4e8d0]"
+                  className="inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-sm text-[#f4e8d0]"
                   style={{
                     background: buildMode === m ? 'rgba(95,150,90,0.85)' : 'rgba(0,0,0,0.5)',
                     borderColor: buildMode === m ? '#8fd06a' : '#5a4a28',
                   }}
                 >
-                  {label}
+                  <span>{icon} {label}</span>
+                  {cost !== null && (
+                    <span className="inline-flex items-center gap-0.5">({cost}<WoodIcon />)</span>
+                  )}
                 </button>
               ))}
               <button
