@@ -1,5 +1,6 @@
 export type AudioCueId =
   | 'night_crickets'
+  | 'day_ambience'
   | 'campfire_crackle'
   | 'footstep_grass'
   | 'jump'
@@ -24,6 +25,12 @@ export const AUDIO_CUES: Record<AudioCueId, AudioCue> = {
     src: '/audio/ambient/night-crickets-loop.mp3',
     loop: true,
     volume: 0.24,
+  },
+  day_ambience: {
+    label: 'Ambient daytime loop (birds/breeze)',
+    src: '/audio/ambient/day-ambience-loop.mp3',
+    loop: true,
+    volume: 0.22,
   },
   campfire_crackle: {
     label: 'Campfire crackle loop',
@@ -82,6 +89,7 @@ export const AUDIO_CUES: Record<AudioCueId, AudioCue> = {
 
 export const AUDIO_ASSET_TODO = [
   '/audio/ambient/night-crickets-loop.mp3',
+  '/audio/ambient/day-ambience-loop.mp3',
   '/audio/ambient/campfire-crackle-loop.mp3',
   '/audio/foley/footstep-grass-01.mp3',
   '/audio/foley/footstep-grass-02.mp3',

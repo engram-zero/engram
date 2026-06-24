@@ -106,7 +106,7 @@ const GRAVITY = 16; // m/s²
 // within `radius`, fading linearly to silence at the rim. The driver picks the
 // loudest emitter per cue based on the player's distance and sets the loop's
 // volume each tick. `nightOnly` cues are muted during the day.
-type AudioEmitter = { cue: AudioCueId; x: number; z: number; radius: number; volume: number; nightOnly?: boolean };
+type AudioEmitter = { cue: AudioCueId; x: number; z: number; radius: number; volume: number; nightOnly?: boolean; dayOnly?: boolean };
 
 // Scatter many night-cricket pockets across the map (deterministic, like the
 // forest) so crickets are heard "randomly" all around — but never in the village
@@ -137,6 +137,9 @@ function makeCricketEmitters(): AudioEmitter[] {
 const AUDIO_EMITTERS: AudioEmitter[] = [
   // Campfire crackle — only audible around the village fire.
   { cue: 'campfire_crackle', x: CAMPFIRE.x, z: CAMPFIRE.z, radius: 12, volume: 0.5 },
+  // Daytime ambience bed (birds/breeze) — a single huge emitter so it plays
+  // everywhere while the sun is up, replacing the night crickets during the day.
+  { cue: 'day_ambience', x: 0, z: 0, radius: 1000, volume: 0.22, dayOnly: true },
   // Many randomly-scattered cricket pockets (night only), everywhere but the core.
   ...makeCricketEmitters(),
 ];
@@ -2576,6 +2579,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
           for (const e of AUDIO_EMITTERS) {
             if (e.cue !== cue) continue;
             if (e.nightOnly && !night) continue;
+            if (e.dayOnly && night) continue;
             const d = Math.hypot(px - e.x, pz - e.z);
             if (d >= e.radius) continue;
             const falloff = 1 - d / e.radius; // linear fade to the rim

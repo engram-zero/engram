@@ -617,3 +617,13 @@ usuario no tiene. Reemplaza el 🪵 en los botones Wall/House por el componente 
 cambia el 🪵 del mensaje de la IA por la palabra "wood".
 **Qué se hizo:** botones de construcción con `WoodIcon` SVG y costo; mensaje IA sin emoji.
 tsc limpio. **Commit:** _(este commit)_
+
+### 23 jun 2026 · Ambiente diurno (cuando NO es de noche)
+**Pedido (humano):** Tener un sonido "de ambiente" para cuando NO es de noche (en lugar de
+los grillos).
+**Prompt sintetizado:** Añade un cue `day_ambience` (loop, `/audio/ambient/day-ambience-loop.mp3`)
+y un emisor global (radio enorme, centrado) con bandera `dayOnly`; agrega soporte `dayOnly` al
+driver espacial (`if (e.dayOnly && night) continue`) para que suene de día en todo el mapa y se
+apague de noche (cuando entran los grillos). Tolerante a archivo faltante.
+**Qué se hizo:** cue `day_ambience` en manifest + TODO, emisor global dayOnly, flag `dayOnly`
+en `AudioEmitter` y en el driver. tsc limpio. (Falta poner el mp3.) **Commit:** _(este commit)_
