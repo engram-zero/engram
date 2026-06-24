@@ -3188,6 +3188,20 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     if (!fpExploring && document.pointerLockElement) document.exitPointerLock();
   }, [fpExploring]);
 
+  // In aerial, a left-click anywhere except a HUD button cancels the avatar's
+  // right-click auto-move (so you can halt it on the spot).
+  useEffect(() => {
+    if (!aerialExploring) return;
+    const onDown = (e: MouseEvent) => {
+      if (e.button !== 0) return; // left-click only
+      const target = e.target as HTMLElement | null;
+      if (target && target.closest('button')) return; // ignore clicks on HUD buttons
+      aerialTargetRef.current = null; // stop walking
+    };
+    window.addEventListener('mousedown', onDown);
+    return () => window.removeEventListener('mousedown', onDown);
+  }, [aerialExploring]);
+
   const nearbyNpc = nearby ? NPC_LIST.find((n) => n.id === nearby) : null;
 
   return (

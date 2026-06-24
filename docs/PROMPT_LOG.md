@@ -719,3 +719,12 @@ left-click de ataque (combate de henrique) intacto. Actualiza los hints.
 (El mp3 en disco resultó idéntico al ya commiteado —mismo hash—, así que no había binario
 nuevo que agregar.)
 **Qué se hizo:** volumen de grillos 0.2 → 0.1. tsc limpio. **Commit:** _(este commit)_
+
+### 23 jun 2026 · Aérea: click izquierdo detiene el auto-movimiento
+**Pedido (humano):** En modo aéreo, cuando el avatar se mueve solo (click derecho), que un
+click izquierdo en cualquier lugar (que no sea un botón) detenga ese movimiento.
+**Prompt sintetizado:** Mientras `aerialExploring`, escucha `mousedown` botón izquierdo: si el
+target no está dentro de un `<button>` (HUD), limpia `aerialTargetRef` para frenar el
+auto-movimiento en el sitio.
+**Qué se hizo:** efecto que cancela el move-target con click izquierdo (excepto sobre botones).
+tsc limpio. **Commit:** _(este commit)_
