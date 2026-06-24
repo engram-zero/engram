@@ -21,6 +21,7 @@ import {
   CAMPFIRE,
   WORLD_RADIUS,
   GROUND_RADIUS,
+  riverCenterZ,
   type TreeDef,
   type CottageDef,
 } from './map';
@@ -1589,9 +1590,7 @@ function Torch({ position, lit = true }: { position: [number, number, number]; l
 // translucent water ribbon draped over the terrain (each vertex sits on the
 // ground height), so it follows the hills without carving terrain or affecting
 // collision/pathing. Skirts the central clearing so it never cuts the village.
-function riverCenterZ(x: number): number {
-  return 24 + Math.sin(x * 0.045) * 15 + Math.cos(x * 0.11) * 4;
-}
+// `riverCenterZ` lives in map.ts so the forest can keep its banks clear.
 function River() {
   const geom = useMemo(() => {
     const STEPS = 140;

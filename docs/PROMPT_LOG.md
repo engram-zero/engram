@@ -646,3 +646,13 @@ donde se oyen.
 número de bolsas (30→14) y sus radios (24..40 → 12..20), manteniéndolos night-only y fuera
 del core, para que los grillos se oigan aquí y allá (no cubriendo todo el mapa) y más suave.
 **Qué se hizo:** 14 emisores, radios 12..20, vol 0.2. tsc limpio. **Commit:** _(este commit)_
+
+### 23 jun 2026 · Árboles fuera del cauce del río
+**Pedido (humano):** El río queda debajo de varios árboles y se ve raro; mover los árboles
+para que no estén sobre el río.
+**Prompt sintetizado:** Mueve la curva `riverCenterZ` a `map.ts` (fuente de verdad) y en la
+generación de `TREES` excluye posiciones a menos de `RIVER_CLEAR` (~5.5) del centro del río,
+para que colisión/tala/visual queden consistentes. En `Scene3D`, importa `riverCenterZ` de
+`map.ts` en lugar de la copia local.
+**Qué se hizo:** `riverCenterZ` + `RIVER_CLEAR` exportados en `map.ts`, filtro en `TREES`,
+import en `Scene3D`. tsc limpio. **Commit:** _(este commit)_

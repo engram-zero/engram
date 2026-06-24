@@ -94,8 +94,16 @@ function mulberry32(seed: number) {
   };
 }
 
+// The creek's centre-line (z as a function of x). Shared with the renderer so the
+// water ribbon and the tree-exclusion below use the exact same path.
+export function riverCenterZ(x: number): number {
+  return 24 + Math.sin(x * 0.045) * 15 + Math.cos(x * 0.11) * 4;
+}
+/** Distance (in z) from the river centre within which trees are not planted. */
+export const RIVER_CLEAR = 5.5;
+
 // Ring the village with a forest: dense enough to read as woods, anchored to the
-// hills, never overlapping a cottage or the central clearing.
+// hills, never overlapping a cottage, the central clearing, or the river.
 export const TREES: TreeDef[] = (() => {
   const rng = mulberry32(1337);
   const out: TreeDef[] = [];
@@ -107,6 +115,7 @@ export const TREES: TreeDef[] = (() => {
     const x = Math.cos(ang) * rad;
     const z = Math.sin(ang) * rad;
     if (COTTAGES.some((c) => Math.hypot(x - c.x, z - c.z) < c.scale * 2.6)) continue;
+    if (Math.abs(z - riverCenterZ(x)) < RIVER_CLEAR) continue; // keep the creek clear
     const r = rng();
     const species: TreeSpecies = r < 0.55 ? 0 : r < 0.82 ? 1 : 2;
     out.push({ x, z, scale: 0.8 + rng() * 0.75, species, rot: rng() * Math.PI * 2 });
