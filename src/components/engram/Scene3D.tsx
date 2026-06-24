@@ -678,19 +678,54 @@ function TalkFraming({ active }: { active: NPCName | null }) {
 // A third-person avatar driven by WASD in WORLD directions, with an orthographic
 // camera following from above. Shares the player position with the FP camera.
 
-function Avatar({ posRef }: { posRef: PlayerPosRef }) {
+function Avatar({
+  posRef,
+  selectable = false,
+  selected = false,
+  onSelect,
+}: {
+  posRef: PlayerPosRef;
+  selectable?: boolean;
+  selected?: boolean;
+  onSelect?: () => void;
+}) {
   const g = useRef<THREE.Group>(null);
-  useFrame(() => {
+  const ring = useRef<THREE.Mesh>(null);
+  const ringMat = useRef<THREE.MeshBasicMaterial>(null);
+  useFrame((state) => {
     if (!g.current) return;
     const { x, z, heading } = posRef.current;
     g.current.position.set(x, getHeightAt(x, z), z);
     g.current.rotation.y = heading;
+    // Pulse the neon selection aura.
+    if (selected && ring.current && ringMat.current) {
+      const t = state.clock.elapsedTime;
+      const s = 1 + Math.sin(t * 4) * 0.08;
+      ring.current.scale.set(s, s, s);
+      ringMat.current.opacity = 0.55 + Math.sin(t * 4) * 0.25;
+    }
   });
   return (
     <group ref={g}>
-      <mesh castShadow position={[0, 0.85, 0]}>
+      {/* Neon selection aura (aerial click-to-select). */}
+      {selected && (
+        <group>
+          <mesh ref={ring} position={[0, 0.05, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+            <ringGeometry args={[0.55, 0.78, 40]} />
+            <meshBasicMaterial ref={ringMat} color="#39ffd0" transparent opacity={0.7} side={THREE.DoubleSide} toneMapped={false} depthWrite={false} />
+          </mesh>
+          <pointLight position={[0, 1.0, 0]} color="#39ffd0" intensity={1.4} distance={4} />
+        </group>
+      )}
+      <mesh
+        castShadow
+        position={[0, 0.85, 0]}
+        onClick={selectable ? (e) => { e.stopPropagation(); onSelect?.(); } : undefined}
+        onPointerOver={selectable ? () => (document.body.style.cursor = 'pointer') : undefined}
+        onPointerOut={selectable ? () => (document.body.style.cursor = '') : undefined}
+      >
         <capsuleGeometry args={[0.32, 0.7, 4, 10]} />
-        <meshStandardMaterial color="#c98b3a" flatShading />
+        <meshStandardMaterial color="#c98b3a" flatShading emissive={selected ? '#0f5a4a' : '#000000'} emissiveIntensity={selected ? 0.6 : 0} />
       </mesh>
       <mesh castShadow position={[0, 1.5, 0]}>
         <sphereGeometry args={[0.26, 12, 12]} />
@@ -709,6 +744,7 @@ function AerialRig({
   enabled,
   posRef,
   touchMove = IDLE_MOVEMENT,
+  moveTargetRef,
   onNearbyChange,
   onNearbyTreeChange,
   onNearbyEnemyChange,
@@ -716,6 +752,7 @@ function AerialRig({
   enabled: boolean;
   posRef: PlayerPosRef;
   touchMove?: MovementInput;
+  moveTargetRef?: React.MutableRefObject<{ x: number; z: number } | null>;
   onNearbyChange?: (npc: NPCName | null) => void;
   onNearbyTreeChange?: (treeIdx: number | null) => void;
   onNearbyEnemyChange?: (enemyId: string | null) => void;
@@ -726,6 +763,7 @@ function AerialRig({
   const nearbyRef = useRef<NPCName | null>(null);
   const treeRef = useRef<number | null>(null);
   const enemyRef = useRef<string | null>(null);
+  const stuck = useRef(0); // seconds making no progress toward the move target
 
   // Mouse-wheel zoom while in aerial view (min raised so you can't zoom out past
   // the world into the sky).
@@ -755,6 +793,8 @@ function AerialRig({
     if (k.left) dx -= 1;
     if (k.right) dx += 1;
     if (dx || dz) {
+      // Manual WASD cancels any auto-move target.
+      if (moveTargetRef) moveTargetRef.current = null;
       const len = Math.hypot(dx, dz);
       dx /= len;
       dz /= len;
@@ -762,6 +802,30 @@ function AerialRig({
       posRef.current.x = rx;
       posRef.current.z = rz;
       posRef.current.heading = Math.atan2(dx, dz); // face the move direction
+    } else if (moveTargetRef?.current) {
+      // Right-click-to-move: walk straight toward the target, sliding around
+      // obstacles via resolveCollision. Give up if we stop making progress.
+      const tgt = moveTargetRef.current;
+      const tdx = tgt.x - posRef.current.x;
+      const tdz = tgt.z - posRef.current.z;
+      const dist = Math.hypot(tdx, tdz);
+      if (dist < 0.35) {
+        moveTargetRef.current = null; // arrived
+        stuck.current = 0;
+      } else {
+        const ux = tdx / dist;
+        const uz = tdz / dist;
+        const [rx, rz] = resolveCollision(posRef.current.x + ux * WALK_SPEED * dt, posRef.current.z + uz * WALK_SPEED * dt);
+        const moved = Math.hypot(rx - posRef.current.x, rz - posRef.current.z);
+        posRef.current.x = rx;
+        posRef.current.z = rz;
+        posRef.current.heading = Math.atan2(ux, uz);
+        stuck.current = moved < WALK_SPEED * dt * 0.25 ? stuck.current + dt : 0;
+        if (stuck.current > 1.2) {
+          moveTargetRef.current = null; // wedged against something — stop
+          stuck.current = 0;
+        }
+      }
     }
 
     dynamicPlayerState.x = posRef.current.x;
@@ -2718,6 +2782,10 @@ export default function Scene3D({ memories = null, active = null, talking = fals
   const controlsArmed = isTouchDevice ? exploring : locked;
   const touchLookRef = useRef({ dx: 0, dy: 0 }); // first-person look (drag) on touch
   const [buildRot, setBuildRot] = useState(0); // rotation for touch placement
+  // Aerial RTS-style control: click the avatar to select (neon aura), right-click
+  // the ground to send it walking there.
+  const aerialTargetRef = useRef<{ x: number; z: number } | null>(null);
+  const [avatarSelected, setAvatarSelected] = useState(false);
 
   const markBuildDraftDirty = () => {
     setBuildDraftDirty(true);
@@ -3088,6 +3156,8 @@ export default function Scene3D({ memories = null, active = null, talking = fals
       // Custom aerial cursor (a soft pointer/reticle). Falls back to the system
       // crosshair until /assets/cursor-aerial.png exists (see docs/ART_ASSETS.md).
       style={aerialExploring && !isTouchDevice ? { cursor: 'url(/assets/cursor-aerial.png) 8 8, crosshair' } : undefined}
+      // Right-click is "move here" in aerial — suppress the browser context menu.
+      onContextMenu={(e) => { if (aerialExploring) e.preventDefault(); }}
     >
       <KeyboardControls map={keyboardMap}>
         <Canvas
@@ -3162,11 +3232,32 @@ export default function Scene3D({ memories = null, active = null, talking = fals
                 enabled={aerialExploring}
                 posRef={posRef}
                 touchMove={touchMove}
+                moveTargetRef={aerialTargetRef}
                 onNearbyChange={setNearby}
                 onNearbyTreeChange={setNearbyTree}
                 onNearbyEnemyChange={setNearbyEnemy}
               />
-              <Avatar posRef={posRef} />
+              <Avatar posRef={posRef} selectable selected={avatarSelected} onSelect={() => setAvatarSelected((s) => !s)} />
+              {/* Invisible ground catcher: right-click sends the avatar there. Only
+                  when not building (so it never steals the build left-click). */}
+              {!buildMode && (
+                <mesh
+                  rotation={[-Math.PI / 2, 0, 0]}
+                  position={[0, 0, 0]}
+                  onContextMenu={(e) => {
+                    e.stopPropagation();
+                    (e.nativeEvent as MouseEvent).preventDefault?.();
+                    aerialTargetRef.current = { x: e.point.x, z: e.point.z };
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setAvatarSelected(false);
+                  }}
+                >
+                  <planeGeometry args={[GROUND_RADIUS * 2, GROUND_RADIUS * 2]} />
+                  <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+                </mesh>
+              )}
               {explorable && buildMode && !isTouchDevice && <BuildController mode={buildMode} onDraftChange={markBuildDraftDirty} />}
               {explorable && buildMode && buildMode !== 'demolish' && isTouchDevice && (
                 <MobileBuildGhost mode={buildMode} posRef={posRef} rot={buildRot} />

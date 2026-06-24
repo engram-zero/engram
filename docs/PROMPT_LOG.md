@@ -673,3 +673,17 @@ por unidad es como antes, pero talar el árbol entero toma más.
 **Prompt sintetizado:** Ajusta `WOOD_PER_CHOP=1` y `TREE_CHOPS=20` (TREE_WOOD sigue 20), para
 que cada ciclo de la barra otorgue 1 madera y el árbol se agote tras 20 ciclos.
 **Qué se hizo:** constantes de tala a 1/20 en `world.ts`. tsc limpio. **Commit:** _(este commit)_
+
+### 23 jun 2026 · Vista aérea estilo RTS: avatar clickeable + click-derecho para mover
+**Pedido (humano):** En vista aérea, que el avatar sea clickeable y al seleccionarlo emita un
+aura neón/glow; y que con click derecho en el mapa el avatar camine solo en línea recta hacia
+ahí (esquivando árboles, que ya se hace vía colisión).
+**Prompt sintetizado:** (1) `Avatar` recibe `selectable/selected/onSelect`: onClick en el
+cuerpo alterna selección y, al estar seleccionado, muestra un anillo neón pulsante + pointLight
+(aura). (2) `AerialRig` recibe `moveTargetRef`: si no hay WASD y hay target, camina hacia él con
+`resolveCollision` (desliza alrededor de obstáculos), llega a <0.35 o se rinde si queda atascado
+~1.2s; WASD cancela el target. (3) Un plano invisible a y=0 (solo cuando NO se construye) captura
+`onContextMenu` → fija el target en `e.point`; click izquierdo deselecciona. Suprime el menú
+contextual del navegador en aérea.
+**Qué se hizo:** glow/selección en `Avatar`, movimiento a target en `AerialRig`, plano de
+click-derecho + refs/estado en el componente. tsc limpio. **Commit:** _(este commit)_
