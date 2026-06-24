@@ -712,3 +712,10 @@ left-click de ataque (combate de henrique) intacto. Actualiza los hints.
 **Qué se hizo:** cursor FP sin lock, context-menu suprimido en FP, click derecho de acción
 (atacar/hablar/talar) vía refs sin closures stale, hints actualizados. tsc limpio.
 **Commit:** _(este commit)_
+
+### 23 jun 2026 · Grillos: bajar volumen otro ~50%
+**Pedido (humano):** Bajar el volumen de los grillos otro ~50% (y commitear el mp3 nuevo).
+**Prompt sintetizado:** Baja el volumen de los emisores `night_crickets` de 0.2 a 0.1.
+(El mp3 en disco resultó idéntico al ya commiteado —mismo hash—, así que no había binario
+nuevo que agregar.)
+**Qué se hizo:** volumen de grillos 0.2 → 0.1. tsc limpio. **Commit:** _(este commit)_

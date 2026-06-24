@@ -130,7 +130,7 @@ function makeCricketEmitters(): AudioEmitter[] {
     const x = Math.cos(ang) * rad;
     const z = Math.sin(ang) * rad;
     if (Math.hypot(x, z) < CORE) continue; // never in the core
-    out.push({ cue: 'night_crickets', x, z, radius: 12 + rng() * 8, volume: 0.2, nightOnly: true });
+    out.push({ cue: 'night_crickets', x, z, radius: 12 + rng() * 8, volume: 0.1, nightOnly: true });
   }
   return out;
 }
