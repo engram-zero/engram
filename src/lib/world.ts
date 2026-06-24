@@ -219,8 +219,11 @@ export function woodIsFull(): boolean {
   return state.inventory.wood >= MAX_WOOD;
 }
 
-/** Wood units a full tree yields (extracted one unit at a time while chopping). */
-export const TREE_WOOD = 5;
+/** Hold-cycles needed to fell a tree (keeps the chop time the same), and how much
+ * wood each cycle grants. A full tree now yields TREE_WOOD = 20. */
+export const TREE_CHOPS = 5;
+export const WOOD_PER_CHOP = 4;
+export const TREE_WOOD = TREE_CHOPS * WOOD_PER_CHOP; // 20
 
 // Transient per-tree extraction progress (not persisted — only the final
 // "chopped" state matters for the world; partial harvest resets on reload).
@@ -235,10 +238,10 @@ export function harvestTree(index: number): { depleted: boolean; gained: boolean
   if (state.choppedTrees.includes(index)) return { depleted: true, gained: false };
   if (state.inventory.wood >= MAX_WOOD) return { depleted: false, gained: false };
   const units = (harvested[index] = (harvested[index] ?? 0) + 1);
-  const depleted = units >= TREE_WOOD;
+  const depleted = units >= TREE_CHOPS;
   commit({
     ...state,
-    inventory: { ...state.inventory, wood: Math.min(MAX_WOOD, state.inventory.wood + 1) },
+    inventory: { ...state.inventory, wood: Math.min(MAX_WOOD, state.inventory.wood + WOOD_PER_CHOP) },
     choppedTrees: depleted ? [...state.choppedTrees, index] : state.choppedTrees,
   });
   return { depleted, gained: true };

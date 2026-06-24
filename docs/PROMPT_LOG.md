@@ -656,3 +656,12 @@ para que colisión/tala/visual queden consistentes. En `Scene3D`, importa `river
 `map.ts` en lugar de la copia local.
 **Qué se hizo:** `riverCenterZ` + `RIVER_CLEAR` exportados en `map.ts`, filtro en `TREES`,
 import en `Scene3D`. tsc limpio. **Commit:** _(este commit)_
+
+### 23 jun 2026 · Árboles dan 20 de madera (en vez de 5)
+**Pedido (humano):** Que los árboles den 20 de madera en lugar de 5.
+**Prompt sintetizado:** Sube el rendimiento de un árbol a 20 manteniendo el mismo tiempo de
+tala: separa "ciclos para talar" (`TREE_CHOPS=5`) de "madera por ciclo" (`WOOD_PER_CHOP=4`),
+con `TREE_WOOD = TREE_CHOPS*WOOD_PER_CHOP = 20`; `harvestTree` agota tras `TREE_CHOPS` y suma
+`WOOD_PER_CHOP` por ciclo (capado a MAX_WOOD).
+**Qué se hizo:** `TREE_CHOPS`/`WOOD_PER_CHOP`/`TREE_WOOD=20` en `world.ts`; `harvestTree`
+actualizado. tsc limpio. **Commit:** _(este commit)_
