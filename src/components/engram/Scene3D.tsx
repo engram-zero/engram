@@ -2740,6 +2740,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
   const world = useWorld();
   const [publishStatus, setPublishStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [publishMsg, setPublishMsg] = useState<string | null>(null);
+  const [showSavedPill, setShowSavedPill] = useState(false); // brief "saved" confirmation, then auto-hide
   const [buildDraftDirty, setBuildDraftDirty] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false); // in-game "unsaved changes" prompt (replaces window.confirm)
   const aerialDraftBaseRef = useRef(cloneWorldState());
@@ -2854,10 +2855,13 @@ export default function Scene3D({ memories = null, active = null, talking = fals
       setBuildDraftDirty(false);
       aerialDraftBaseRef.current = cloneWorldState(getWorld());
       setPublishMsg(result.skipped ? 'World already saved.' : `Saved to 0G (${result.rootHash.slice(0, 10)}…${result.rootHash.slice(-6)})`);
+      setShowSavedPill(true);
       window.setTimeout(() => {
         setPublishStatus((s) => (s === 'saved' ? 'idle' : s));
         setPublishMsg((m) => (m && m.startsWith('Saved to 0G') ? null : m));
       }, 5000);
+      // Hide the "all changes saved" confirmation entirely after a while.
+      window.setTimeout(() => setShowSavedPill(false), 12000);
       return true;
     } catch (error) {
       console.warn('[engram] publish world failed:', error);
@@ -3360,13 +3364,16 @@ export default function Scene3D({ memories = null, active = null, talking = fals
               >
                 {publishStatus === 'saving' ? '⏳ Saving…' : buildDraftDirty ? '💾 Save World ●' : '✓ Saved'}
               </button>
-              {/* Clear, persistent save-state pill. */}
+              {/* Save-state pill. The "all changes saved" confirmation auto-hides
+                  after a save; the unsaved/saving/error states always show. */}
               {(() => {
                 const tone =
                   publishStatus === 'saving' ? { c: '#9fd0e6', t: '⏳ Saving to 0G…' }
                   : publishStatus === 'error' ? { c: '#ffb3a8', t: `⚠️ ${publishMsg ?? 'Save failed — try again.'}` }
                   : buildDraftDirty ? { c: '#ffe39a', t: '● Unsaved changes — Save before leaving' }
-                  : { c: '#aee5a6', t: publishMsg ?? '✓ All changes saved' };
+                  : showSavedPill ? { c: '#aee5a6', t: publishMsg ?? '✓ All changes saved' }
+                  : null;
+                if (!tone) return null;
                 return (
                   <span className="max-w-[15rem] rounded bg-black/65 px-2 py-1 text-right text-xs" style={{ color: tone.c }}>
                     {tone.t}

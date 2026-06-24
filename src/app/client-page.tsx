@@ -161,6 +161,13 @@ function Game() {
     return startPublicWorldPolling(networkType, address);
   }, [address, isConnected, networkType]);
 
+  // Auto-dismiss the "✓ Saved to 0G" banner after a while so it doesn't linger.
+  useEffect(() => {
+    if (save.status !== 'saved') return;
+    const id = window.setTimeout(() => setSave({ status: 'idle' }), 12000);
+    return () => window.clearTimeout(id);
+  }, [save.status]);
+
   const crossFor = useCallback(
     (npc: NPCName): Partial<Record<NPCName, NPCMemory>> | undefined => {
       if (npc !== 'sable' || !memories) return undefined;
