@@ -118,11 +118,22 @@ better pending/saved feedback or a relayer/meta-tx flow.
 Knockout round, judged. The Group Stage submission is locked but you can iterate and
 submit a revised version if you advance. Snapshot = `main` at the round deadline, so keep
 `main` green (tsc clean, demo live). **Prioritised plan lives in
-[`ENGRAM_PROMPTS.md` → "🏆 Fase 2 — Round of 32"](ENGRAM_PROMPTS.md).** TL;DR:
-1. Real-time multiplayer (biggest differentiator; new prompt, scoped) — coordinate with martelaxe.
-2. Stabilise the public world (scan Turbo regardless of toggle / raise block lookback).
-3. Audiovisual polish (river/avatars/night light) + an audio **mute** toggle.
-4. Deepen a memory-driven loop on camera (market v2 / LLM haggling with Aldric).
+[`ENGRAM_PROMPTS.md` → "🏆 Fase 2 — Round of 32"](ENGRAM_PROMPTS.md).**
+
+**Done this round (25 jun 2026), all on `main`:**
+- [x] **Stabilise the public world** — scans Turbo regardless of the network toggle so
+      every wallet's builds are consistently visible to judges. (`09aefe2`)
+- [x] **Audio mute toggle** — persisted 🔊/🔇 in the header; closes the last open item
+      of Prompt 6. (`14f1c6c`)
+- [x] **Memory-driven loop on camera** — LLM haggling with Aldric (Prompt 10 v2): propose
+      a price, he accepts / counters / refuses in character; trust persists to 0G. (`69b79e9`)
+- [x] **AV polish — river** — softer faded banks, muted dusk teal, meandering width (no
+      longer a flat saturated band). (`fd02145`) + a touch more **moonlight fill** at night.
+
+**Still open (deferred):**
+1. Real-time multiplayer (biggest differentiator; new prompt #19, scoped) — **deferred to a
+   later phase** by decision; coordinate with martelaxe when picked up.
+2. Further AV polish if wanted: avatar silhouettes (plain but recognisable).
 
 Full backlog (still open) in `docs/ENGRAM_PROMPTS.md`: player relations/raids (13),
 market goods (14), fair demon sieges (15), gathering animation polish (16),

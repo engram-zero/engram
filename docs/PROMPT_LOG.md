@@ -811,4 +811,16 @@ opacity 0.82, roughness 0.3, metalness 0.25, emissive `#0c2630` @0.15). Mantén 
 el terreno y `depthWrite:false`. Verifica a ojo con capturas aéreas. tsc debe pasar.
 **Qué se hizo:** `River()` con 3 carriles, vertex colors de orilla, ancho serpenteante y
 material apagado; verificado con capturas aéreas (antes/después). `npx tsc --noEmit` limpio.
-**Commit:** _(este commit)_
+**Commit:** fd02145
+
+### 25 jun 2026 · Relleno lunar nocturno + STATUS Round of 32
+**Pedido (humano):** Sube un pelín el relleno lunar (que el suelo no quede tan negro de noche);
+y actualiza `STATUS.md` marcando los cuatro ítems de la ronda como hechos.
+**Prompt sintetizado:** En `computeDayNight` (`Scene3D.tsx`) sube el piso de visibilidad
+nocturna `visible` de `0.32 + daylight*0.68` a `0.42 + daylight*0.58` (mantiene el tope diurno
+en 1.0, así el día no cambia; solo sube el relleno lunar que alimenta ambient/hemi/dir de noche).
+En `STATUS.md`, en "Round of 32 — what to do next", marca como hechos: mundo público (Turbo),
+mute toggle, regateo con Aldric (v2) y pulido del río + relleno lunar, con sus commits; deja
+multiplayer como diferido. tsc debe pasar.
+**Qué se hizo:** piso nocturno 0.32→0.42 en `computeDayNight`; sección Round of 32 de
+`STATUS.md` actualizada con los cuatro hechos. `npx tsc --noEmit` limpio. **Commit:** _(este commit)_

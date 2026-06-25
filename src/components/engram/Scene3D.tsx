@@ -2520,8 +2520,9 @@ export function computeDayNight(hour: number): DayNight {
   const sunX = -Math.cos(ang); // east (−1) → west (+1)
   const daylight = Math.max(0, sunY);
   // Keep a visibility floor so night still reads as night, but terrain, trees and
-  // silhouettes don't collapse into pure black.
-  const visible = 0.32 + daylight * 0.68;
+  // silhouettes don't collapse into pure black. The floor is the night "moonlight
+  // fill" — raised slightly so the ground isn't crushed-black on real hardware.
+  const visible = 0.42 + daylight * 0.58;
   const skyVisible = Math.max(0, Math.min(1, (sunY - 0.02) / 0.28));
 
   // Moon rides its own arc across the night (sunset → sunrise).
