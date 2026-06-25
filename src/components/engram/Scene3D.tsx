@@ -1657,30 +1657,40 @@ function Torch({ position, lit = true }: { position: [number, number, number]; l
 // `riverCenterZ` lives in map.ts so the forest can keep its banks clear.
 function River() {
   const geom = useMemo(() => {
-    const STEPS = 140;
-    const HALF_W = 3.2; // creek half-width
+    const STEPS = 160;
     const x0 = -GROUND_RADIUS + 4;
     const x1 = GROUND_RADIUS - 4;
     const positions: number[] = [];
-    const uvs: number[] = [];
+    const colors: number[] = [];
     const indices: number[] = [];
+    // Three lanes across (L, centre, R). Baking a darker bank colour into the
+    // edge vertices makes the water fade into its shore instead of ending on a
+    // hard line — a soft edge without paying for a custom shader.
+    const core = new THREE.Color('#2c5d70'); // muted dusk steel-teal (was a brighter cyan)
+    const bank = new THREE.Color('#16323c'); // deeper at the banks → reads as a shore
+    const lanes = [-1, 0, 1] as const;
     for (let i = 0; i <= STEPS; i++) {
       const t = i / STEPS;
       const x = x0 + (x1 - x0) * t;
       const cz = riverCenterZ(x);
-      for (const s of [-1, 1] as const) {
-        const z = cz + s * HALF_W;
+      // Gently meander the width so it isn't a perfectly uniform ribbon.
+      const halfW = 2.5 + Math.sin(x * 0.17) * 0.85; // ~1.65 … 3.35
+      for (const s of lanes) {
+        const z = cz + s * halfW;
         positions.push(x, getHeightAt(x, z) + 0.08, z); // drape just above ground
-        uvs.push(s < 0 ? 0 : 1, t * 24);
+        const c = s === 0 ? core : bank;
+        colors.push(c.r, c.g, c.b);
       }
     }
     for (let i = 0; i < STEPS; i++) {
-      const a = i * 2;
-      indices.push(a, a + 1, a + 3, a, a + 3, a + 2);
+      const a = i * 3; // [L, C, R] of this step
+      const b = (i + 1) * 3; // [L, C, R] of the next step
+      indices.push(a, a + 1, b + 1, a, b + 1, b); // left half (L→C)
+      indices.push(a + 1, a + 2, b + 2, a + 1, b + 2, b + 1); // right half (C→R)
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
     g.setIndex(indices);
     g.computeVertexNormals();
     return g;
@@ -1688,13 +1698,13 @@ function River() {
   return (
     <mesh geometry={geom} receiveShadow renderOrder={1}>
       <meshStandardMaterial
-        color="#2f6f8f"
+        vertexColors
         transparent
-        opacity={0.74}
-        roughness={0.15}
-        metalness={0.35}
-        emissive="#10303f"
-        emissiveIntensity={0.25}
+        opacity={0.82}
+        roughness={0.3}
+        metalness={0.25}
+        emissive="#0c2630"
+        emissiveIntensity={0.15}
         depthWrite={false}
       />
     </mesh>

@@ -795,4 +795,20 @@ rechaza, no se mueve nada. Se conserva el botón fijo "Sell wood". tsc debe pasa
 **Qué se hizo:** contrato `TradeOffer`/`TradeDecision`; negociación + clamp + fallback en
 `/api/npc/route.ts`; `chat()` extendido y UI de regateo en `client-page.tsx`. Verificada la
 aritmética del fallback (justo paga 2; 4–5 → contraoferta 3, leal 4; ≥6 rechaza).
-`npx tsc --noEmit` limpio. **Commit:** _(este commit)_
+`npx tsc --noEmit` limpio. **Commit:** 69b79e9
+
+### 25 jun 2026 · Pulido del río: bordes suaves + color apagado (Round of 32 #3)
+**Pedido (humano):** Round of 32, pulido AV: corre el dev server, juzga el río a ojo y
+arréglalo. Diagnóstico (vía capturas aéreas headless con SwiftShader): el río se veía como una
+banda cian saturada, de ancho uniforme y bordes duros ("agua de piscina").
+**Prompt sintetizado:** Reescribe `River()` en `Scene3D.tsx` para que la cinta de agua deje de
+ser una banda plana: (1) genera 3 carriles transversales (L/centro/R) en vez de 2 y usa
+**vertex colors** horneando un color de orilla más oscuro (`#16323c`) en los bordes y el núcleo
+en un teal-acero apagado (`#2c5d70`), de modo que el agua se difumine en su orilla (borde suave
+sin shader propio); (2) haz que el medio-ancho **serpentee** con `2.5 + sin(x*0.17)*0.85` para
+que no sea uniforme; (3) baja saturación/emissive/metalness del material (`vertexColors`,
+opacity 0.82, roughness 0.3, metalness 0.25, emissive `#0c2630` @0.15). Mantén el drapeado sobre
+el terreno y `depthWrite:false`. Verifica a ojo con capturas aéreas. tsc debe pasar.
+**Qué se hizo:** `River()` con 3 carriles, vertex colors de orilla, ancho serpenteante y
+material apagado; verificado con capturas aéreas (antes/después). `npx tsc --noEmit` limpio.
+**Commit:** _(este commit)_
