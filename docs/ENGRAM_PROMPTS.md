@@ -18,7 +18,7 @@
 3. [Protección de coste/abuso en /api/npc (rate limit)](#prompt-3--rate-limit--anti-abuso-en-apinpc) — ✅ done
 4. [Controles móviles / táctiles (sin pointer lock)](#prompt-4--controles-móviles--táctiles) — ✅ done (joystick de arrastre, look táctil en 1ª persona, toggle de vista, sin scroll iOS, modo demo)
 5. [Texturas PNG en lugar de materiales planos](#prompt-5--texturas-png) — ✅ done (22 texturas en webp; ver [`ART_ASSETS.md`](ART_ASSETS.md))
-6. [Audio ambiental (fogata, pasos, noche)](#prompt-6--audio-ambiental) — 🟡 partial: infraestructura + cues cableados; faltan mute y fogata posicional
+6. [Audio ambiental (fogata, pasos, noche)](#prompt-6--audio-ambiental) — ✅ done: ambiente **espacial por distancia** (fogata, bolsas de grillos night-only, bed diurno) + foley (pasos/hacha/salto). Falta solo un toggle de **mute**.
 7. [Verificar end-to-end la UX del 429 en el cliente](#prompt-7--verificación-diferida-ux-del-429) — ⏳ diferida (ver precondición)
 8. [Visión: gameplay loop, doble vista y mundo persistente en 0G](#prompt-8--visión-gameplay-loop--doble-vista) — 🟡 partial: 8a done, 8b persistencia MVP done (martelaxe)
 9. [Construir edificios + persistir el mundo en 0G](#prompt-9--construir--persistir-el-mundo-en-0g) — ✅ 9a (gameplay + zonas/precios) y 9b (persistencia 0G, martelaxe) hechos
@@ -29,13 +29,46 @@
 14. [Mercado v2: bienes comprables, sinks y reparación](#prompt-14--mercado-v2-bienes-comprables-sinks-y-reparación) — ⏳ pendiente
 15. [Asedios y demonios con fairness offline](#prompt-15--asedios-y-demonios-con-fairness-offline) — ⏳ pendiente
 16. [Animaciones de gathering y feedback físico](#prompt-16--animaciones-de-gathering-y-feedback-físico) — ⏳ pendiente
-17. [Terreno editable, ríos y mapa más grande](#prompt-17--terreno-editable-ríos-y-mapa-más-grande) — ⏳ pendiente
+17. [Terreno editable, ríos y mapa más grande](#prompt-17--terreno-editable-ríos-y-mapa-más-grande) — 🟡 partial: **riachuelo** (cinta de agua drapeada, no tala terreno) hecho; terreno editable / mapa más grande siguen pendientes
 18. [Reparación, durabilidad y mantenimiento del mundo](#prompt-18--reparación-durabilidad-y-mantenimiento-del-mundo) — ⏳ pendiente
 
 > **Tareas no-código (ADMIN):** ✅ deploy a Vercel + env vars · ✅ save a 0G end-to-end ·
-> ⏳ actualizar la Description del dashboard 0g.ai (versión honesta) ·
-> ⏳ grabar video demo (guion en [`DEMO_SCRIPT.md`](DEMO_SCRIPT.md)) · ⏳ completar submission ·
+> ✅ **Group Stage ENVIADO y ACEPTADO** (pasa a Round of 32) · ✅ video demo (voz IA, ElevenLabs) ·
+> ✅ logo + thumbnail + license (MIT) · ⏳ actualizar la Description del dashboard 0g.ai (versión honesta) ·
 > ⏳ post en X (`#TheZeroCup`, `@0G_labs`).
+
+---
+
+## 🏆 Fase 2 — Round of 32 (prioridades)
+
+> **Estado:** Group Stage **aceptado** (jun 2026). El Round of 32 es **knockout con
+> jueces**: hay que **destacar**, no solo funcionar. La submission del Group Stage está
+> bloqueada, pero se puede **iterar** y enviar una versión revisada si se avanza.
+> Snapshot = `main` al cierre de la ronda (Regla #5), así que mantener `main` siempre
+> verde (tsc limpio, demo viva). Calendario: Round of 32 ~jun 28 – jul 3.
+
+**Objetivo de la ronda:** un *wow* claro que un juez note en 30s, sin romper el núcleo
+(memoria en 0G). Prioridad de mayor a menor impacto/riesgo:
+
+1. **Multiplayer en tiempo real (el gran diferenciador).** Hoy el "mundo público" es
+   *descubrimiento asíncrono* (lees builds guardados de otras wallets). Co-presencia en
+   vivo (ver a otros jugadores moverse) necesita un servidor de realtime (websockets /
+   estado compartido). Es el salto más impresionante; planearlo como prompt nuevo (#19)
+   con scope acotado para no arriesgar el demo. **Alto impacto, alto esfuerzo.**
+2. **Estabilizar el mundo público (#4 del chat):** escanear **siempre Turbo** sin importar
+   el toggle de red, y/o subir el `NEXT_PUBLIC_PUBLIC_WORLD_BLOCK_LOOKBACK`, para que los
+   builds de todos se vean de forma consistente. **Bajo esfuerzo, evita un bug visible a jueces.**
+3. **Pulido audiovisual** (lo que más sube la percepción en video/galería): revisar a ojo
+   el **río** (ancho/color/ruta), **avatares**, **iluminación nocturna**, y añadir un
+   **toggle de mute** (último pendiente del audio, Prompt 6).
+4. **Profundizar un loop con la memoria 0G** que luzca en cámara: p.ej. **mercado v2**
+   (Prompt 14) o **regateo con LLM** con Aldric (Prompt 10 v2) — refuerza el core narrativo
+   de "los NPCs te recuerdan" que es nuestra tesis ganadora.
+5. **Relaciones entre players / sabotaje** (Prompt 13) — encaja con multiplayer si se hace #1.
+
+**Cómo arrancar el chat de Fase 2:** pedir a la IA que lea `PROMPT_LOG.md`, `STATUS.md` y
+este archivo, y proponga el plan del Round of 32. Coordinar con martelaxe (0G/contracts,
+realtime) y henrique (combate) antes de tocar sus áreas.
 
 ---
 

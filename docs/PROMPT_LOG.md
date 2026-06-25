@@ -728,3 +728,15 @@ target no está dentro de un `<button>` (HUD), limpia `aerialTargetRef` para fre
 auto-movimiento en el sitio.
 **Qué se hizo:** efecto que cancela el move-target con click izquierdo (excepto sobre botones).
 tsc limpio. **Commit:** _(este commit)_
+
+### 23 jun 2026 · Docs para Fase 2 (Round of 32)
+**Pedido (humano):** Pasamos de ronda (Group Stage aceptado); actualizar la documentación
+para arrancar la Fase 2 en un chat nuevo con prioridades claras.
+**Prompt sintetizado:** Marca en `ENGRAM_PROMPTS.md` el avance real (audio espacial ✅, río
+parcial ✅, Group Stage enviado y aceptado, video/logo/thumbnail/license ✅) y añade una sección
+"🏆 Fase 2 — Round of 32 (prioridades)" con el plan priorizado (multiplayer realtime, estabilizar
+mundo público, pulido AV + mute, profundizar loop de memoria, relaciones entre players) y cómo
+arrancar el chat nuevo. Refleja lo mismo en `STATUS.md` (progreso del torneo + qué sigue).
+**Qué se hizo:** estados actualizados e índice ADMIN en `ENGRAM_PROMPTS.md`, nueva sección de
+Fase 2, y secciones "Tournament progress" / "Round of 32 — what to do next" en `STATUS.md`.
+**Commit:** _(este commit)_

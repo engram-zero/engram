@@ -1,6 +1,6 @@
 # Engram — Status & 0G integration notes
 
-_Last updated: 18 jun 2026. If you're an AI/contributor touching storage, read the
+_Last updated: 23 jun 2026 (Group Stage accepted → Round of 32). If you're an AI/contributor touching storage, read the
 "0G integration gotchas" section — it's hard-won and non-obvious._
 
 ## Current state — the core loop WORKS ✅
@@ -106,12 +106,24 @@ tx is approved. Other wallets' builds are visible through the public-world overl
 are read-only and do not currently affect collision/pathing. The future version should add
 better pending/saved feedback or a relayer/meta-tx flow.
 
-## Remaining for the Jun 23 submission
+## Tournament progress
 - [x] Save to 0G working end-to-end (criterion #1). ✅
+- [x] **Group Stage submitted & ACCEPTED → through to Round of 32.** ✅ (jun 2026)
+- [x] Demo video (AI voiceover, ElevenLabs), logo, thumbnail, MIT license. ✅
 - [ ] Update the 0g.ai dashboard **Description** to the corrected, honest copy (no
       "MetaMask signature / no server / cross-device" — see README / chat history).
-- [ ] (Optional) 2–3 min demo video.
-- [ ] Backlog in `docs/ENGRAM_PROMPTS.md`: audio polish (6: mute + positional fire),
-      deferred 429-UX check (7), player relations/raids (13), market goods (14),
-      fair demon sieges (15), gathering animation polish (16), terrain/rivers/world expansion (17),
-      and repair/durability systems (18).
+- [ ] Post on X (`#TheZeroCup`, `@0G_labs`).
+
+## Round of 32 — what to do next
+Knockout round, judged. The Group Stage submission is locked but you can iterate and
+submit a revised version if you advance. Snapshot = `main` at the round deadline, so keep
+`main` green (tsc clean, demo live). **Prioritised plan lives in
+[`ENGRAM_PROMPTS.md` → "🏆 Fase 2 — Round of 32"](ENGRAM_PROMPTS.md).** TL;DR:
+1. Real-time multiplayer (biggest differentiator; new prompt, scoped) — coordinate with martelaxe.
+2. Stabilise the public world (scan Turbo regardless of toggle / raise block lookback).
+3. Audiovisual polish (river/avatars/night light) + an audio **mute** toggle.
+4. Deepen a memory-driven loop on camera (market v2 / LLM haggling with Aldric).
+
+Full backlog (still open) in `docs/ENGRAM_PROMPTS.md`: player relations/raids (13),
+market goods (14), fair demon sieges (15), gathering animation polish (16),
+editable terrain / bigger map (17), repair/durability (18).
