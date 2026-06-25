@@ -21,6 +21,15 @@ const listeners = new Set<() => void>();
 let state = EMPTY_PUBLIC_WORLD;
 let lastKey = '';
 
+/**
+ * Public-world discovery always scans Turbo, regardless of the player's network
+ * toggle. Writes default to Turbo (see docs/STATUS.md gotcha #4: Standard and Turbo
+ * are independent storage networks), so reading bundles from Standard would silently
+ * show no builds. The registry/L1 RPC is shared across networks, so only the storage
+ * endpoint matters here. This keeps everyone's builds visible to judges consistently.
+ */
+const PUBLIC_WORLD_NETWORK: NetworkType = 'turbo';
+
 const emit = () => listeners.forEach((l) => l());
 
 function subscribe(l: () => void) {
@@ -65,14 +74,16 @@ async function downloadWorldBuildings(
  * each RootUpdated event already reveals wallet -> latest 0G bundle root.
  */
 export async function initPublicWorld(
-  networkType: NetworkType,
+  _networkType: NetworkType,
   currentWallet?: string | null,
   options: { force?: boolean; quiet?: boolean } = {}
 ): Promise<void> {
   const registry = getRegistryAddress();
   if (!registry) return;
 
-  const key = `${networkType}:${currentWallet?.toLowerCase() ?? ''}`;
+  // Always scan Turbo (see PUBLIC_WORLD_NETWORK); the player's toggle (_networkType)
+  // must not change which builds are discoverable.
+  const key = `${PUBLIC_WORLD_NETWORK}:${currentWallet?.toLowerCase() ?? ''}`;
   if (!options.force && key === lastKey && state.buildings.length > 0) return;
   lastKey = key;
   setPublicWorld({
@@ -82,11 +93,11 @@ export async function initPublicWorld(
 
   try {
     console.info('[engram] public world refresh start', {
-      networkType,
+      networkType: PUBLIC_WORLD_NETWORK,
       currentWallet,
       force: !!options.force,
     });
-    const { l1Rpc, storageRpc } = getNetworkConfig(networkType);
+    const { l1Rpc, storageRpc } = getNetworkConfig(PUBLIC_WORLD_NETWORK);
     const provider = new JsonRpcProvider(l1Rpc);
     const contract = new Contract(registry, ENGRAM_REGISTRY_ABI, provider);
     const latestBlock = await provider.getBlockNumber();

@@ -740,3 +740,20 @@ arrancar el chat nuevo. Refleja lo mismo en `STATUS.md` (progreso del torneo + q
 **Qué se hizo:** estados actualizados e índice ADMIN en `ENGRAM_PROMPTS.md`, nueva sección de
 Fase 2, y secciones "Tournament progress" / "Round of 32 — what to do next" en `STATUS.md`.
 **Commit:** _(este commit)_
+
+### 25 jun 2026 · Mundo público estable: escanear siempre Turbo (Round of 32 #1)
+**Pedido (humano):** Round of 32, prioridad #1: estabilizar el mundo público para que los
+builds de todas las wallets se vean de forma consistente a los jueces, sin depender del toggle
+de red.
+**Prompt sintetizado:** El descubrimiento del mundo público (`src/lib/public-world.ts`) usa
+hoy el `networkType` del toggle del jugador para `getNetworkConfig`, así que un juez con la red
+en Standard descarga bundles desde el storage de Standard y no ve ningún build (los writes van
+siempre a Turbo — STATUS.md gotcha #4; Standard y Turbo son redes de storage independientes; el
+registry/L1 RPC es compartido). Fija el escaneo a Turbo de forma incondicional: introduce una
+constante `PUBLIC_WORLD_NETWORK: NetworkType = 'turbo'`, úsala en `getNetworkConfig` y en la
+cache key dentro de `initPublicWorld`, e ignora el `networkType` recibido (renómbralo a
+`_networkType`, manteniendo la firma para no tocar callers). No subir el `scanLookback` a ciegas
+(arriesga el cap de rango de `eth_getLogs`); queda env-overridable. tsc debe pasar.
+**Qué se hizo:** constante `PUBLIC_WORLD_NETWORK='turbo'` con comentario explicativo;
+`initPublicWorld` ahora escanea Turbo siempre (storage + cache key) e ignora el toggle; firma
+intacta. `npx tsc --noEmit` limpio. **Commit:** _(este commit)_
