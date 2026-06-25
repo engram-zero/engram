@@ -23,6 +23,8 @@ import type {
   NPCMemory,
   MemoryUpdate,
   NPCName,
+  TradeOffer,
+  TradeDecision,
 } from '@/lib/types';
 
 export const runtime = 'nodejs';
@@ -33,6 +35,14 @@ const GEMINI_MODEL = process.env.ENGRAM_GEMINI_MODEL || 'gemini-1.5-flash';
 // A player turn is a sentence or two; anything longer is junk or an attempt to
 // blow up token cost. Reject before it reaches the model.
 const MAX_MESSAGE_LEN = 500;
+
+// Haggling economics (Aldric, sell side). The "fair" price mirrors the fixed-sale
+// price in the client; MAX is the hardest ceiling Aldric will ever pay per unit,
+// and ABUSIVE marks an ask so greedy it costs the player trust.
+const FAIR_WOOD_PRICE = 2;
+const MAX_WOOD_PRICE = 5;
+const ABUSIVE_WOOD_PRICE = 6;
+const MAX_OFFER_QTY = 9999;
 
 // Best-effort client IP (Vercel sets x-forwarded-for). Used as a second rate-limit
 // key so one wallet can't be swapped freely to dodge the per-wallet cap.
@@ -51,7 +61,7 @@ const genAI = googleKey ? new GoogleGenerativeAI(googleKey) : null;
 const isAddress = (w: unknown): w is string =>
   typeof w === 'string' && /^0x[a-fA-F0-9]{40}$/.test(w);
 
-function clamp(n: number, lo: number, hi: number): number {
+function clamp(n: unknown, lo: number, hi: number): number {
   const x = Math.round(Number(n) || 0);
   return Math.max(lo, Math.min(hi, x));
 }
@@ -91,6 +101,8 @@ interface AITurn {
   dialogue: string;
   options: string[];
   memory_update: MemoryUpdate;
+  /** Present only when the model was asked to settle a trade offer. */
+  trade?: TradeDecision;
 }
 
 function normalizeTurn(raw: any, npcName: string): AITurn {
@@ -101,6 +113,7 @@ function normalizeTurn(raw: any, npcName: string): AITurn {
   if (options.length < 3) {
     options = [...options, 'Tell me more.', 'I should go.', 'What do you make of me?'].slice(0, 3);
   }
+  const rawTrade = out.trade && typeof out.trade === 'object' ? out.trade : undefined;
   return {
     dialogue:
       typeof out.dialogue === 'string' && out.dialogue.trim()
@@ -117,7 +130,85 @@ function normalizeTurn(raw: any, npcName: string): AITurn {
       summary:
         typeof upd.summary === 'string' && upd.summary.trim() ? upd.summary.trim() : 'Spoke with the traveller.',
     },
+    // Loosely carried through; the route does the authoritative clamp against the
+    // actual offer (the model can't be trusted to respect the asked price/qty).
+    trade: rawTrade
+      ? {
+          accepted: !!rawTrade.accepted,
+          agreedPricePerUnit: Number(rawTrade.agreedPricePerUnit) || 0,
+          quantity: Number(rawTrade.quantity) || 0,
+        }
+      : undefined,
   };
+}
+
+// Sanitise a player-supplied offer; returns null if it isn't a usable wood sale.
+function sanitizeOffer(offer: unknown): TradeOffer | null {
+  if (!offer || typeof offer !== 'object') return null;
+  const o = offer as Record<string, unknown>;
+  if (o.resource !== 'wood') return null;
+  const quantity = clamp(o.quantity, 1, MAX_OFFER_QTY);
+  const pricePerUnit = clamp(o.pricePerUnit, 0, 999);
+  if (quantity < 1) return null;
+  return { resource: 'wood', quantity, pricePerUnit };
+}
+
+// The negotiation rules appended to Aldric's system prompt when an offer is live.
+function negotiationInstruction(offer: TradeOffer, trust: number): string {
+  const total = offer.quantity * offer.pricePerUnit;
+  return `
+# ACTIVE TRADE OFFER (the player is SELLING wood; you are buying)
+The player offers ${offer.quantity} wood at ${offer.pricePerUnit} coin per unit (total ${total} coin).
+Your fair reference price is ${FAIR_WOOD_PRICE} coin/unit; you will NEVER pay more than
+${MAX_WOOD_PRICE} coin/unit, no matter what. Their trust in your ledger is ${trust}/100.
+Decide in character:
+- A fair or low ask (≤ ${FAIR_WOOD_PRICE}): accept happily; trust rises a little.
+- A slightly high ask: counter with a price between ${FAIR_WOOD_PRICE} and ${MAX_WOOD_PRICE} and accept at that counter.
+- An abusive ask (≥ ${ABUSIVE_WOOD_PRICE} coin/unit) or any attempt to cheat: refuse; trust falls; call out the gouging.
+- Reward loyal sellers (high trust) with a slightly more generous price.
+Include a "trade" field in your JSON alongside the usual fields:
+  "trade": { "accepted": <true|false>, "agreedPricePerUnit": <integer coin you will pay, ≤ ${offer.pricePerUnit} and ≤ ${MAX_WOOD_PRICE}>, "quantity": <integer ≤ ${offer.quantity}> }
+Your spoken dialogue MUST match the verdict: name the agreed price if you accept (or your counter), or your refusal if you reject.`;
+}
+
+// Deterministic settlement: used when no AI key is set, or when the model
+// forgot to return a usable trade. Aldric is greedy but fair.
+function decideTradeFallback(offer: TradeOffer, trust: number): { trade: TradeDecision; summary: string; dialogue: string; trustDelta: number; mood: string } {
+  const loyal = trust >= 70;
+  const maxPay = loyal ? FAIR_WOOD_PRICE + 2 : FAIR_WOOD_PRICE + 1; // 4 / 3
+  const asked = offer.pricePerUnit;
+  if (asked >= ABUSIVE_WOOD_PRICE) {
+    return {
+      trade: { accepted: false, agreedPricePerUnit: 0, quantity: 0 },
+      summary: `Refused a gouging offer of ${asked} coin/wood.`,
+      dialogue: `Aldric snorts and pushes the ledger shut. "${asked} coin a log? Do I look like a fool? Come back with an honest number."`,
+      trustDelta: -3,
+      mood: 'affronted',
+    };
+  }
+  const agreed = Math.min(asked, maxPay);
+  const counter = agreed < asked;
+  const total = agreed * offer.quantity;
+  return {
+    trade: { accepted: true, agreedPricePerUnit: agreed, quantity: offer.quantity },
+    summary: `Bought ${offer.quantity} wood at ${agreed} coin/unit${counter ? ' (countered down)' : ''}.`,
+    dialogue: counter
+      ? `Aldric weighs the timber. "I'll not pay ${asked}. ${agreed} a log, ${total} coin for the lot — take it or leave it." He counts out the coin.`
+      : `Aldric nods. "${agreed} a log, fair enough. ${total} coin for ${offer.quantity} wood." He counts it into your palm.`,
+    trustDelta: asked <= FAIR_WOOD_PRICE ? 2 : 1,
+    mood: loyal ? 'warm' : 'pleased',
+  };
+}
+
+// Clamp the model's trade verdict to the real offer: never pay above the asked
+// price or the hard ceiling, never buy more than offered.
+function clampTrade(trade: TradeDecision | undefined, offer: TradeOffer): TradeDecision | undefined {
+  if (!trade) return undefined;
+  if (!trade.accepted) return { accepted: false, agreedPricePerUnit: 0, quantity: 0 };
+  const ceiling = Math.min(offer.pricePerUnit, MAX_WOOD_PRICE);
+  const agreedPricePerUnit = clamp(trade.agreedPricePerUnit, 1, ceiling);
+  const quantity = clamp(trade.quantity || offer.quantity, 1, offer.quantity);
+  return { accepted: true, agreedPricePerUnit, quantity };
 }
 
 // Apply the AI's delta onto the memory and stamp the interaction.
@@ -198,6 +289,8 @@ export async function POST(req: Request) {
   }
 
   const { walletAddress, npcName, message, memory, crossMemory, enemiesKilled } = body;
+  // Haggling only applies to Aldric; ignore offers aimed at anyone else.
+  const offer = npcName === 'aldric' ? sanitizeOffer(body.offer) : null;
 
   if (!isAddress(walletAddress)) return NextResponse.json({ error: 'Invalid wallet address.' }, { status: 400 });
   if (!getNPC(npcName)) return NextResponse.json({ error: 'Unknown NPC.' }, { status: 400 });
@@ -220,27 +313,54 @@ export async function POST(req: Request) {
     );
   }
 
+  const offerLine = offer
+    ? `The player offers to sell ${offer.quantity} wood at ${offer.pricePerUnit} coin per unit. Haggle and settle it.`
+    : '';
   const userContent =
     message && message.trim()
-      ? `The player says/does: "${message.trim()}"`
-      : 'The player has just approached you. Greet them.';
+      ? `The player says/does: "${message.trim()}"${offerLine ? `\n${offerLine}` : ''}`
+      : offerLine || 'The player has just approached you. Greet them.';
 
   try {
-    const system = buildSystem(npcName, memory, crossMemory, enemiesKilled);
+    let system = buildSystem(npcName, memory, crossMemory, enemiesKilled);
+    if (offer) system += '\n' + negotiationInstruction(offer, memory.trust_level);
     const npcDisplayName = getNPC(npcName)!.name;
-    const turn = anthropic
+    const hasAI = !!anthropic || !!genAI;
+    let turn = anthropic
       ? await runClaude(system, userContent, npcDisplayName)
       : genAI
         ? await runGemini(system, userContent, npcDisplayName)
         : fallbackTurn(npcName, memory, message || '');
 
-    const updated = applyUpdate(memory, turn.memory_update, message || '');
+    // Resolve the trade. The model's verdict is authoritative when present (clamped
+    // to the real offer); otherwise fall back to deterministic settlement so the
+    // sale still works without an AI key or when the model omits `trade`.
+    let trade: TradeDecision | undefined;
+    if (offer) {
+      trade = clampTrade(turn.trade, offer);
+      if (!trade) {
+        const fb = decideTradeFallback(offer, memory.trust_level);
+        trade = fb.trade;
+        // Only overwrite the dialogue/memory when the model gave us nothing useful
+        // (no AI, or AI returned no trade) — keep a real model reply if we had one.
+        if (!hasAI) {
+          turn = {
+            ...turn,
+            dialogue: fb.dialogue,
+            memory_update: { trust_delta: fb.trustDelta, emotional_state: fb.mood, debts_delta: 0, summary: fb.summary },
+          };
+        }
+      }
+    }
+
+    const updated = applyUpdate(memory, turn.memory_update, message || (offer ? `Offered ${offer.quantity} wood at ${offer.pricePerUnit} coin/unit.` : ''));
 
     const payload: NPCChatResponse = {
       response: turn.dialogue,
       options: turn.options,
       memory: updated,
       delta: turn.memory_update,
+      ...(trade ? { trade } : {}),
     };
     return NextResponse.json(payload);
   } catch (err) {

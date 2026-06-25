@@ -22,7 +22,7 @@
 7. [Verificar end-to-end la UX del 429 en el cliente](#prompt-7--verificación-diferida-ux-del-429) — ⏳ diferida (ver precondición)
 8. [Visión: gameplay loop, doble vista y mundo persistente en 0G](#prompt-8--visión-gameplay-loop--doble-vista) — 🟡 partial: 8a done, 8b persistencia MVP done (martelaxe)
 9. [Construir edificios + persistir el mundo en 0G](#prompt-9--construir--persistir-el-mundo-en-0g) — ✅ 9a (gameplay + zonas/precios) y 9b (persistencia 0G, martelaxe) hechos
-10. [Mercado: vender recursos a los NPCs → reputación en 0G](#prompt-10--mercado-vender-recursos--reputación) — ✅ v1 done (venta simple + reputación); v2 regateo pendiente
+10. [Mercado: vender recursos a los NPCs → reputación en 0G](#prompt-10--mercado-vender-recursos--reputación) — ✅ v1 + v2 done (venta simple + **regateo con LLM**: Aldric acepta/contraoferta/rechaza, ajusta trust, persiste en 0G)
 11. [Construcción con IA + tokens (describir y que la IA edifique)](#prompt-11--construcción-con-ia--tokens) — ✅ done (`/api/build` + modal; **bloques voxel** refinados a grid fino, preview, costo USD, tope de gasto, BYO key)
 12. [Edificios habitables (entrar dentro)](#prompt-12--edificios-habitables-entrar) — ✅ done (casas huecas con puerta libre)
 13. [Relaciones entre players: aliados, enemigos y sabotaje](#prompt-13--relaciones-entre-players-aliados-enemigos-y-sabotaje) — ⏳ pendiente
@@ -607,12 +607,14 @@ simple queda local hasta publicar mundo.
 
 ## Prompt 10 — Mercado: vender recursos → reputación
 
-> **✅ v1 DONE — 18 jun 2026.** Aldric ya ofrece una venta simple de madera dentro
-> del diálogo: muestra precio fijo, cantidad, monedas actuales y reputación/trust.
-> La venta modifica el inventario local del jugador y añade una interacción directa
-> a la memoria de Aldric, que se persiste con **Leave & save** como el resto de su
-> historial. Queda pendiente solo la **v2 opcional** de regateo con LLM/precios
-> negociados.
+> **✅ v1 + v2 DONE — 25 jun 2026.** Aldric ofrece una venta simple de madera a precio
+> fijo dentro del diálogo, y además **regateo con LLM (v2)**: el jugador propone un precio
+> ("Your price / wood" + "Propose deal") y Aldric **acepta, contraoferta o rechaza** en
+> personaje vía `/api/npc` (campo `offer`/`trade`), ajustando su `trust`. La venta solo mueve
+> recursos si acepta, y el cambio de trust se persiste con **Leave & save** como el resto de
+> su historial. Implementado en [`src/lib/types.ts`](../src/lib/types.ts) (`TradeOffer`/
+> `TradeDecision`), [`src/app/api/npc/route.ts`](../src/app/api/npc/route.ts) (negociación +
+> clamp + fallback determinista) y [`src/app/client-page.tsx`](../src/app/client-page.tsx) (UI).
 
 > El gancho del proyecto: que el **gameplay alimente la memoria/reputación en 0G**.
 > Vender al comerciante (Aldric) y regatear cambia tu reputación, que ya vive en 0G.

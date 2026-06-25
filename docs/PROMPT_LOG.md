@@ -771,4 +771,28 @@ la lógica de volumen espacial por-tick: aplica `mutedRef.current` a cada elemen
 tsc debe pasar.
 **Qué se hizo:** `muted`/`setMuted` con persistencia en `AudioContext`; `.muted` aplicado en
 creación y en toggle; botón de mute en el header (siempre visible). `npx tsc --noEmit` limpio.
-**Commit:** _(este commit)_
+**Commit:** 14f1c6c
+
+### 25 jun 2026 · Regateo con Aldric (Prompt 10 v2, Round of 32 #4)
+**Pedido (humano):** Round of 32, prioridad #4: profundizar un loop con la memoria 0G que luzca
+en cámara — el regateo/negociación con Aldric (Prompt 10 v2), donde el jugador propone un precio
+y el LLM responde en personaje (acepta / contraoferta / rechaza), ajustando trust y persistiendo
+en 0G.
+**Prompt sintetizado:** Implementa el regateo de venta de madera con Aldric **extendiendo
+`/api/npc`** (no un endpoint nuevo), para reusar rate-limit, proveedor LLM, fallback y el flujo
+de memoria. (1) Contrato en `types.ts`: `NPCChatRequest.offer?: TradeOffer { resource:'wood',
+quantity, pricePerUnit }` y `NPCChatResponse.trade?: TradeDecision { accepted,
+agreedPricePerUnit, quantity }`. (2) Servidor: cuando llega `offer` y el NPC es Aldric, sanitiza
+la oferta, inyecta un bloque de negociación en su system prompt (precio justo=2, techo=5,
+abusivo≥6, su trust actual; reglas acepta/contraoferta/rechaza, recompensa lealtad), pide al
+modelo un campo `trade` además de `dialogue`/`memory_update`, y **clampa** el veredicto contra la
+oferta real (nunca paga > lo pedido ni > techo, ni compra más de lo ofrecido). Fallback
+determinista `decideTradeFallback` para cuando no hay key o el modelo no devuelve `trade`. El
+servidor **no** mueve recursos. (3) Cliente: `chat()` acepta `offer` y devuelve `trade`; panel de
+Aldric gana input "Your price / wood" + botón "Propose deal"; al aceptar aplica `addResource`
+(wood−, coin+ a `agreedPricePerUnit`) y el `trust_delta` se persiste con **Leave & save**; si
+rechaza, no se mueve nada. Se conserva el botón fijo "Sell wood". tsc debe pasar.
+**Qué se hizo:** contrato `TradeOffer`/`TradeDecision`; negociación + clamp + fallback en
+`/api/npc/route.ts`; `chat()` extendido y UI de regateo en `client-page.tsx`. Verificada la
+aritmética del fallback (justo paga 2; 4–5 → contraoferta 3, leal 4; ≥6 rechaza).
+`npx tsc --noEmit` limpio. **Commit:** _(este commit)_

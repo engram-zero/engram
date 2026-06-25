@@ -13,7 +13,7 @@ import ConnectButton from '@/components/ConnectButton';
 import NetworkToggle from '@/components/NetworkToggle';
 import { useWallet } from '@/hooks/useWallet';
 import { NPC_LIST } from '@/lib/npcs';
-import type { NPCName, NPCMemory } from '@/lib/types';
+import type { NPCName, NPCMemory, TradeOffer, TradeDecision } from '@/lib/types';
 import { readAllMemories, writeMemory, getBundleRoot } from '@/lib/memory';
 import { addResource, initWorld, setWorldPersistence, useWorld } from '@/lib/world';
 import { createBundleWorldPersistence } from '@/lib/world-0g';
@@ -45,12 +45,13 @@ async function chat(
   message: string,
   memory: NPCMemory,
   crossMemory?: Partial<Record<NPCName, NPCMemory>>,
-  enemiesKilled?: number
+  enemiesKilled?: number,
+  offer?: TradeOffer
 ) {
   const res = await fetch('/api/npc', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ walletAddress, npcName, message, memory, crossMemory, enemiesKilled }),
+    body: JSON.stringify({ walletAddress, npcName, message, memory, crossMemory, enemiesKilled, offer }),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -59,7 +60,7 @@ async function chat(
     if (typeof data.retryAfter === 'number') err.retryAfter = data.retryAfter;
     throw err;
   }
-  return data as { response: string; options: string[]; memory: NPCMemory; delta: unknown };
+  return data as { response: string; options: string[]; memory: NPCMemory; delta: unknown; trade?: TradeDecision };
 }
 
 type ChatError = Error & { code?: number; retryAfter?: number };
@@ -125,6 +126,7 @@ function Game() {
   const [save, setSave] = useState<SaveState>({ status: 'idle' });
   const [err, setErr] = useState<string | null>(null);
   const [merchantQty, setMerchantQty] = useState(1);
+  const [merchantPrice, setMerchantPrice] = useState(3);
   const [merchantMsg, setMerchantMsg] = useState<string | null>(null);
   // "Explore as guest" — roam Aldenmoor without a wallet (no dialogue/saving).
   // The best mobile fallback when there's no injected wallet / WalletConnect.
@@ -245,6 +247,52 @@ function Game() {
       dialogue: aldricSaleDialogue(nextMemory.trust_level, quantity, totalCoins),
       loading: false,
     }));
+  }
+
+  // v2: propose a price and let Aldric's AI haggle (accept / counter / refuse).
+  // The trade verdict comes from the server; resources only move on acceptance,
+  // and the trust change persists with the rest of the conversation on Leave & save.
+  async function proposeDealToAldric() {
+    if (!address || !memories || active !== 'aldric' || scene.loading) return;
+    const availableWood = Math.max(0, world.inventory.wood);
+    if (availableWood <= 0) {
+      setMerchantMsg('You have no wood to sell.');
+      return;
+    }
+    const quantity = clampInt(merchantQty, 1, availableWood);
+    const pricePerUnit = clampInt(merchantPrice, 0, 99);
+    setMerchantMsg(null);
+    setScene((s) => ({ ...s, loading: true }));
+    try {
+      const offer: TradeOffer = { resource: 'wood', quantity, pricePerUnit };
+      const data = await chat(address, 'aldric', '', memories.aldric, undefined, world.enemiesKilled, offer);
+      setMemories((prev) => (prev ? { ...prev, aldric: data.memory } : prev));
+      setDirty((d) => ({ ...d, aldric: true }));
+
+      const trade = data.trade;
+      if (trade?.accepted) {
+        const qty = clampInt(trade.quantity, 1, availableWood);
+        const total = qty * trade.agreedPricePerUnit;
+        await addResource('wood', -qty);
+        await addResource('coin', total);
+        setMerchantQty((prev) => clampInt(prev, 1, Math.max(1, availableWood - qty)));
+        const countered = trade.agreedPricePerUnit < pricePerUnit;
+        setMerchantMsg(
+          `Deal — sold ${qty} wood at ${trade.agreedPricePerUnit} coin/unit (+${total} coin)${countered ? ' · he countered down' : ''}.`
+        );
+      } else {
+        setMerchantMsg('Aldric refused the offer. No coin changed hands.');
+      }
+      setScene({ dialogue: data.response, options: data.options, loading: false });
+    } catch (e) {
+      const error = e as ChatError;
+      if (error.code === 429) {
+        const wait = Math.max(1, error.retryAfter ?? 5);
+        setScene((s) => ({ ...s, loading: false, dialogue: `${error.message} (try again in ~${wait}s)` }));
+        return;
+      }
+      setScene((s) => ({ ...s, loading: false, dialogue: `(${error.message})` }));
+    }
   }
 
   // Leaving an NPC persists that conversation to 0G and anchors the new root if needed.
@@ -468,11 +516,39 @@ function Game() {
                     className="w-24 bg-black/40 border border-[#5a4a28] focus:border-[#d6b84a] outline-none rounded-md px-3 py-2 text-sm"
                   />
                   <span className="text-sm text-[#f4e8d0]/75">
-                    Total: <strong>{clampInt(merchantQty, 1, Math.max(1, world.inventory.wood)) * ALDRIC_WOOD_PRICE}</strong> coin
+                    Quick sale: <strong>{clampInt(merchantQty, 1, Math.max(1, world.inventory.wood)) * ALDRIC_WOOD_PRICE}</strong> coin
                   </span>
                 </div>
+
+                {/* v2 — haggle: name your own price and let Aldric accept, counter, or refuse. */}
+                <div className="mt-2.5 flex flex-wrap items-center gap-2 border-t border-[#6a5832]/60 pt-2.5">
+                  <label className="text-sm text-[#f4e8d0]/85" htmlFor="aldric-ask-price">
+                    Your price / wood
+                  </label>
+                  <input
+                    id="aldric-ask-price"
+                    type="number"
+                    min={0}
+                    max={99}
+                    inputMode="numeric"
+                    value={merchantPrice}
+                    disabled={scene.loading || world.inventory.wood <= 0}
+                    onChange={(e) => setMerchantPrice(clampInt(Number(e.target.value || 0), 0, 99))}
+                    className="w-24 bg-black/40 border border-[#5a4a28] focus:border-[#d6b84a] outline-none rounded-md px-3 py-2 text-sm"
+                  />
+                  <span className="text-sm text-[#f4e8d0]/75">
+                    Asking: <strong>{clampInt(merchantQty, 1, Math.max(1, world.inventory.wood)) * clampInt(merchantPrice, 0, 99)}</strong> coin
+                  </span>
+                  <button
+                    onClick={proposeDealToAldric}
+                    disabled={scene.loading || world.inventory.wood <= 0}
+                    className="bg-black/40 border border-[#8a6a32] hover:border-[#d6b84a] rounded-md px-3 py-2 text-sm disabled:opacity-40"
+                  >
+                    Propose deal
+                  </button>
+                </div>
                 <div className="mt-2 text-xs text-[#f4e8d0]/65">
-                  Selling updates your local resource draft immediately; Aldric&apos;s memory is persisted when you use <strong>Leave &amp; save</strong>.
+                  Selling updates your local resource draft immediately; Aldric&apos;s memory is persisted when you use <strong>Leave &amp; save</strong>. Haggle hard and he&apos;ll remember it.
                 </div>
                 {merchantMsg && <div className="mt-2 text-sm text-[#d6b84a]">{merchantMsg}</div>}
               </div>

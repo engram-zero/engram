@@ -139,6 +139,26 @@ export interface MemoryUpdate {
   summary: string;
 }
 
+/** A price the player proposes when haggling with Aldric (sell side). */
+export interface TradeOffer {
+  /** Only wood is tradeable for now. */
+  resource: 'wood';
+  /** How many units the player wants to sell. */
+  quantity: number;
+  /** Coin per unit the player is asking for. */
+  pricePerUnit: number;
+}
+
+/** Aldric's verdict on a {@link TradeOffer}. The CLIENT applies the resource move. */
+export interface TradeDecision {
+  /** Whether a sale happens at all. */
+  accepted: boolean;
+  /** Coin per unit Aldric will actually pay — may be a counter, ≤ the asked price. */
+  agreedPricePerUnit: number;
+  /** Units actually sold (≤ the offered quantity). */
+  quantity: number;
+}
+
 /** POST body for /api/npc. */
 export interface NPCChatRequest {
   walletAddress: string;
@@ -151,6 +171,8 @@ export interface NPCChatRequest {
   crossMemory?: Partial<Record<NPCName, NPCMemory>>;
   /** Player's global kill count. */
   enemiesKilled?: number;
+  /** Optional price offer when haggling with Aldric. Ignored for other NPCs. */
+  offer?: TradeOffer;
 }
 
 /** Response from /api/npc. The client persists `memory` to 0G on dialogue end. */
@@ -163,6 +185,8 @@ export interface NPCChatResponse {
   memory: NPCMemory;
   /** The raw delta, for the memory panel / debugging. */
   delta: MemoryUpdate;
+  /** Aldric's verdict, present only when the request carried an `offer`. */
+  trade?: TradeDecision;
 }
 
 /** Factory for a brand-new NPC memory (first contact defaults). */
