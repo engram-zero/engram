@@ -756,4 +756,19 @@ cache key dentro de `initPublicWorld`, e ignora el `networkType` recibido (renó
 (arriesga el cap de rango de `eth_getLogs`); queda env-overridable. tsc debe pasar.
 **Qué se hizo:** constante `PUBLIC_WORLD_NETWORK='turbo'` con comentario explicativo;
 `initPublicWorld` ahora escanea Turbo siempre (storage + cache key) e ignora el toggle; firma
-intacta. `npx tsc --noEmit` limpio. **Commit:** _(este commit)_
+intacta. `npx tsc --noEmit` limpio. **Commit:** 09aefe2
+
+### 25 jun 2026 · Mute toggle de audio (cierra Prompt 6, Round of 32 #2)
+**Pedido (humano):** Round of 32, prioridad #2: añadir el toggle de mute pendiente del sistema
+de audio (último ítem abierto del Prompt 6).
+**Prompt sintetizado:** Añade mute global al `AudioProvider`
+(`src/context/AudioContext.tsx`): expón `muted: boolean` y `setMuted(next)` en el contexto,
+persistido en `localStorage` (`engram:audioMuted`) e hidratado en mount (client-only, sin
+mismatch SSR). Implementa el mute vía `element.muted` (no tocando `volume`) para no pelear con
+la lógica de volumen espacial por-tick: aplica `mutedRef.current` a cada elemento al crearlo en
+`getCue`, y al togglear recorre los cues existentes seteando `.muted`. Cablea un botón
+🔊/🔇 en el header de `client-page.tsx`, visible también en modo Demo/guest, con `aria-label`.
+tsc debe pasar.
+**Qué se hizo:** `muted`/`setMuted` con persistencia en `AudioContext`; `.muted` aplicado en
+creación y en toggle; botón de mute en el header (siempre visible). `npx tsc --noEmit` limpio.
+**Commit:** _(este commit)_

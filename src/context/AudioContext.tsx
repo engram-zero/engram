@@ -22,7 +22,22 @@ type AudioContextValue = {
    * and adjusts gain WITHOUT restarting it — safe to call every frame/tick.
    */
   setLoopVolume: (cueId: AudioCueId, volume: number) => Promise<void>;
+  /** Whether all sound is muted. Persisted across sessions. */
+  muted: boolean;
+  /** Toggle global mute (or set explicitly). */
+  setMuted: (next: boolean) => void;
 };
+
+const MUTE_STORAGE_KEY = 'engram:audioMuted';
+
+function readStoredMute(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.localStorage.getItem(MUTE_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
 
 const AudioContext = createContext<AudioContextValue | undefined>(undefined);
 
@@ -33,8 +48,17 @@ type ManagedCue = {
 
 export function AudioProvider({ children }: { children: React.ReactNode }) {
   const [audioReady, setAudioReady] = useState(false);
+  const [muted, setMutedState] = useState(false);
   const cuesRef = useRef(new Map<AudioCueId, ManagedCue>());
   const unavailableRef = useRef(new Set<string>());
+  const mutedRef = useRef(false);
+
+  // Hydrate persisted mute preference on mount (client-only to avoid SSR mismatch).
+  useEffect(() => {
+    const stored = readStoredMute();
+    mutedRef.current = stored;
+    setMutedState(stored);
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -61,6 +85,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         audio.preload = cue.loop ? 'auto' : 'none';
         audio.loop = !!cue.loop;
         audio.volume = cue.volume;
+        audio.muted = mutedRef.current;
         audio.addEventListener('error', () => {
           unavailableRef.current.add(src);
         });
@@ -160,14 +185,33 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     [audioReady, getCue]
   );
 
+  const setMuted = useCallback((next: boolean) => {
+    mutedRef.current = next;
+    setMutedState(next);
+    try {
+      window.localStorage.setItem(MUTE_STORAGE_KEY, next ? '1' : '0');
+    } catch {
+      // ignore storage failures (private mode, etc.)
+    }
+    // Apply to every element already created. Loops keep running silently so the
+    // per-tick spatial volume logic stays correct; .muted just gates audible output.
+    for (const managed of cuesRef.current.values()) {
+      for (const element of managed.elements) {
+        element.muted = next;
+      }
+    }
+  }, []);
+
   const value = useMemo<AudioContextValue>(
     () => ({
       audioReady,
       play,
       setLoopEnabled,
       setLoopVolume,
+      muted,
+      setMuted,
     }),
-    [audioReady, play, setLoopEnabled, setLoopVolume]
+    [audioReady, play, setLoopEnabled, setLoopVolume, muted, setMuted]
   );
 
   return <AudioContext.Provider value={value}>{children}</AudioContext.Provider>;

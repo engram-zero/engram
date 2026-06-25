@@ -113,7 +113,7 @@ function aldricSaleDialogue(trustLevel: number, quantity: number, totalCoins: nu
 function Game() {
   const { address, isConnected } = useWallet();
   const { networkType } = useNetwork();
-  const { play } = useEngramAudio();
+  const { play, muted, setMuted } = useEngramAudio();
   const world = useWorld();
 
   const [memories, setMemories] = useState<Record<NPCName, NPCMemory> | null>(null);
@@ -327,6 +327,14 @@ function Game() {
       <header className="absolute top-0 inset-x-0 z-20 flex justify-between items-center px-4 py-3 bg-gradient-to-b from-black/55 to-transparent">
         <div className="font-bold tracking-[0.15em] text-[#d6b84a]">ENGRAM · Aldenmoor</div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setMuted(!muted)}
+            aria-label={muted ? 'Unmute sound' : 'Mute sound'}
+            title={muted ? 'Unmute sound' : 'Mute sound'}
+            className="bg-black/40 border border-[#5a4a28] hover:border-[#d6b84a] rounded-md px-3 py-1.5 text-sm"
+          >
+            {muted ? '🔇' : '🔊'}
+          </button>
           {address ? (
             <>
               <NetworkToggle />
