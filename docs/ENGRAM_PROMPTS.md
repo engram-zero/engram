@@ -26,7 +26,7 @@
 11. [Construcción con IA + tokens (describir y que la IA edifique)](#prompt-11--construcción-con-ia--tokens) — ✅ done (`/api/build` + modal; **bloques voxel** refinados a grid fino, preview, costo USD, tope de gasto, BYO key)
 12. [Edificios habitables (entrar dentro)](#prompt-12--edificios-habitables-entrar) — ✅ done (casas huecas con puerta libre)
 13. [Relaciones entre players: aliados, enemigos y sabotaje](#prompt-13--relaciones-entre-players-aliados-enemigos-y-sabotaje) — ⏳ pendiente
-14. [Mercado v2: bienes comprables, sinks y reparación](#prompt-14--mercado-v2-bienes-comprables-sinks-y-reparación) — ⏳ pendiente
+14. [Mercado v2: bienes comprables, sinks y reparación](#prompt-14--mercado-v2-bienes-comprables-sinks-y-reparación) — 🟡 mayormente done (Aldric **vende** bienes con coin; **spread de casa** + **precio dinámico** madera; **stone** minable y comerciable). Falta: repair kits (depende de durabilidad #18)
 15. [Asedios y demonios con fairness offline](#prompt-15--asedios-y-demonios-con-fairness-offline) — ⏳ pendiente
 16. [Animaciones de gathering y feedback físico](#prompt-16--animaciones-de-gathering-y-feedback-físico) — ⏳ pendiente
 17. [Terreno editable, ríos y mapa más grande](#prompt-17--terreno-editable-ríos-y-mapa-más-grande) — 🟡 partial: **riachuelo** (cinta de agua drapeada, no tala terreno) hecho; terreno editable / mapa más grande siguen pendientes

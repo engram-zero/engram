@@ -18,11 +18,13 @@ import {
   getHeightAt,
   COTTAGES,
   TREES,
+  ROCKS,
   CAMPFIRE,
   WORLD_RADIUS,
   GROUND_RADIUS,
   riverCenterZ,
   type TreeDef,
+  type RockDef,
   type CottageDef,
 } from './map';
 import { getTexture, getTextureVariant, hasTexture } from './textures';
@@ -35,7 +37,11 @@ import {
   harvestTree,
   isChopped,
   woodIsFull,
+  harvestRock,
+  isMined,
+  stoneIsFull,
   MAX_WOOD,
+  MAX_STONE,
   placeBuilding,
   removeBuilding,
   damageBuilding,
@@ -89,6 +95,7 @@ const PLAYER_RADIUS = 0.45;
 const WALK_SPEED = 4.6;
 const TALK_RANGE = 3.2; // how close you must stand before "Press E" appears
 const CHOP_RANGE = 2.8; // how close to a tree before "Press F to chop"
+const MINE_RANGE = 2.8; // how close to a rock before "Hold F to mine"
 const SPAWN_XZ: [number, number] = [0, 9]; // y is sampled from the terrain
 
 const keyboardMap = [
@@ -308,6 +315,7 @@ function resolveCollision(x: number, z: number): [number, number] {
   const obstacles = [
     { x: CAMPFIRE.x, z: CAMPFIRE.z, r: 1.0 },
     ...TREES.map((t, i) => ({ t, i })).filter(({ i }) => !isChopped(i)).map(({ t }) => ({ x: t.x, z: t.z, r: 0.45 * t.scale })),
+    ...ROCKS.map((r, i) => ({ r, i })).filter(({ i }) => !isMined(i)).map(({ r }) => ({ x: r.x, z: r.z, r: 0.6 * r.scale })),
     ...(Object.values(dynamicNpcState)).map((state) => ({ x: state.x, z: state.z, r: 0.6 })),
     ...(Object.values(dynamicEnemyState)).filter((s) => !s.dead).map((s) => ({ x: s.x, z: s.z, r: 0.5 })),
   ];
@@ -459,6 +467,7 @@ function Player({
   touchLook,
   onNearbyChange,
   onNearbyTreeChange,
+  onNearbyRockChange,
   onNearbyEnemyChange,
   onFootstep,
   onJump,
@@ -470,6 +479,7 @@ function Player({
   touchLook?: React.MutableRefObject<{ dx: number; dy: number }>;
   onNearbyChange: (npc: NPCName | null) => void;
   onNearbyTreeChange?: (treeIdx: number | null) => void;
+  onNearbyRockChange?: (rockIdx: number | null) => void;
   onNearbyEnemyChange?: (enemyId: string | null) => void;
   onFootstep?: () => void;
   onJump?: () => void;
@@ -482,6 +492,7 @@ function Player({
   const footstep = useRef(0);
   const nearbyRef = useRef<NPCName | null>(null);
   const treeRef = useRef<number | null>(null);
+  const rockRef = useRef<number | null>(null);
   const nearbyEnemyRef = useRef<string | null>(null);
   const didLook = useRef(false);
   const lookEuler = useRef(new THREE.Euler(0, 0, 0, 'YXZ')); // touch look (yaw/pitch)
@@ -634,7 +645,25 @@ function Player({
       treeRef.current = treeIdx;
       onNearbyTreeChange?.(treeIdx);
     }
-    
+
+    // Nearest mineable (non-mined) rock within reach.
+    let bestRock = -1;
+    let bestRd = Infinity;
+    for (let i = 0; i < ROCKS.length; i++) {
+      if (isMined(i)) continue;
+      const r = ROCKS[i];
+      const dd = Math.hypot(camera.position.x - r.x, camera.position.z - r.z);
+      if (dd < MINE_RANGE && dd < bestRd) {
+        bestRd = dd;
+        bestRock = i;
+      }
+    }
+    const rockIdx = bestRock >= 0 ? bestRock : null;
+    if (rockIdx !== rockRef.current) {
+      rockRef.current = rockIdx;
+      onNearbyRockChange?.(rockIdx);
+    }
+
     // Nearest enemy within attack range.
     let bestEnemy: string | null = null;
     let bestEd = Infinity;
@@ -1139,6 +1168,47 @@ function TreePart({
   }, [items, localY, chopped]);
   if (items.length === 0) return null;
   return <instancedMesh ref={ref} args={[geometry, material, items.length]} castShadow />;
+}
+
+// Mineable stone outcrops. Instanced like the forest; a mined rock collapses to
+// zero scale (kept in slot) so the minedRocks set drives visibility directly.
+function Rocks() {
+  const world = useWorld();
+  const mined = useMemo(() => new Set(world.minedRocks), [world.minedRocks]);
+  const geo = useMemo(() => new THREE.DodecahedronGeometry(0.6, 0), []);
+  const mat = useMemo(
+    () =>
+      new THREE.MeshStandardMaterial({
+        color: '#6f6a63',
+        map: getTextureVariant('stone', 0, { repeat: 1 }),
+        flatShading: !hasTexture('stone'),
+        roughness: 1,
+      }),
+    []
+  );
+  const ref = useRef<THREE.InstancedMesh>(null);
+  useLayoutEffect(() => {
+    const mesh = ref.current;
+    if (!mesh) return;
+    const dummy = new THREE.Object3D();
+    ROCKS.forEach((r, i) => {
+      if (mined.has(i)) {
+        dummy.position.set(r.x, -1000, r.z);
+        dummy.scale.setScalar(0);
+      } else {
+        // Sit the boulder partly into the ground; flatten it a touch.
+        dummy.position.set(r.x, getHeightAt(r.x, r.z) + 0.25 * r.scale, r.z);
+        dummy.scale.set(r.scale, r.scale * 0.8, r.scale);
+      }
+      dummy.rotation.set(0, r.rot, r.rot * 0.5);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(i, dummy.matrix);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.computeBoundingSphere();
+  }, [mined]);
+  if (ROCKS.length === 0) return null;
+  return <instancedMesh ref={ref} args={[geo, mat, ROCKS.length]} castShadow receiveShadow />;
 }
 
 function InstancedTrees() {
@@ -1723,6 +1793,7 @@ function Village({ torchesLit = true }: { torchesLit?: boolean }) {
         <Torch key={`torch${i}`} lit={torchesLit} position={[c.x + 1.7 * c.scale * Math.sin(c.rot), 0, c.z + 1.7 * c.scale * Math.cos(c.rot)]} />
       ))}
       <InstancedTrees />
+      <Rocks />
       <Campfire />
     </group>
   );
@@ -1825,6 +1896,7 @@ function canPlaceBuilding(type: BuildingType, x: number, z: number, candidate?: 
       ...COTTAGES.map((c) => ({ x: c.x, z: c.z, r: c.scale * 1.5 })),
       { x: CAMPFIRE.x, z: CAMPFIRE.z, r: 1.0 },
       ...TREES.map((t, i) => ({ t, i })).filter(({ i }) => !isChopped(i)).map(({ t }) => ({ x: t.x, z: t.z, r: 0.45 * t.scale })),
+      ...ROCKS.map((r, i) => ({ r, i })).filter(({ i }) => !isMined(i)).map(({ r }) => ({ x: r.x, z: r.z, r: 0.6 * r.scale })),
       ...(Object.values(NPC_POS) as [number, number, number][]).map((p) => ({ x: p[0], z: p[2], r: 0.9 })),
     ];
     for (const c of staticObstacles) {
@@ -1841,6 +1913,7 @@ function canPlaceBuilding(type: BuildingType, x: number, z: number, candidate?: 
     ...COTTAGES.map((c) => ({ x: c.x, z: c.z, r: c.scale * 1.5 })),
     { x: CAMPFIRE.x, z: CAMPFIRE.z, r: 1.0 },
     ...TREES.map((t, i) => ({ t, i })).filter(({ i }) => !isChopped(i)).map(({ t }) => ({ x: t.x, z: t.z, r: 0.45 * t.scale })),
+    ...ROCKS.map((r, i) => ({ r, i })).filter(({ i }) => !isMined(i)).map(({ r }) => ({ x: r.x, z: r.z, r: 0.6 * r.scale })),
     ...w.buildings.filter((b) => b.type !== 'block').map((b) => ({ x: b.x, z: b.z, r: BUILD_RADIUS[b.type] })),
     ...extraBuildings.filter((b) => b.type !== 'block').map((b) => ({ x: b.x, z: b.z, r: BUILD_RADIUS[b.type] })),
     ...(Object.values(NPC_POS) as [number, number, number][]).map((p) => ({ x: p[0], z: p[2], r: 0.9 })),
@@ -2726,6 +2799,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
 
   const [nearby, setNearby] = useState<NPCName | null>(null);
   const [nearbyTree, setNearbyTree] = useState<number | null>(null);
+  const [nearbyRock, setNearbyRock] = useState<number | null>(null);
   const [locked, setLocked] = useState(false);
   const [view, setView] = useState<ViewMode>('fp');
   const [isTouchDevice, setIsTouchDevice] = useState(false);
@@ -2745,6 +2819,8 @@ export default function Scene3D({ memories = null, active = null, talking = fals
   nearbyRef.current = nearby;
   const nearbyTreeRef = useRef<number | null>(null);
   nearbyTreeRef.current = nearbyTree;
+  const nearbyRockRef = useRef<number | null>(null);
+  nearbyRockRef.current = nearbyRock;
   const nearbyEnemyRef = useRef<string | null>(null);
   nearbyEnemyRef.current = nearbyEnemy;
   
@@ -3032,10 +3108,14 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     const SWING_MS = 620; // play an axe-hit roughly every ~0.6s while chopping
     let sinceSwing = SWING_MS; // swing immediately on the first chopping tick
     const id = window.setInterval(() => {
+      // Same hold-action harvests a tree (wood) or, if none is in range, a rock
+      // (stone). Trees take priority when both are reachable.
       const tree = nearbyTreeRef.current;
+      const rock = nearbyRockRef.current;
       const canChop = fHeldRef.current && tree !== null && !isChopped(tree) && !woodIsFull();
-      if (canChop) {
-        // Audible swings throughout the chop, not just when a unit completes.
+      const canMine = fHeldRef.current && tree === null && rock !== null && !isMined(rock) && !stoneIsFull();
+      if (canChop || canMine) {
+        // Audible swings throughout the action, not just when a unit completes.
         sinceSwing += TICK;
         if (sinceSwing >= SWING_MS) {
           void play('axe_chop');
@@ -3043,9 +3123,14 @@ export default function Scene3D({ memories = null, active = null, talking = fals
         }
         chopRef.current = Math.min(100, chopRef.current + (TICK / PER_UNIT_MS) * 100);
         if (chopRef.current >= 100) {
-          const { depleted } = harvestTree(tree!); // grant 1 unit; deplete after TREE_WOOD
+          if (canChop) {
+            const { depleted } = harvestTree(tree!); // grant 1 wood; deplete after TREE_WOOD
+            if (depleted) setNearbyTree(null); // tree gone; Player repicks next frame
+          } else {
+            const { depleted } = harvestRock(rock!); // grant 1 stone; deplete after ROCK_STONE
+            if (depleted) setNearbyRock(null); // rock gone; Player repicks next frame
+          }
           chopRef.current = 0;
-          if (depleted) setNearbyTree(null); // tree gone; Player repicks next frame
         }
       } else {
         sinceSwing = SWING_MS; // reset so the next chop swings right away
@@ -3095,8 +3180,8 @@ export default function Scene3D({ memories = null, active = null, talking = fals
           onSelectRef.current(nearbyRef.current); // talk
           return;
         }
-        if (nearbyTreeRef.current !== null) {
-          fHeldRef.current = true; // hold the right button to keep chopping
+        if (nearbyTreeRef.current !== null || nearbyRockRef.current !== null) {
+          fHeldRef.current = true; // hold the right button to keep chopping/mining
           rightChopRef.current = true;
         }
       }
@@ -3160,6 +3245,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     if (exploring) return;
     setNearby(null);
     setNearbyTree(null);
+    setNearbyRock(null);
     setLocked(false);
     if (typeof document === 'undefined') return;
     // Exit any lock already held, and any lock whose async grant lands after the
@@ -3282,6 +3368,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
               touchLook={isTouchDevice ? touchLookRef : undefined}
               onNearbyChange={setNearby}
               onNearbyTreeChange={setNearbyTree}
+              onNearbyRockChange={setNearbyRock}
               onNearbyEnemyChange={setNearbyEnemy}
               onFootstep={() => void play('footstep_grass')}
               onJump={() => void play('jump')}
@@ -3690,6 +3777,23 @@ Left-click to look around · right-click to act · WASD to walk · V for aerial
             </div>
           )}
 
+          {controlsArmed && !isTouchDevice && nearbyRock !== null && nearbyTree === null && !nearbyNpc && (
+            <div className="pointer-events-none absolute bottom-28 left-1/2 z-10 -translate-x-1/2">
+              {world.inventory.stone >= MAX_STONE ? (
+                <div className="rounded-full border border-[#8a8a8a] px-5 py-2 text-sm font-semibold text-[#f4e8d0] shadow-lg" style={{ background: 'rgba(20,16,10,0.9)' }}>
+                  Stone full ({MAX_STONE}) - can&apos;t carry more
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-[#7a8a9a] px-5 py-2.5 text-center text-sm font-semibold text-[#f4e8d0] shadow-lg" style={{ background: 'rgba(14,16,20,0.9)' }}>
+                  Hold <span className="text-[#bcd0e0]">F</span> to mine
+                  <div className="mt-1.5 h-2 w-40 overflow-hidden rounded-full bg-black/55">
+                    <div className="h-full rounded-full bg-[#bcd0e0] transition-[width] duration-75" style={{ width: `${chopPct}%` }} />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {controlsArmed && nearbyEnemy && !nearbyNpc && !nearbyTree && (
             <div className="pointer-events-none absolute bottom-28 left-1/2 z-10 -translate-x-1/2">
               <div className="rounded-full border border-red-500/60 px-5 py-2 text-sm font-semibold text-red-100 shadow-lg" style={{ background: 'rgba(30,10,10,0.88)' }}>
@@ -3753,6 +3857,34 @@ Left-click to look around · right-click to act · WASD to walk · V for aerial
                   Hold to chop
                   <div className="mt-1.5 h-2 w-32 overflow-hidden rounded-full bg-black/55">
                     <div className="h-full rounded-full bg-[#8fd06a] transition-[width] duration-75" style={{ width: `${chopPct}%` }} />
+                  </div>
+                </button>
+              )
+            )}
+            {nearbyRock !== null && nearbyTree === null && !nearbyNpc && (
+              world.inventory.stone >= MAX_STONE ? (
+                <div className="rounded-2xl border border-[#8a8a8a] bg-[rgba(20,16,10,0.92)] px-4 py-3 text-sm font-semibold text-[#f4e8d0]">
+                  Stone full ({MAX_STONE})
+                </div>
+              ) : (
+                <button
+                  onPointerDown={() => {
+                    fHeldRef.current = true;
+                  }}
+                  onPointerUp={() => {
+                    fHeldRef.current = false;
+                  }}
+                  onPointerLeave={() => {
+                    fHeldRef.current = false;
+                  }}
+                  onPointerCancel={() => {
+                    fHeldRef.current = false;
+                  }}
+                  className="rounded-2xl border border-[#7a8a9a] bg-[rgba(14,16,20,0.92)] px-4 py-3 text-center text-sm font-semibold text-[#f4e8d0]"
+                >
+                  Hold to mine
+                  <div className="mt-1.5 h-2 w-32 overflow-hidden rounded-full bg-black/55">
+                    <div className="h-full rounded-full bg-[#bcd0e0] transition-[width] duration-75" style={{ width: `${chopPct}%` }} />
                   </div>
                 </button>
               )

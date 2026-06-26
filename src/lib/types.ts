@@ -36,6 +36,8 @@ export interface WorldState {
   inventory: Record<ResourceType, number>;
   /** Indices (into map.ts TREES) of trees the player has chopped. */
   choppedTrees: number[];
+  /** Indices (into map.ts ROCKS) of rock outcrops the player has mined out. */
+  minedRocks: number[];
   /** Structures the player has built. */
   buildings: Building[];
   /** Enemies the player has killed. */

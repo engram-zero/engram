@@ -24,6 +24,8 @@ import {
   upgradeAxe,
   receiveBoughtWood,
   woodQuote,
+  MARKET,
+  MAX_STONE,
   AXE_UPGRADE_COST,
   SAPLING_COST,
 } from '@/lib/world';
@@ -157,6 +159,7 @@ function Game() {
   const [merchantQty, setMerchantQty] = useState(1);
   const [merchantPrice, setMerchantPrice] = useState(3);
   const [merchantBuyQty, setMerchantBuyQty] = useState(1);
+  const [merchantStoneQty, setMerchantStoneQty] = useState(1);
   const [merchantMsg, setMerchantMsg] = useState<string | null>(null);
   // "Explore as guest" — roam Aldenmoor without a wallet (no dialogue/saving).
   // The best mobile fallback when there's no injected wallet / WalletConnect.
@@ -383,6 +386,46 @@ function Game() {
     setMemories((prev) => (prev ? { ...prev, aldric: next } : prev));
     setDirty((d) => ({ ...d, aldric: true }));
     setMerchantMsg(`Sharper axe acquired — you now gather 2× wood per chop. (−${AXE_UPGRADE_COST} coin)`);
+  }
+
+  // Stone trade (static price, house edge: buy > sell). Mirrors the wood flow.
+  async function sellStoneToAldric() {
+    if (!memories || active !== 'aldric' || scene.loading) return;
+    const avail = Math.max(0, world.inventory.stone);
+    if (avail <= 0) {
+      setMerchantMsg('You have no stone to sell.');
+      return;
+    }
+    const price = MARKET.stone?.sell ?? 4;
+    const qty = clampInt(merchantStoneQty, 1, avail);
+    const total = qty * price;
+    await addResource('stone', -qty);
+    await addResource('coin', total);
+    const next = applyAldricSpend(memories.aldric, `Sold ${qty} stone for ${total} coin.`, `Bought ${qty} stone from the traveller at ${price} coin each.`);
+    setMemories((prev) => (prev ? { ...prev, aldric: next } : prev));
+    setDirty((d) => ({ ...d, aldric: true }));
+    setMerchantStoneQty((prev) => clampInt(prev, 1, Math.max(1, avail - qty)));
+    setMerchantMsg(`Sold ${qty} stone for ${total} coin (${price}/unit).`);
+  }
+
+  async function buyStoneFromAldric() {
+    if (!memories || active !== 'aldric' || scene.loading) return;
+    const price = MARKET.stone?.buy ?? 9;
+    const want = clampInt(merchantStoneQty, 1, 999);
+    const affordable = Math.floor(world.inventory.coin / price);
+    const room = Math.max(0, MAX_STONE - world.inventory.stone);
+    const qty = Math.min(want, affordable, room);
+    if (qty <= 0) {
+      setMerchantMsg(room <= 0 ? 'Your pack is full of stone.' : `Not enough coin — stone is ${price} coin/unit.`);
+      return;
+    }
+    const cost = qty * price;
+    await addResource('coin', -cost);
+    await addResource('stone', qty);
+    const next = applyAldricSpend(memories.aldric, `Bought ${qty} stone for ${cost} coin.`, `Sold ${qty} stone to the traveller at ${price} coin each.`);
+    setMemories((prev) => (prev ? { ...prev, aldric: next } : prev));
+    setDirty((d) => ({ ...d, aldric: true }));
+    setMerchantMsg(`Bought ${qty} stone for ${cost} coin (${price}/unit).`);
   }
 
   // Leaving an NPC persists that conversation to 0G and anchors the new root if needed.
@@ -681,8 +724,40 @@ function Game() {
                   </div>
                 </div>
 
+                {/* Stone — gathered by mining rock outcrops; static price, house edge. */}
+                <div className="mt-3 border-t border-[#6a5832]/60 pt-2.5">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                    <span className="text-[#bcd0e0]">Stone · sell <strong>{MARKET.stone?.sell}</strong> / buy <strong>{MARKET.stone?.buy}</strong> coin</span>
+                    <span>Your stone: <strong>{world.inventory.stone}</strong></span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={999}
+                      inputMode="numeric"
+                      value={merchantStoneQty}
+                      disabled={scene.loading}
+                      onChange={(e) => setMerchantStoneQty(clampInt(Number(e.target.value || 1), 1, 999))}
+                      className="w-20 bg-black/40 border border-[#5a4a28] focus:border-[#d6b84a] outline-none rounded-md px-3 py-2 text-sm"
+                    />
+                    <button
+                      onClick={sellStoneToAldric}
+                      disabled={scene.loading || world.inventory.stone <= 0}
+                      className="bg-black/40 border border-[#8a6a32] hover:border-[#d6b84a] rounded-md px-3 py-2 text-sm disabled:opacity-40"
+                    >
+                      Sell stone
+                    </button>
+                    <button
+                      onClick={buyStoneFromAldric}
+                      disabled={scene.loading || world.inventory.coin < (MARKET.stone?.buy ?? 9) || world.inventory.stone >= MAX_STONE}
+                      className="bg-black/40 border border-[#8a6a32] hover:border-[#d6b84a] rounded-md px-3 py-2 text-sm disabled:opacity-40"
+                    >
+                      Buy stone
+                    </button>
+                  </div>
+                </div>
+
                 <div className="mt-2 text-xs text-[#f4e8d0]/65">
-                  Selling updates your local resource draft immediately; Aldric&apos;s memory is persisted when you use <strong>Leave &amp; save</strong>. Haggle hard and he&apos;ll remember it.
+                  Selling updates your local resource draft immediately; Aldric&apos;s memory is persisted when you use <strong>Leave &amp; save</strong>. Haggle hard and he&apos;ll remember it. Mine rock outcrops in the hills for <strong>stone</strong>.
                 </div>
                 {merchantMsg && <div className="mt-2 text-sm text-[#d6b84a]">{merchantMsg}</div>}
               </div>

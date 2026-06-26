@@ -876,4 +876,24 @@ compra, regateo y labels usan `quote.sell/buy/mid`; se elimina el `ALDRIC_WOOD_P
 pasar y mantenerse el invariante buy>ceil (la casa siempre gana).
 **Qué se hizo:** `woodQuote` + constantes en `world.ts`; `referencePrice` en el contrato;
 `haggleParams` + integración en `/api/npc`; quote vivo cableado en `client-page.tsx`. Verificado el
-invariante (houseWins=true) y la curva en 6 estados. `npx tsc --noEmit` limpio. **Commit:** _(este commit)_
+invariante (houseWins=true) y la curva en 6 estados. `npx tsc --noEmit` limpio. **Commit:** fbef41a
+
+### 25 jun 2026 · Mercado v2 — Fase 3: gathering de stone (minería) + mercado (Prompt 14)
+**Pedido (humano):** Agregar un recurso real nuevo: que se pueda **minar piedra** (nodos de roca,
+como los árboles) y comerciarla con Aldric. (Y pregunta: ¿minar podría ser minería literal de
+cómputo? → sí, mejor vía 0G Compute que PoW; idea post-torneo.)
+**Prompt sintetizado:** Espeja el sistema de árboles para piedra. (1) `map.ts`: `ROCKS` (16 nodos
+deterministas en las colinas, fuera del núcleo/río/cottages) + sus colliders. (2) `WorldState`
+gana `minedRocks` (types + normalize/clone/EMPTY); en `world.ts` `MAX_STONE=60`, `ROCK_MINES=18`,
+`harvestRock`/`isMined`/`stoneIsFull` (espejo de `harvestTree`), y `MARKET.stone={sell:4,buy:9}`
+(buy>sell, house edge; piedra más cara que madera). (3) `Scene3D.tsx`: componente `Rocks`
+(InstancedMesh de dodecaedros, oculta los `minedRocks`); rocas añadidas a los obstáculos de
+`resolveCollision` y de colocación de edificios (filtrando `!isMined`); detección de roca cercana
+en el Player FP (`onNearbyRockChange`, `MINE_RANGE`); el loop de hold-action mina la roca si no hay
+árbol en rango (prioridad árbol); click-derecho y los HUDs (desktop + táctil) ganan el hint "Hold F
+to mine". (4) `client-page.tsx`: handlers `sellStoneToAldric`/`buyStoneFromAldric` + fila de stone
+en el panel de Aldric. tsc debe pasar. (Verificación headless omitida por saturación del entorno;
+la integración espeja el sistema de árboles ya probado.)
+**Qué se hizo:** `ROCKS`+colliders en `map.ts`; `minedRocks`/minería/`MARKET.stone` en `world.ts`;
+`Rocks` + colisión + detección + loop + hints en `Scene3D.tsx`; comercio de stone en
+`client-page.tsx`. `npx tsc --noEmit` limpio. **Commit:** _(este commit)_

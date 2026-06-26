@@ -123,6 +123,34 @@ export const TREES: TreeDef[] = (() => {
   return out;
 })();
 
+export interface RockDef {
+  x: number;
+  z: number;
+  scale: number;
+  rot: number;
+}
+
+// Mineable stone outcrops — sparser than the forest, scattered through the hills
+// away from the village core, the river, and the cottages. Same deterministic
+// PRNG style so they're identical every run.
+export const ROCKS: RockDef[] = (() => {
+  const rng = mulberry32(7331);
+  const out: RockDef[] = [];
+  let tries = 0;
+  while (out.length < 16 && tries < 2000) {
+    tries++;
+    const ang = rng() * Math.PI * 2;
+    const rad = 16 + rng() * 40; // 16..56, out in the hills
+    const x = Math.cos(ang) * rad;
+    const z = Math.sin(ang) * rad;
+    if (COTTAGES.some((c) => Math.hypot(x - c.x, z - c.z) < c.scale * 2.6)) continue;
+    if (Math.abs(z - riverCenterZ(x)) < RIVER_CLEAR) continue; // keep the creek clear
+    if (TREES.some((t) => Math.hypot(x - t.x, z - t.z) < 1.6)) continue; // not inside a tree
+    out.push({ x, z, scale: 0.9 + rng() * 0.7, rot: rng() * Math.PI * 2 });
+  }
+  return out;
+})();
+
 // ─── Colliders (derived — never hand-maintained) ──────────────────────────────
 
 export interface Collider {
@@ -138,5 +166,11 @@ export const COLLIDERS: Collider[] = [
     x: t.x,
     z: t.z,
     r: 0.45 * t.scale,
+  })),
+  // Rock outcrops the player can reach.
+  ...ROCKS.filter((r) => Math.hypot(r.x, r.z) < WORLD_RADIUS + 2).map((r) => ({
+    x: r.x,
+    z: r.z,
+    r: 0.6 * r.scale,
   })),
 ];

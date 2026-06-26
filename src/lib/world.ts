@@ -30,7 +30,7 @@ export const BUILD_COST: Record<BuildingType, number> = { wall: 3, house: 10, bl
  * Blocks are decorative voxels — they don't collide (radius 0). */
 export const BUILD_RADIUS: Record<BuildingType, number> = { wall: 0.9, house: 1.8, block: 0 };
 
-export const EMPTY_WORLD: WorldState = { inventory: { wood: 0, stone: 0, coin: 0 }, choppedTrees: [], buildings: [], enemiesKilled: 0, axeLevel: 0 };
+export const EMPTY_WORLD: WorldState = { inventory: { wood: 0, stone: 0, coin: 0 }, choppedTrees: [], minedRocks: [], buildings: [], enemiesKilled: 0, axeLevel: 0 };
 
 // ── Market (Aldric) ───────────────────────────────────────────────────────────
 // House-edge spread: the BUY price (player buys a resource with coin) is always
@@ -46,9 +46,11 @@ export interface ResourcePrice {
   buy: number;
 }
 export const MARKET: Partial<Record<ResourceType, ResourcePrice>> = {
-  // Static fallback; wood is priced dynamically via woodQuote(). Future resources
-  // (e.g. stone) can sit here as fixed quotes until they get their own model.
+  // Wood is priced dynamically via woodQuote(); this is a fallback. Stone uses a
+  // static quote for now (buy > sell keeps the house edge), and can get its own
+  // dynamic model later. Stone is rarer than wood, so it's worth more.
   wood: { sell: 2, buy: 6 },
+  stone: { sell: 4, buy: 9 },
 };
 
 /** Cost in coin of the one-time "sharper axe" upgrade (2× wood per chop). */
@@ -143,11 +145,12 @@ function normalizeBuildings(raw: unknown): Building[] {
 
 export function normalizeWorldState(raw: unknown): WorldState {
   const p = raw && typeof raw === 'object' ? (raw as any) : {};
-  const choppedTrees: number[] = Array.isArray(p?.choppedTrees)
-    ? Array.from(new Set<number>(p.choppedTrees
-        .map((n: unknown) => Number(n))
-        .filter((n: number) => Number.isInteger(n) && n >= 0)))
-    : [];
+  const intIndexSet = (raw: unknown): number[] =>
+    Array.isArray(raw)
+      ? Array.from(new Set<number>(raw.map((n) => Number(n)).filter((n) => Number.isInteger(n) && n >= 0)))
+      : [];
+  const choppedTrees = intIndexSet(p?.choppedTrees);
+  const minedRocks = intIndexSet(p?.minedRocks);
 
   return {
     inventory: {
@@ -156,6 +159,7 @@ export function normalizeWorldState(raw: unknown): WorldState {
       coin: Math.max(0, Number(p?.inventory?.coin ?? 0)),
     },
     choppedTrees,
+    minedRocks,
     buildings: normalizeBuildings(p?.buildings),
     enemiesKilled: Math.max(0, Number(p?.enemiesKilled ?? 0)),
     axeLevel: Math.max(0, Math.round(Number(p?.axeLevel ?? 0))),
@@ -166,6 +170,7 @@ export function cloneWorldState(value: WorldState = EMPTY_WORLD): WorldState {
   return {
     inventory: { ...value.inventory },
     choppedTrees: [...value.choppedTrees],
+    minedRocks: [...value.minedRocks],
     buildings: value.buildings.map((b) => ({ ...b })),
     enemiesKilled: value.enemiesKilled,
     axeLevel: value.axeLevel,
@@ -280,6 +285,38 @@ export function isChopped(index: number): boolean {
 /** True when the player can't carry any more wood. */
 export function woodIsFull(): boolean {
   return state.inventory.wood >= MAX_WOOD;
+}
+
+// ── Mining (stone) ── parallels tree chopping, against map.ts ROCKS. ───────────
+export const MAX_STONE = 60;
+/** Holds-to-mine before a rock is exhausted; yields ONE stone per fill. */
+export const ROCK_MINES = 18;
+export const STONE_PER_MINE = 1;
+export const ROCK_STONE = ROCK_MINES * STONE_PER_MINE; // total stone per rock
+
+const mined: Record<number, number> = {};
+
+export function isMined(index: number): boolean {
+  return state.minedRocks.includes(index);
+}
+
+export function stoneIsFull(): boolean {
+  return state.inventory.stone >= MAX_STONE;
+}
+
+/** Extract one unit of stone from a rock (mirrors harvestTree). After ROCK_STONE
+ * units the rock is exhausted and vanishes. No-op if already mined or full. */
+export function harvestRock(index: number): { depleted: boolean; gained: boolean } {
+  if (state.minedRocks.includes(index)) return { depleted: true, gained: false };
+  if (state.inventory.stone >= MAX_STONE) return { depleted: false, gained: false };
+  const units = (mined[index] = (mined[index] ?? 0) + 1);
+  const depleted = units >= ROCK_MINES;
+  commit({
+    ...state,
+    inventory: { ...state.inventory, stone: Math.min(MAX_STONE, state.inventory.stone + STONE_PER_MINE) },
+    minedRocks: depleted ? [...state.minedRocks, index] : state.minedRocks,
+  });
+  return { depleted, gained: true };
 }
 
 /** Each fill of the chop bar grants ONE unit of wood (like the original pacing);
