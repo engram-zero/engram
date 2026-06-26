@@ -919,3 +919,54 @@ fallback; `scripts/fund-compute.ts` + npm script `fund:compute`; cableado + píl
 `Scene3D.tsx`; flags y notas en `.env.example`; estado actualizado en `ENGRAM_PROMPTS.md` (🟡
 construido, gateado OFF, sin verificar en vivo). `npx tsc --noEmit` y `next build` limpios.
 **Commit:** _(este commit)_
+
+### 26 jun 2026 · Relaciones entre players MVP (Prompt 13)
+**Pedido (humano):** Aclarar si las tareas #13–#19 son lo mismo y arrancar con #13:
+relaciones entre players (aliado/enemigo) sobre el mundo persistente.
+**Prompt sintetizado:** Implementa una primera versión no destructiva de Prompt 13. Añade
+`WalletRelation = neutral | allied | hostile` y `WorldState.relations` normalizado en
+`world.ts`; expón `setWalletRelation` y guarda esas relaciones en el mismo bundle del mundo,
+por lo que se publican a 0G con **Save World**. Extiende `public-world` con una lista de owners
+descubiertos por sus builds. En vista aérea, muestra un panel de wallets públicas con botones
+Neutral/Ally/Hostile; al cambiar una relación marca el mundo como dirty y reutiliza el flujo de
+guardar/descartar existente. Las construcciones públicas reciben un anillo sutil de color según
+la relación. No implementar raids todavía; sabotaje/destrucción queda pendiente de reglas de
+fairness, durabilidad y posiblemente multiplayer.
+**Qué se hizo:** modelo `relations`, normalización/clonado/store action; owners en
+`public-world`; panel de relaciones y marcadores 3D en `Scene3D`; docs de `ENGRAM_PROMPTS.md`
+y `STATUS.md` actualizados. `npx tsc --noEmit` limpio. **Commit:** _(este commit)_
+
+### 26 jun 2026 · Repair kits + durabilidad MVP (Prompts 14/18)
+**Pedido (humano):** Continuar el MVP con el siguiente loop básico: repair/durability v1 +
+repair kit, conectando relaciones, mercado y mundo persistente sin implementar raids todavía.
+**Prompt sintetizado:** Aprovecha que `Building` ya tiene `hp/maxHp` y que los enemigos ya
+pueden dañar edificios. Añade `WorldState.repairKits` normalizado/persistido, constantes
+`REPAIR_KIT_COST`/`REPAIR_KIT_HEAL`, acción `addRepairKits` y `repairBuilding(index)`.
+En Aldric, añade compra de repair kit por coin y registra la compra en su memoria. En vista
+aérea, muestra kits en el HUD, añade herramienta **Repair**, y permite reparar edificios propios
+dañados con un kit; marca el mundo como dirty para guardarlo con **Save World**. Añade feedback
+visual de daño en edificios (`hp/maxHp` → material más oscuro + anillo naranja/rojo). No tocar
+raids/sabotaje todavía.
+**Qué se hizo:** `repairKits` persistido en `WorldState`; kit de reparación comprado a Aldric
+como coin sink; herramienta Repair en aerial; visual de daño en builds; docs de prompts/status
+actualizados. `npx tsc --noEmit` limpio. **Commit:** _(este commit)_
+
+### 26 jun 2026 · Durability hardening: HP bars, wood repair, wallet-world render fix
+**Pedido (humano):** Al conectar wallet la escena quedaba gris/oscura, pero en guest no; empezó
+con el trabajo de HP de edificios. Quitar soluciones no relacionadas, explicar en prompts lo
+hecho, quitar el tag `TEST DAY`, mostrar HP de edificios con barras, y hacer que reparar cueste
+madera también.
+**Prompt sintetizado:** Vuelve al origen del bug en vez de tocar el renderer/cielo: el fallo solo
+aparece con wallet conectada, por tanto revisar el path de `world.buildings`/`publicWorld.buildings`
+cargado desde 0G. Elimina debug UI/renderer (`TEST DAY`) y cualquier `<Html>` permanente asociado a
+HP que pueda crear capas DOM sobre el canvas. Sanitiza edificios persistidos descargados de 0G
+(`x/z` finitos y dentro de bounds, `scale/y/hp/maxHp` clampados) para que una wallet pública no pueda
+dibujar geometría gigante sobre la cámara. Mantén la durabilidad con marcadores puros de Three.js:
+anillo de daño + barra de HP billboard sobre edificios dañados. Cambia reparación a coste de madera
+(`REPAIR_WOOD_COST`) y deja repair kits como boost opcional de esa reparación, no como requisito.
+Actualiza tooltips/feedback y verifica con `npx tsc --noEmit`.
+**Qué se hizo:** se eliminó el tag `TEST DAY`; el bug de pantalla gris se corrigió retirando el
+badge DOM de HP y los anillos neutrales públicos; `normalizeBuildings` ahora clampa builds cargados
+desde bundles 0G; edificios dañados muestran barras HP WebGL; `repairBuilding` cuesta madera y
+consume kit solo como boost si existe; copies de Repair/Aldric actualizadas. `npx tsc --noEmit`
+limpio. **Commit:** _(este commit)_

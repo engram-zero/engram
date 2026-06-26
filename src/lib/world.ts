@@ -15,9 +15,9 @@
 //     NOT cross-device, NOT on-chain).
 
 import { useSyncExternalStore } from 'react';
-import { BLOCK_UNIT, type ResourceType, type WorldState, type Building, type BuildingType } from '@/lib/types';
+import { BLOCK_SCALE_MAX, BLOCK_SCALE_MIN, BLOCK_UNIT, type ResourceType, type WalletRelation, type WorldState, type Building, type BuildingType } from '@/lib/types';
 
-export type { ResourceType, WorldState, Building, BuildingType } from '@/lib/types';
+export type { ResourceType, WalletRelation, WorldState, Building, BuildingType } from '@/lib/types';
 
 /** How much wood the player can carry before they must use/drop some. Raised to
  * support AI-built structures and the pricier builds near the village centre. */
@@ -29,8 +29,19 @@ export const BUILD_COST: Record<BuildingType, number> = { wall: 3, house: 10, bl
 /** Collider radius for each building (kept in sync with the rendered footprint).
  * Blocks are decorative voxels — they don't collide (radius 0). */
 export const BUILD_RADIUS: Record<BuildingType, number> = { wall: 0.9, house: 1.8, block: 0 };
+const MAX_BUILD_COORD = 150;
+const MAX_BLOCK_Y = 12;
 
-export const EMPTY_WORLD: WorldState = { inventory: { wood: 0, stone: 0, coin: 0 }, choppedTrees: [], minedRocks: [], buildings: [], enemiesKilled: 0, axeLevel: 0 };
+export const EMPTY_WORLD: WorldState = {
+  inventory: { wood: 0, stone: 0, coin: 0 },
+  choppedTrees: [],
+  minedRocks: [],
+  buildings: [],
+  enemiesKilled: 0,
+  axeLevel: 0,
+  repairKits: 0,
+  relations: {},
+};
 
 // ── Market (Aldric) ───────────────────────────────────────────────────────────
 // House-edge spread: the BUY price (player buys a resource with coin) is always
@@ -57,6 +68,14 @@ export const MARKET: Partial<Record<ResourceType, ResourcePrice>> = {
 export const AXE_UPGRADE_COST = 70;
 /** Cost in coin of one sapling (regrows one felled tree). */
 export const SAPLING_COST = 5;
+/** Cost in coin of one repair kit. */
+export const REPAIR_KIT_COST = 12;
+/** Wood spent by any repair action. Repair kits boost the same wood repair. */
+export const REPAIR_WOOD_COST = 2;
+/** HP restored by a wood-only repair. */
+export const REPAIR_WOOD_HEAL = 30;
+/** HP restored when a repair kit is consumed with the wood repair. */
+export const REPAIR_KIT_HEAL = 60;
 
 // ── Dynamic wood pricing (Phase 2) ────────────────────────────────────────────
 // A relative market: wood's coin value rises with scarcity (fewer trees left on
@@ -95,35 +114,42 @@ export function woodQuote(world: WorldState, totalTrees: number): WoodQuote {
   return { mid, sell, buy, haggleCeil };
 }
 
-const LOCALHOST_FREE_BUILD_WALLETS = new Set([
-  '0xc77b3982d324c6e812119eea7dc94f0a856da59e',
-]);
-
 export function isLocalhostFreeBuildWallet(addr: string | null = wallet): boolean {
   if (!addr || typeof window === 'undefined') return false;
   const host = window.location.hostname;
   const isLocalhost = host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0';
-  return isLocalhost && LOCALHOST_FREE_BUILD_WALLETS.has(addr.toLowerCase());
+  return isLocalhost;
 }
 
 function applyLocalhostFreeBuild(state: WorldState, addr: string | null = wallet): WorldState {
   if (!isLocalhostFreeBuildWallet(addr)) return state;
   return {
     ...state,
-    inventory: { ...state.inventory, wood: MAX_WOOD },
+    inventory: { ...state.inventory, wood: MAX_WOOD, coin: Math.max(state.inventory.coin, 999) },
+    axeLevel: Math.max(state.axeLevel, 1),
+    repairKits: Math.max(state.repairKits, 99),
   };
 }
 
 function normalizeBuildings(raw: unknown): Building[] {
   if (!Array.isArray(raw)) return [];
   return raw
-    .filter((b): b is Building => !!b && (b.type === 'wall' || b.type === 'house' || b.type === 'block') && typeof b.x === 'number' && typeof b.z === 'number')
+    .filter((b): b is Building =>
+      !!b &&
+      (b.type === 'wall' || b.type === 'house' || b.type === 'block') &&
+      typeof b.x === 'number' &&
+      typeof b.z === 'number' &&
+      Number.isFinite(b.x) &&
+      Number.isFinite(b.z) &&
+      Math.abs(b.x) <= MAX_BUILD_COORD &&
+      Math.abs(b.z) <= MAX_BUILD_COORD
+    )
     .map((b) => {
       const base: Building = {
         type: b.type,
         x: b.x,
         z: b.z,
-        rot: typeof b.rot === 'number' ? b.rot : 0,
+        rot: typeof b.rot === 'number' && Number.isFinite(b.rot) ? b.rot : 0,
         woodCost: typeof b.woodCost === 'number' ? Math.max(0, Math.round(b.woodCost)) : undefined,
       };
 
@@ -131,16 +157,27 @@ function normalizeBuildings(raw: unknown): Building[] {
       if (b.type === 'house') defaultHp = 150;
       if (b.type === 'wall') defaultHp = 80;
 
-      base.maxHp = typeof (b as any).maxHp === 'number' ? (b as any).maxHp : defaultHp;
-      base.hp = typeof (b as any).hp === 'number' ? (b as any).hp : base.maxHp;
+      base.maxHp = typeof (b as any).maxHp === 'number' && Number.isFinite((b as any).maxHp) ? Math.max(1, Math.min(300, Math.round((b as any).maxHp))) : defaultHp;
+      base.hp = typeof (b as any).hp === 'number' && Number.isFinite((b as any).hp) ? Math.max(0, Math.min(base.maxHp, Math.round((b as any).hp))) : base.maxHp;
 
       if (b.type === 'block') {
-        base.y = typeof b.y === 'number' ? b.y : 0;
-        base.scale = typeof b.scale === 'number' ? b.scale : BLOCK_UNIT;
+        base.y = typeof b.y === 'number' && Number.isFinite(b.y) ? Math.max(0, Math.min(MAX_BLOCK_Y, b.y)) : 0;
+        base.scale = typeof b.scale === 'number' && Number.isFinite(b.scale) ? Math.max(BLOCK_SCALE_MIN, Math.min(BLOCK_SCALE_MAX, b.scale)) : BLOCK_UNIT;
         base.color = typeof b.color === 'string' ? b.color : '#8a6a4a';
       }
       return base;
     });
+}
+
+function normalizeRelations(raw: unknown): Record<string, WalletRelation> {
+  if (!raw || typeof raw !== 'object') return {};
+  const relations: Record<string, WalletRelation> = {};
+  for (const [wallet, value] of Object.entries(raw as Record<string, unknown>)) {
+    const key = wallet.toLowerCase();
+    if (!/^0x[a-f0-9]{40}$/.test(key)) continue;
+    if (value === 'allied' || value === 'hostile') relations[key] = value;
+  }
+  return relations;
 }
 
 export function normalizeWorldState(raw: unknown): WorldState {
@@ -163,6 +200,8 @@ export function normalizeWorldState(raw: unknown): WorldState {
     buildings: normalizeBuildings(p?.buildings),
     enemiesKilled: Math.max(0, Number(p?.enemiesKilled ?? 0)),
     axeLevel: Math.max(0, Math.round(Number(p?.axeLevel ?? 0))),
+    repairKits: Math.max(0, Math.round(Number(p?.repairKits ?? 0))),
+    relations: normalizeRelations(p?.relations),
   };
 }
 
@@ -174,6 +213,8 @@ export function cloneWorldState(value: WorldState = EMPTY_WORLD): WorldState {
     buildings: value.buildings.map((b) => ({ ...b })),
     enemiesKilled: value.enemiesKilled,
     axeLevel: value.axeLevel,
+    repairKits: value.repairKits,
+    relations: { ...value.relations },
   };
 }
 
@@ -382,6 +423,30 @@ export function receiveBoughtWood(units: number): number {
   return got;
 }
 
+export function addRepairKits(amount: number) {
+  const next = Math.max(0, state.repairKits + Math.round(amount));
+  return commit({ ...state, repairKits: next });
+}
+
+// ── Player relations ─────────────────────────────────────────────────────────
+
+export function relationForWallet(targetWallet: string): WalletRelation {
+  return state.relations[targetWallet.toLowerCase()] ?? 'neutral';
+}
+
+export function setWalletRelation(targetWallet: string, relation: WalletRelation): boolean {
+  const key = targetWallet.toLowerCase();
+  if (!/^0x[a-f0-9]{40}$/.test(key)) return false;
+  const nextRelations = { ...state.relations };
+  if (relation === 'neutral') {
+    delete nextRelations[key];
+  } else {
+    nextRelations[key] = relation;
+  }
+  commit({ ...state, relations: nextRelations });
+  return true;
+}
+
 // ── Building ──────────────────────────────────────────────────────────────────
 
 /** Place a structure if the player can afford it (deducts `cost` wood). The
@@ -417,26 +482,45 @@ export function removeBuilding(index: number) {
   });
 }
 
-/** Damage a building by index, optionally removing it if destroyed. */
+/** Damage a building by index. At 0 HP it remains as a ruined repairable shell. */
 export function damageBuilding(index: number, amount: number) {
   if (index < 0 || index >= state.buildings.length) return;
   const built = state.buildings[index];
   if (built.hp === undefined) return;
-  
-  const newHp = built.hp - amount;
-  if (newHp <= 0) {
-    commit({
-      ...state,
-      buildings: state.buildings.filter((_, i) => i !== index),
-    });
-  } else {
-    const newBuildings = [...state.buildings];
-    newBuildings[index] = { ...built, hp: newHp };
-    commit({
-      ...state,
-      buildings: newBuildings,
-    });
-  }
+
+  const newBuildings = [...state.buildings];
+  newBuildings[index] = { ...built, hp: Math.max(0, built.hp - amount) };
+  commit({
+    ...state,
+    buildings: newBuildings,
+  });
+}
+
+/** Spend wood to restore HP on a damaged building; a repair kit boosts the heal. */
+export function repairBuilding(index: number): boolean {
+  if (index < 0 || index >= state.buildings.length) return false;
+  const built = state.buildings[index];
+  const maxHp = built.maxHp ?? built.hp ?? 0;
+  const hp = built.hp ?? maxHp;
+  if (maxHp <= 0 || hp >= maxHp) return false;
+  const freeBuild = isLocalhostFreeBuildWallet();
+  if (!freeBuild && state.inventory.wood < REPAIR_WOOD_COST) return false;
+  const useKit = state.repairKits > 0;
+  const heal = useKit ? REPAIR_KIT_HEAL : REPAIR_WOOD_HEAL;
+
+  const newBuildings = [...state.buildings];
+  newBuildings[index] = {
+    ...built,
+    maxHp,
+    hp: Math.min(maxHp, hp + heal),
+  };
+  commit({
+    ...state,
+    inventory: { ...state.inventory, wood: freeBuild ? MAX_WOOD : Math.max(0, state.inventory.wood - REPAIR_WOOD_COST) },
+    repairKits: useKit ? Math.max(0, state.repairKits - 1) : state.repairKits,
+    buildings: newBuildings,
+  });
+  return true;
 }
 
 // ── React hooks ───────────────────────────────────────────────────────────────

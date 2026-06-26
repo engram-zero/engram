@@ -18,19 +18,19 @@
 3. [Protección de coste/abuso en /api/npc (rate limit)](#prompt-3--rate-limit--anti-abuso-en-apinpc) — ✅ done
 4. [Controles móviles / táctiles (sin pointer lock)](#prompt-4--controles-móviles--táctiles) — ✅ done (joystick de arrastre, look táctil en 1ª persona, toggle de vista, sin scroll iOS, modo demo)
 5. [Texturas PNG en lugar de materiales planos](#prompt-5--texturas-png) — ✅ done (22 texturas en webp; ver [`ART_ASSETS.md`](ART_ASSETS.md))
-6. [Audio ambiental (fogata, pasos, noche)](#prompt-6--audio-ambiental) — ✅ done: ambiente **espacial por distancia** (fogata, bolsas de grillos night-only, bed diurno) + foley (pasos/hacha/salto). Falta solo un toggle de **mute**.
+6. [Audio ambiental (fogata, pasos, noche)](#prompt-6--audio-ambiental) — ✅ done: ambiente **espacial por distancia** (fogata, bolsas de grillos night-only, bed diurno) + foley (pasos/hacha/salto) + toggle de mute.
 7. [Verificar end-to-end la UX del 429 en el cliente](#prompt-7--verificación-diferida-ux-del-429) — ⏳ diferida (ver precondición)
 8. [Visión: gameplay loop, doble vista y mundo persistente en 0G](#prompt-8--visión-gameplay-loop--doble-vista) — 🟡 partial: 8a done, 8b persistencia MVP done (martelaxe)
 9. [Construir edificios + persistir el mundo en 0G](#prompt-9--construir--persistir-el-mundo-en-0g) — ✅ 9a (gameplay + zonas/precios) y 9b (persistencia 0G, martelaxe) hechos
 10. [Mercado: vender recursos a los NPCs → reputación en 0G](#prompt-10--mercado-vender-recursos--reputación) — ✅ v1 + v2 done (venta simple + **regateo con LLM**: Aldric acepta/contraoferta/rechaza, ajusta trust, persiste en 0G)
 11. [Construcción con IA + tokens (describir y que la IA edifique)](#prompt-11--construcción-con-ia--tokens) — ✅ done (`/api/build` + modal; **bloques voxel** refinados a grid fino, preview, costo USD, tope de gasto, BYO key)
 12. [Edificios habitables (entrar dentro)](#prompt-12--edificios-habitables-entrar) — ✅ done (casas huecas con puerta libre)
-13. [Relaciones entre players: aliados, enemigos y sabotaje](#prompt-13--relaciones-entre-players-aliados-enemigos-y-sabotaje) — ⏳ pendiente
-14. [Mercado v2: bienes comprables, sinks y reparación](#prompt-14--mercado-v2-bienes-comprables-sinks-y-reparación) — 🟡 mayormente done (Aldric **vende** bienes con coin; **spread de casa** + **precio dinámico** madera; **stone** minable y comerciable). Falta: repair kits (depende de durabilidad #18)
+13. [Relaciones entre players: aliados, enemigos y sabotaje](#prompt-13--relaciones-entre-players-aliados-enemigos-y-sabotaje) — 🟡 MVP done: ally/hostile por wallet persistido en 0G; sabotaje/raids pendiente
+14. [Mercado v2: bienes comprables, sinks y reparación](#prompt-14--mercado-v2-bienes-comprables-sinks-y-reparación) — 🟡 mayormente done (Aldric **vende** bienes con coin; **spread de casa** + **precio dinámico** madera; **stone** minable/comerciable; repair kits como boost de reparación). Más bienes/stock depth pendiente
 15. [Asedios y demonios con fairness offline](#prompt-15--asedios-y-demonios-con-fairness-offline) — ⏳ pendiente
 16. [Animaciones de gathering y feedback físico](#prompt-16--animaciones-de-gathering-y-feedback-físico) — ⏳ pendiente
 17. [Terreno editable, ríos y mapa más grande](#prompt-17--terreno-editable-ríos-y-mapa-más-grande) — 🟡 partial: **riachuelo** (cinta de agua drapeada, no tala terreno) hecho; terreno editable / mapa más grande siguen pendientes
-18. [Reparación, durabilidad y mantenimiento del mundo](#prompt-18--reparación-durabilidad-y-mantenimiento-del-mundo) — ⏳ pendiente
+18. [Reparación, durabilidad y mantenimiento del mundo](#prompt-18--reparación-durabilidad-y-mantenimiento-del-mundo) — 🟡 MVP done: hp/maxHp + daño visual + barras HP WebGL + reparación con madera (kits = boost); mantenimiento avanzado pendiente
 20. [Minar = trabajo real en 0G Compute (proof-of-useful-work)](#prompt-20--minar--trabajo-real-en-0g-compute) — 🟡 construido, **gateado OFF + sin verificar en vivo** (falta fondear el ledger y probar)
 
 > **Tareas no-código (ADMIN):** ✅ deploy a Vercel + env vars · ✅ save a 0G end-to-end ·
@@ -60,12 +60,13 @@
    el toggle de red, y/o subir el `NEXT_PUBLIC_PUBLIC_WORLD_BLOCK_LOOKBACK`, para que los
    builds de todos se vean de forma consistente. **Bajo esfuerzo, evita un bug visible a jueces.**
 3. **Pulido audiovisual** (lo que más sube la percepción en video/galería): revisar a ojo
-   el **río** (ancho/color/ruta), **avatares**, **iluminación nocturna**, y añadir un
-   **toggle de mute** (último pendiente del audio, Prompt 6).
+   el **río** (ancho/color/ruta), **avatares** e **iluminación nocturna**. El toggle de
+   mute ya está hecho.
 4. **Profundizar un loop con la memoria 0G** que luzca en cámara: p.ej. **mercado v2**
    (Prompt 14) o **regateo con LLM** con Aldric (Prompt 10 v2) — refuerza el core narrativo
    de "los NPCs te recuerdan" que es nuestra tesis ganadora.
-5. **Relaciones entre players / sabotaje** (Prompt 13) — encaja con multiplayer si se hace #1.
+5. **Relaciones entre players / sabotaje** (Prompt 13) — MVP de relaciones hecho; sabotaje
+   real encaja con multiplayer si se hace #1.
 
 **Cómo arrancar el chat de Fase 2:** pedir a la IA que lea `PROMPT_LOG.md`, `STATUS.md` y
 este archivo, y proponga el plan del Round of 32. Coordinar con martelaxe (0G/contracts,
@@ -401,8 +402,8 @@ superficies grandes, reutilizando materiales (una textura → un material compar
 > [`src/lib/audio/manifest.ts`](../src/lib/audio/manifest.ts), con fallback silencioso
 > si faltan assets. También están cableados los cues de grillos, fogata, pasos,
 > salto/caída, hachazo, ataque y UI, y documentados en
-> [`AUDIO_ASSETS.md`](AUDIO_ASSETS.md). Lo que sigue pendiente de este prompt es el
-> **mute toggle** y volver la fogata realmente **posicional**.
+> [`AUDIO_ASSETS.md`](AUDIO_ASSETS.md). El toggle de mute ya está cableado y la
+> ambience usa emisores espaciales por distancia.
 
 ```
 # Tarea: ambiente sonoro de Aldenmoor (inmersión barata, gran retorno)
@@ -744,6 +745,13 @@ precios/diálogo**. Empezar simple; el regateo con LLM es v2.
 
 ## Prompt 13 — Relaciones entre players: aliados, enemigos y sabotaje
 
+> **🟡 MVP — 26 jun 2026.** `WorldState.relations` guarda `neutral | allied | hostile`
+> por wallet en el mismo bundle persistido a 0G. La vista aérea muestra wallets
+> descubiertas por el mundo público, permite marcarlas como aliadas/enemigas, marca
+> el mundo como dirty y lo guarda con **Save World**. Las construcciones públicas se
+> señalan con un anillo de color según relación. Falta la parte destructiva:
+> permisos compartidos, sabotaje/raids y replay/log de daño con reglas de fairness.
+
 > Nueva línea de diseño social: que los jugadores puedan declararse **aliados** o
 > **enemigos**, y que eso abra juego emergente real sobre el mundo persistente
 > guardado en 0G. La idea detonadora: permitir que un enemigo pueda **demoler o
@@ -788,6 +796,13 @@ conflicto controlado.
 ---
 
 ## Prompt 14 — Mercado v2: bienes comprables, sinks y reparación
+
+> **🟡 PARTIAL — 26 jun 2026.** Aldric ya vende wood, saplings, sharper axe y
+> **repair kits**. Los repair kits cuestan coin, se guardan en `WorldState.repairKits`,
+> y se usan desde la vista aérea para reparar edificios dañados. Cada compra registra
+> una interacción en la memoria de Aldric, persistible con **Leave & save**.
+> Quedan pendientes skins/materiales, antorchas decorativas, bridge/stair kits y
+> stock/economía más profunda.
 
 > La moneda ya existe y Aldric ya compra madera, pero aún falta el lado importante
 > del loop: **gastar** esa moneda en algo que cambie el gameplay.
@@ -896,6 +911,12 @@ encima de una base que luego haya que rehacer.
 ---
 
 ## Prompt 18 — Reparación, durabilidad y mantenimiento del mundo
+
+> **🟡 MVP — 26 jun 2026.** Los edificios ya tienen `hp/maxHp`, el daño se ve con
+> material más oscuro + anillo de estado, y el jugador puede comprar **repair kits**
+> a Aldric para restaurar edificios propios desde la vista aérea. El estado se guarda
+> con el `WorldState` en 0G. Faltan logs de daño, permisos de aliados y reglas de
+> mantenimiento/sabotaje más finas.
 
 > Si habrá demonios, sabotaje entre enemigos o simplemente desgaste, hace falta una
 > mecánica de mantenimiento del mundo. También abre espacio para coin sinks y trabajo cooperativo.

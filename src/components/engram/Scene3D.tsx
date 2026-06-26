@@ -44,11 +44,16 @@ import {
   MAX_STONE,
   placeBuilding,
   removeBuilding,
+  repairBuilding,
   damageBuilding,
   recordEnemyKill,
+  setWalletRelation,
   BUILD_COST,
   BUILD_RADIUS,
+  REPAIR_WOOD_COST,
   isLocalhostFreeBuildWallet,
+  type WalletRelation,
+  type WorldState,
   type BuildingType,
   type Building,
 } from '@/lib/world';
@@ -65,11 +70,26 @@ type PlayerPos = { x: number; z: number; heading: number };
 type PlayerPosRef = React.MutableRefObject<PlayerPos>;
 type ViewMode = 'fp' | 'aerial';
 type MovementInput = { forward: boolean; backward: boolean; left: boolean; right: boolean };
+type BuildTool = BuildingType | 'demolish' | 'repair' | 'damage';
+type ToolFeedback = { text: string; tone: 'good' | 'bad' | 'info' };
+
+const shortWallet = (wallet: string) => `${wallet.slice(0, 6)}…${wallet.slice(-4)}`;
 
 // How many texture-variant groups the forest is split into (cycles through the
 // PNGs registered per slot, so the woods don't look uniform).
 const TREE_BUCKETS = 4;
 const IDLE_MOVEMENT: MovementInput = { forward: false, backward: false, left: false, right: false };
+const RELATION_STYLES: Record<WalletRelation, { label: string; color: string; border: string; title: string }> = {
+  neutral: { label: 'Neutral', color: '#d8c8a8', border: '#5a4a28', title: 'No special permissions or hostility' },
+  allied: { label: 'Ally', color: '#8fd06a', border: '#4f9d56', title: 'Trusted wallet; future co-op permissions can key off this' },
+  hostile: { label: 'Hostile', color: '#e06a5f', border: '#a8463d', title: 'Marked as an enemy; future raids/sabotage can key off this' },
+};
+
+function hpOf(b: Building): { hp: number; maxHp: number; ratio: number } {
+  const maxHp = Math.max(1, b.maxHp ?? b.hp ?? 1);
+  const hp = Math.max(0, Math.min(maxHp, b.hp ?? maxHp));
+  return { hp, maxHp, ratio: hp / maxHp };
+}
 
 // Where each villager stands (XZ). They live in the flat clearing, so ground
 // height is ~0; we still anchor their Y to the terrain for safety.
@@ -980,12 +1000,12 @@ function Celestial({ position, sun = false }: { position: [number, number, numbe
     [sun]
   );
   return (
-    <group position={position}>
-      <mesh>
+    <group position={position} raycast={() => null}>
+      <mesh raycast={() => null}>
         <sphereGeometry args={[sun ? 4 : 3, 24, 24]} />
         <meshBasicMaterial color={sun ? '#fff2c4' : '#eef2ff'} />
       </mesh>
-      <sprite scale={sun ? [44, 44, 1] : [22, 22, 1]}>
+      <sprite scale={sun ? [44, 44, 1] : [22, 22, 1]} raycast={() => null}>
         <spriteMaterial map={halo} transparent depthWrite={false} blending={THREE.AdditiveBlending} opacity={sun ? 0.9 : 0.7} />
       </sprite>
     </group>
@@ -1809,61 +1829,198 @@ function Village({ torchesLit = true }: { torchesLit?: boolean }) {
 
 function BuildingMesh({ b }: { b: Building }) {
   const y = getHeightAt(b.x, b.z);
+  const { ratio: damageRatio } = hpOf(b);
+  const damaged = damageRatio < 0.95;
+  const woodColor = damageRatio < 0.35 ? '#4f3227' : damageRatio < 0.7 ? '#654832' : '#7a5a3a';
+  const roofColor = damageRatio < 0.35 ? '#55261f' : damageRatio < 0.7 ? '#6d3025' : '#8a3a2a';
   if (b.type === 'block') {
     const s = b.scale ?? BLOCK_UNIT;
     return (
-      <mesh position={[b.x, y + (b.y ?? 0) + s / 2, b.z]} rotation={[0, b.rot, 0]} castShadow receiveShadow>
-        <boxGeometry args={[s, s, s]} />
-        <meshStandardMaterial color={b.color ?? '#8a6a4a'} flatShading />
-      </mesh>
+      <>
+        <mesh position={[b.x, y + (b.y ?? 0) + s / 2, b.z]} rotation={[0, b.rot, 0]} castShadow receiveShadow>
+          <boxGeometry args={[s, s, s]} />
+          <meshStandardMaterial color={b.color ?? '#8a6a4a'} flatShading />
+        </mesh>
+        {damaged && <DamageMarker b={b} ratio={damageRatio} />}
+      </>
     );
   }
   if (b.type === 'wall') {
     return (
-      <mesh position={[b.x, y + 0.75, b.z]} rotation={[0, b.rot, 0]} castShadow receiveShadow>
-        <boxGeometry args={[1.8, 1.5, 0.3]} />
-        <meshStandardMaterial color="#7a5a3a" map={getTextureVariant('cottage_wood', Math.round(b.x + b.z))} flatShading />
-      </mesh>
+      <>
+        <mesh position={[b.x, y + 0.75, b.z]} rotation={[0, b.rot, 0]} castShadow receiveShadow>
+          <boxGeometry args={[1.8, 1.5, 0.3]} />
+          <meshStandardMaterial color={woodColor} map={getTextureVariant('cottage_wood', Math.round(b.x + b.z))} flatShading />
+        </mesh>
+        {damaged && <DamageMarker b={b} ratio={damageRatio} />}
+      </>
     );
   }
   return (
-    <group position={[b.x, y, b.z]} rotation={[0, b.rot, 0]}>
-      <mesh position={[0, 0.03, 0]} receiveShadow rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[HOUSE_WIDTH - 0.14, HOUSE_DEPTH - 0.14]} />
-        <meshStandardMaterial color="#2f2a1f" map={getTextureVariant('terrain_grass', Math.round(b.x + b.z))} flatShading />
-      </mesh>
-      {HOUSE_WALL_BOXES.map((wall, i) => (
-        <mesh key={i} position={[wall.cx, HOUSE_WALL_HEIGHT / 2, wall.cz]} castShadow receiveShadow>
-          <boxGeometry args={[wall.hx * 2, HOUSE_WALL_HEIGHT, wall.hz * 2]} />
-          <meshStandardMaterial color="#7a5a3a" map={getTextureVariant('cottage_wood', Math.round(b.x))} flatShading />
+    <>
+      <group position={[b.x, y, b.z]} rotation={[0, b.rot, 0]}>
+        <mesh position={[0, 0.03, 0]} receiveShadow rotation={[-Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[HOUSE_WIDTH - 0.14, HOUSE_DEPTH - 0.14]} />
+          <meshStandardMaterial color="#2f2a1f" map={getTextureVariant('terrain_grass', Math.round(b.x + b.z))} flatShading />
         </mesh>
-      ))}
-      <mesh position={[0, 1.66, HOUSE_DOOR_OFFSET_Z]} castShadow receiveShadow>
-        <boxGeometry args={[HOUSE_DOOR_WIDTH, 0.18, 0.08]} />
-        <meshStandardMaterial color="#55341f" flatShading transparent opacity={0.92} />
+        {HOUSE_WALL_BOXES.map((wall, i) => (
+          <mesh key={i} position={[wall.cx, HOUSE_WALL_HEIGHT / 2, wall.cz]} castShadow receiveShadow>
+            <boxGeometry args={[wall.hx * 2, HOUSE_WALL_HEIGHT, wall.hz * 2]} />
+            <meshStandardMaterial color={woodColor} map={getTextureVariant('cottage_wood', Math.round(b.x))} flatShading />
+          </mesh>
+        ))}
+        <mesh position={[0, 1.66, HOUSE_DOOR_OFFSET_Z]} castShadow receiveShadow>
+          <boxGeometry args={[HOUSE_DOOR_WIDTH, 0.18, 0.08]} />
+          <meshStandardMaterial color="#55341f" flatShading transparent opacity={0.92} />
+        </mesh>
+        <mesh position={[0, HOUSE_ROOF_Y, -0.66]} rotation={[-0.62, 0, 0]} castShadow>
+          <boxGeometry args={[2.8, 0.14, 1.6]} />
+          <meshStandardMaterial color={roofColor} map={getTextureVariant('cottage_roof', Math.round(b.z))} flatShading />
+        </mesh>
+        <mesh position={[0, HOUSE_ROOF_Y, 0.66]} rotation={[0.62, 0, 0]} castShadow>
+          <boxGeometry args={[2.8, 0.14, 1.6]} />
+          <meshStandardMaterial color={roofColor} map={getTextureVariant('cottage_roof', Math.round(b.z))} flatShading />
+        </mesh>
+      </group>
+      {damaged && <DamageMarker b={b} ratio={damageRatio} />}
+    </>
+  );
+}
+
+function DamageMarker({ b, ratio }: { b: Building; ratio: number }) {
+  const y = getHeightAt(b.x, b.z) + 0.075;
+  const radius = b.type === 'house' ? 2.1 : b.type === 'wall' ? 1.05 : 0.38;
+  const color = ratio < 0.35 ? '#ff5f50' : '#ffbd66';
+  return (
+    <>
+      <group position={[b.x, y, b.z]}>
+        <mesh rotation={[-Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[radius, radius + 0.07, 48]} />
+          <meshBasicMaterial color={color} transparent opacity={0.72} depthWrite={false} />
+        </mesh>
+      </group>
+      <BuildingHpBar b={b} ratio={ratio} />
+    </>
+  );
+}
+
+function BuildingHpBar({ b, ratio }: { b: Building; ratio: number }) {
+  const ref = useRef<THREE.Group>(null);
+  const { camera } = useThree();
+  const ground = getHeightAt(b.x, b.z);
+  const height =
+    b.type === 'house' ? 3.45 :
+    b.type === 'wall' ? 2.05 :
+    (b.y ?? 0) + (b.scale ?? BLOCK_UNIT) + 0.55;
+  const width = b.type === 'house' ? 1.55 : b.type === 'wall' ? 1.15 : 0.72;
+  const fill = Math.max(0.04, Math.min(1, ratio)) * width;
+  const color = ratio < 0.35 ? '#ff5f50' : ratio < 0.7 ? '#ffbd66' : '#8fd06a';
+
+  useFrame(() => {
+    if (ref.current) ref.current.quaternion.copy(camera.quaternion);
+  });
+
+  return (
+    <group ref={ref} position={[b.x, ground + height, b.z]} renderOrder={30}>
+      <mesh position={[0, 0, 0]}>
+        <planeGeometry args={[width + 0.12, 0.2]} />
+        <meshBasicMaterial color="#160d0b" transparent opacity={0.82} depthWrite={false} toneMapped={false} />
       </mesh>
-      <mesh position={[0, HOUSE_ROOF_Y, -0.66]} rotation={[-0.62, 0, 0]} castShadow>
-        <boxGeometry args={[2.8, 0.14, 1.6]} />
-        <meshStandardMaterial color="#8a3a2a" map={getTextureVariant('cottage_roof', Math.round(b.z))} flatShading />
-      </mesh>
-      <mesh position={[0, HOUSE_ROOF_Y, 0.66]} rotation={[0.62, 0, 0]} castShadow>
-        <boxGeometry args={[2.8, 0.14, 1.6]} />
-        <meshStandardMaterial color="#8a3a2a" map={getTextureVariant('cottage_roof', Math.round(b.z))} flatShading />
+      <mesh position={[-(width - fill) / 2, 0, 0.01]}>
+        <planeGeometry args={[fill, 0.12]} />
+        <meshBasicMaterial color={color} transparent opacity={0.96} depthWrite={false} toneMapped={false} />
       </mesh>
     </group>
   );
 }
 
-function Buildings() {
+function RelationMarker({ b, relation }: { b: Building; relation: WalletRelation }) {
+  if (relation === 'neutral') return null;
+  const y = getHeightAt(b.x, b.z) + 0.055;
+  const style = RELATION_STYLES[relation];
+  const radius = b.type === 'house' ? 2.45 : b.type === 'wall' ? 1.25 : 0.42;
+  return (
+    <group position={[b.x, y, b.z]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[radius, radius + 0.055, 48]} />
+        <meshBasicMaterial color={style.color} transparent opacity={0.58} depthWrite={false} />
+      </mesh>
+    </group>
+  );
+}
+
+function PublicBuildingMesh({ b, relation }: { b: Building; relation: WalletRelation }) {
+  return (
+    <>
+      <RelationMarker b={b} relation={relation} />
+      <BuildingMesh b={b} />
+    </>
+  );
+}
+
+function Buildings({
+  tool = null,
+  onDraftChange = () => {},
+  onToolFeedback = () => {},
+}: {
+  tool?: BuildTool | null;
+  onDraftChange?: () => void;
+  onToolFeedback?: (feedback: ToolFeedback) => void;
+}) {
   const world = useWorld();
   const publicWorld = usePublicWorld();
+  const handleOwnBuildingClick = (index: number) => {
+    if (tool === 'demolish') {
+      removeBuilding(index);
+      onDraftChange();
+      onToolFeedback({ text: 'Building demolished. Half its wood was refunded.', tone: 'info' });
+      return;
+    }
+    if (tool === 'repair') {
+      const beforeWorld = getWorld();
+      const before = hpOf(getWorld().buildings[index]);
+      if (before.hp >= before.maxHp) {
+        onToolFeedback({ text: `Already healthy (${before.hp}/${before.maxHp} HP).`, tone: 'info' });
+        return;
+      }
+      if (!isLocalhostFreeBuildWallet() && beforeWorld.inventory.wood < REPAIR_WOOD_COST) {
+        onToolFeedback({ text: `Need ${REPAIR_WOOD_COST} wood to repair.`, tone: 'bad' });
+        return;
+      }
+      if (repairBuilding(index)) {
+        const after = hpOf(getWorld().buildings[index]);
+        const kitText = beforeWorld.repairKits > 0 ? ', -1 kit' : '';
+        onDraftChange();
+        onToolFeedback({ text: `Repaired +${after.hp - before.hp} HP (-${REPAIR_WOOD_COST} wood${kitText}) · ${after.hp}/${after.maxHp}.`, tone: 'good' });
+      }
+      return;
+    }
+    if (tool === 'damage' && isLocalhostFreeBuildWallet()) {
+      const before = hpOf(getWorld().buildings[index]);
+      damageBuilding(index, 45);
+      const after = hpOf(getWorld().buildings[index]);
+      onDraftChange();
+      onToolFeedback({ text: `Damage test −${before.hp - after.hp} HP (${after.hp}/${after.maxHp}).`, tone: 'bad' });
+    }
+  };
+
   return (
     <group>
-      {publicWorld.buildings.map((b, i) => (
-        <BuildingMesh key={`public-${b.owner}-${i}`} b={b} />
-      ))}
+      {publicWorld.buildings.map((b, i) => {
+        const relation = world.relations[b.owner.toLowerCase()] ?? 'neutral';
+        return <PublicBuildingMesh key={`public-${b.owner}-${i}`} b={b} relation={relation} />;
+      })}
       {world.buildings.map((b, i) => (
-        <BuildingMesh key={i} b={b} />
+        <group
+          key={i}
+          onClick={(e) => {
+            if (tool !== 'demolish' && tool !== 'repair' && tool !== 'damage') return;
+            e.stopPropagation();
+            handleOwnBuildingClick(i);
+          }}
+        >
+          <BuildingMesh b={b} />
+        </group>
       ))}
     </group>
   );
@@ -1948,7 +2105,51 @@ function demolishNearest(x: number, z: number, reach = 2): boolean {
   return false;
 }
 
-function BuildController({ mode, onDraftChange }: { mode: BuildingType | 'demolish'; onDraftChange: () => void }) {
+function repairNearest(x: number, z: number, reach = 2.4): boolean {
+  let bi = -1;
+  let bd = Infinity;
+  getWorld().buildings.forEach((b, i) => {
+    const maxHp = b.maxHp ?? b.hp ?? 0;
+    const hp = b.hp ?? maxHp;
+    if (maxHp <= 0 || hp >= maxHp) return;
+    const d = Math.hypot(x - b.x, z - b.z);
+    if (d < reach && d < bd) {
+      bd = d;
+      bi = i;
+    }
+  });
+  if (bi >= 0) {
+    return repairBuilding(bi);
+  }
+  return false;
+}
+
+function damageNearestForTest(x: number, z: number, reach = 2.4): boolean {
+  let bi = -1;
+  let bd = Infinity;
+  getWorld().buildings.forEach((b, i) => {
+    const d = Math.hypot(x - b.x, z - b.z);
+    if (d < reach && d < bd) {
+      bd = d;
+      bi = i;
+    }
+  });
+  if (bi >= 0) {
+    damageBuilding(bi, 45);
+    return true;
+  }
+  return false;
+}
+
+function BuildController({
+  mode,
+  onDraftChange,
+  onToolFeedback,
+}: {
+  mode: BuildTool;
+  onDraftChange: () => void;
+  onToolFeedback: (feedback: ToolFeedback) => void;
+}) {
   const [ghost, setGhost] = useState<[number, number] | null>(null);
   const [rot, setRot] = useState(0);
   const world = useWorld();
@@ -1964,7 +2165,7 @@ function BuildController({ mode, onDraftChange }: { mode: BuildingType | 'demoli
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const isBuild = mode !== 'demolish';
+  const isBuild = mode !== 'demolish' && mode !== 'repair' && mode !== 'damage';
   // `world` keeps the ghost validity reactive to inventory/buildings changes.
   void world;
   const valid = isBuild && !!ghost && canPlaceBuilding(mode, ghost[0], ghost[1]);
@@ -1985,6 +2186,19 @@ function BuildController({ mode, onDraftChange }: { mode: BuildingType | 'demoli
       if (bi >= 0) {
         removeBuilding(bi);
         onDraftChange();
+        onToolFeedback({ text: 'Building demolished. Half its wood was refunded.', tone: 'info' });
+      }
+    } else if (mode === 'repair') {
+      if (repairNearest(px, pz)) {
+        onDraftChange();
+        onToolFeedback({ text: `Repaired nearest damaged building (-${REPAIR_WOOD_COST} wood).`, tone: 'good' });
+      } else {
+        onToolFeedback({ text: `No damaged building in range, or not enough wood (${REPAIR_WOOD_COST}).`, tone: 'info' });
+      }
+    } else if (mode === 'damage') {
+      if (isLocalhostFreeBuildWallet() && damageNearestForTest(px, pz)) {
+        onDraftChange();
+        onToolFeedback({ text: 'Damage test applied. Click the building for exact HP.', tone: 'bad' });
       }
     } else if (valid) {
       if (placeBuilding({ type: mode, x, z, rot }, buildCostAt(mode, x, z))) onDraftChange();
@@ -2716,6 +2930,65 @@ function TouchLook({ lookRef }: { lookRef: React.MutableRefObject<{ dx: number; 
   );
 }
 
+function PublicRelationsPanel({
+  world,
+  onRelationChange,
+}: {
+  world: WorldState;
+  onRelationChange: () => void;
+}) {
+  const publicWorld = usePublicWorld();
+  if (publicWorld.owners.length === 0) return null;
+
+  const setRelation = (owner: string, relation: WalletRelation) => {
+    if (setWalletRelation(owner, relation)) onRelationChange();
+  };
+
+  return (
+    <div className="absolute left-4 top-40 z-20 w-[18rem] max-w-[calc(100vw-2rem)] rounded-md border border-[#5a4a28] bg-black/60 p-3 text-xs text-[#f4e8d0] shadow-xl backdrop-blur-sm">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <span className="font-semibold text-[#d6b84a]">Nearby wallets</span>
+        {publicWorld.loading && <span className="text-[#9fd0e6]">refreshing</span>}
+      </div>
+      <div className="flex max-h-56 flex-col gap-2 overflow-y-auto pr-1">
+        {publicWorld.owners.slice(0, 8).map(({ owner, buildingCount }) => {
+          const relation = world.relations[owner] ?? 'neutral';
+          return (
+            <div key={owner} className="rounded border border-[#3b3220] bg-black/35 p-2">
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <span className="font-mono text-[11px] text-[#f4e8d0]">{shortWallet(owner)}</span>
+                <span className="text-[11px] text-[#f4e8d0]/65">{buildingCount} build{buildingCount === 1 ? '' : 's'}</span>
+              </div>
+              <div className="grid grid-cols-3 gap-1">
+                {(['neutral', 'allied', 'hostile'] as const).map((next) => {
+                  const style = RELATION_STYLES[next];
+                  const active = relation === next;
+                  return (
+                    <button
+                      key={next}
+                      type="button"
+                      title={style.title}
+                      onClick={() => setRelation(owner, next)}
+                      className="rounded border px-1.5 py-1 text-[11px] font-semibold transition-colors"
+                      style={{
+                        borderColor: active ? style.color : style.border,
+                        color: active ? style.color : '#d8c8a8',
+                        background: active ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.32)',
+                      }}
+                    >
+                      {style.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── Public component ─────────────────────────────────────────────────────────
 
 interface Scene3DProps {
@@ -2763,7 +3036,24 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     return { hour: Number.isFinite(h) ? Math.max(0, Math.min(24, h)) : 18.6 };
   }, []);
   const photoMode = !!photo;
-  const dn = useMemo(() => computeDayNight(photoMode ? photo!.hour : localHour), [localHour, photoMode, photo]);
+  const forceBrightTestLighting = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    const host = window.location.hostname;
+    const params = new URLSearchParams(window.location.search);
+    const localOrLan =
+      host === 'localhost' ||
+      host === '127.0.0.1' ||
+      host === '0.0.0.0' ||
+      host.startsWith('10.') ||
+      host.startsWith('192.168.') ||
+      host.startsWith('172.') ||
+      window.location.port === '3000';
+    // In local/LAN testing we need readable interactions more than cinematic
+    // night. `?night=1` opts back into the dramatic lighting; `?day=1` forces
+    // this path anywhere and gives us a visible diagnostic badge.
+    return params.get('night') !== '1' && (params.get('day') === '1' || localOrLan || process.env.NODE_ENV !== 'production');
+  }, []);
+  const dn = useMemo(() => computeDayNight(forceBrightTestLighting ? 12 : photoMode ? photo!.hour : localHour), [forceBrightTestLighting, localHour, photoMode, photo]);
 
   // Distance-based ambience: a light tick reads the live player position and sets
   // each loop's volume from the nearest emitter (see AUDIO_EMITTERS). Runs off a
@@ -2811,7 +3101,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
   const [view, setView] = useState<ViewMode>('fp');
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   const [touchMove, setTouchMove] = useState<MovementInput>(IDLE_MOVEMENT);
-  const [buildMode, setBuildMode] = useState<BuildingType | 'demolish' | null>(null);
+  const [buildMode, setBuildMode] = useState<BuildTool | null>(null);
   // Building is aerial-only (needs the free cursor); leave it when not in aerial.
   useEffect(() => {
     if (!(exploring && view === 'aerial')) setBuildMode(null);
@@ -2832,8 +3122,10 @@ export default function Scene3D({ memories = null, active = null, talking = fals
   nearbyEnemyRef.current = nearbyEnemy;
   
   const world = useWorld();
+  const localhostGod = isLocalhostFreeBuildWallet(getWorldWallet());
   const [publishStatus, setPublishStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [publishMsg, setPublishMsg] = useState<string | null>(null);
+  const [toolFeedback, setToolFeedback] = useState<ToolFeedback | null>(null);
   const [showSavedPill, setShowSavedPill] = useState(false); // brief "saved" confirmation, then auto-hide
   const [buildDraftDirty, setBuildDraftDirty] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false); // in-game "unsaved changes" prompt (replaces window.confirm)
@@ -2848,7 +3140,9 @@ export default function Scene3D({ memories = null, active = null, talking = fals
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const mq = window.matchMedia('(pointer: coarse)');
-    const sync = () => setIsTouchDevice(mq.matches || 'ontouchstart' in window);
+    // Do not use `'ontouchstart' in window`: desktop Chrome/laptops can expose it,
+    // which mounted huge invisible touch zones over the game and swallowed clicks.
+    const sync = () => setIsTouchDevice(mq.matches);
     sync();
     mq.addEventListener?.('change', sync);
     return () => mq.removeEventListener?.('change', sync);
@@ -2890,6 +3184,13 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     }
   };
 
+  const showToolFeedback = useCallback((feedback: ToolFeedback) => {
+    setToolFeedback(feedback);
+    window.setTimeout(() => {
+      setToolFeedback((current) => (current?.text === feedback.text ? null : current));
+    }, 5000);
+  }, []);
+
   // Actually leave aerial view for first person. `discard` reverts the draft to
   // the snapshot taken on entry (used by the "Discard & leave" path).
   const leaveAerial = useCallback((discard: boolean) => {
@@ -2928,7 +3229,26 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     if (!buildMode) return;
     const p = posRef.current;
     if (buildMode === 'demolish') {
-      if (demolishNearest(p.x, p.z, 3)) markBuildDraftDirty();
+      if (demolishNearest(p.x, p.z, 3)) {
+        markBuildDraftDirty();
+        showToolFeedback({ text: 'Building demolished. Half its wood was refunded.', tone: 'info' });
+      }
+      return;
+    }
+    if (buildMode === 'repair') {
+      if (repairNearest(p.x, p.z, 3)) {
+        markBuildDraftDirty();
+        showToolFeedback({ text: `Repaired nearest damaged building (-${REPAIR_WOOD_COST} wood).`, tone: 'good' });
+      } else {
+        showToolFeedback({ text: `No damaged building in range, or not enough wood (${REPAIR_WOOD_COST}).`, tone: 'info' });
+      }
+      return;
+    }
+    if (buildMode === 'damage') {
+      if (isLocalhostFreeBuildWallet() && damageNearestForTest(p.x, p.z, 3)) {
+        markBuildDraftDirty();
+        showToolFeedback({ text: 'Damage test applied. Click the building for exact HP.', tone: 'bad' });
+      }
       return;
     }
     const [x, z] = mobileGhostXZ(p);
@@ -2984,6 +3304,16 @@ export default function Scene3D({ memories = null, active = null, talking = fals
   const [aiCost, setAiCost] = useState(0); // USD of the last generation
   const [aiBudget, setAiBudget] = useState(''); // session $ cap (persisted)
   const [aiSpent, setAiSpent] = useState(0); // cumulative $ (persisted)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (aiOpen && !aiBusy) setAiOpen(false);
+      if (confirmLeave && publishStatus !== 'saving') setConfirmLeave(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [aiBusy, aiOpen, confirmLeave, publishStatus]);
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
     setAiBudget(window.localStorage.getItem('engram:aiBudget') || '');
@@ -3354,29 +3684,30 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     >
       <KeyboardControls map={keyboardMap}>
         <Canvas
-          shadows
+          key={forceBrightTestLighting ? 'test-day-canvas' : 'cinematic-canvas'}
+          shadows={!forceBrightTestLighting}
           dpr={[1, 1.75]}
           camera={{ position: [0, 3.1, 9], fov: 60 }}
-          gl={{ antialias: true, toneMappingExposure: 1.6 }}
+          gl={{ antialias: true, toneMappingExposure: forceBrightTestLighting ? 2.2 : 1.6 }}
         >
-          <color attach="background" args={[dn.bg]} />
-          <fog attach="fog" args={[dn.fog, 30, 110]} />
+          <color attach="background" args={[forceBrightTestLighting ? '#a8caee' : dn.bg]} />
+          {!forceBrightTestLighting && <fog attach="fog" args={[dn.fog, 30, 110]} />}
 
           {/* Skydome — the sun position follows the player's local clock, so the
               drei <Sky> shader paints day, dusk and night automatically. */}
-          {dn.skyVisible && (
+          {!forceBrightTestLighting && dn.skyVisible && (
             <Sky distance={450000} sunPosition={dn.sunPos} turbidity={dn.turbidity} rayleigh={dn.rayleigh} mieCoefficient={0.02} mieDirectionalG={0.86} />
           )}
 
           {/* Lighting scales with time of day: warm strong sun at noon, dim cool
               moonlight at night (the key light follows the same sun/moon arc). */}
-          <ambientLight intensity={dn.ambIntensity} color={dn.ambColor} />
-          <hemisphereLight args={[dn.hemiSky, dn.hemiGround, dn.hemiIntensity]} />
+          <ambientLight intensity={forceBrightTestLighting ? 3.2 : dn.ambIntensity} color={forceBrightTestLighting ? '#ffffff' : dn.ambColor} />
+          <hemisphereLight args={[forceBrightTestLighting ? '#ffffff' : dn.hemiSky, forceBrightTestLighting ? '#b8d49a' : dn.hemiGround, forceBrightTestLighting ? 2.2 : dn.hemiIntensity]} />
           <directionalLight
-            position={dn.dirPos}
-            intensity={dn.dirIntensity}
-            color={dn.dirColor}
-            castShadow
+            position={forceBrightTestLighting ? [40, 70, 35] : dn.dirPos}
+            intensity={forceBrightTestLighting ? 2.6 : dn.dirIntensity}
+            color={forceBrightTestLighting ? '#fff4dd' : dn.dirColor}
+            castShadow={!forceBrightTestLighting}
             shadow-mapSize={[2048, 2048]}
             shadow-camera-near={1}
             shadow-camera-far={80}
@@ -3385,11 +3716,11 @@ export default function Scene3D({ memories = null, active = null, talking = fals
             shadow-camera-top={26}
             shadow-camera-bottom={-26}
           />
-          <NightFillLight active={dn.torchesLit} />
+          <NightFillLight active={!forceBrightTestLighting && dn.torchesLit} />
 
-          {dn.starsVisible && <Stars radius={80} depth={45} count={1800} factor={3.2} saturation={0} fade speed={0.5} />}
-          {dn.sunVisible && <Celestial position={dn.sunDiscPos} sun />}
-          {dn.moonVisible && <Celestial position={dn.moonDiscPos} />}
+          {!forceBrightTestLighting && dn.starsVisible && <Stars radius={80} depth={45} count={1800} factor={3.2} saturation={0} fade speed={0.5} />}
+          {!forceBrightTestLighting && view === 'fp' && dn.sunVisible && <Celestial position={dn.sunDiscPos} sun />}
+          {!forceBrightTestLighting && view === 'fp' && dn.moonVisible && <Celestial position={dn.moonDiscPos} />}
 
           {/* Cinematic rig on the title/loading screen; first-person controls
               once Aldenmoor is explorable. */}
@@ -3452,8 +3783,8 @@ export default function Scene3D({ memories = null, active = null, talking = fals
                   <meshBasicMaterial transparent opacity={0} depthWrite={false} />
                 </mesh>
               )}
-              {explorable && buildMode && !isTouchDevice && <BuildController mode={buildMode} onDraftChange={markBuildDraftDirty} />}
-              {explorable && buildMode && buildMode !== 'demolish' && isTouchDevice && (
+              {explorable && buildMode && !isTouchDevice && <BuildController mode={buildMode} onDraftChange={markBuildDraftDirty} onToolFeedback={showToolFeedback} />}
+              {explorable && buildMode && buildMode !== 'demolish' && buildMode !== 'repair' && buildMode !== 'damage' && isTouchDevice && (
                 <MobileBuildGhost mode={buildMode} posRef={posRef} rot={buildRot} />
               )}
             </>
@@ -3463,14 +3794,14 @@ export default function Scene3D({ memories = null, active = null, talking = fals
           <Village torchesLit={dn.torchesLit} />
           <River />
           <Fireflies active={dn.torchesLit} />
-          {explorable && <Buildings />}
+          {explorable && <Buildings tool={buildMode} onDraftChange={markBuildDraftDirty} onToolFeedback={showToolFeedback} />}
           {explorable && aiPreview && aiOrigin && <AIPreviewGhosts pieces={aiPreview} origin={aiOrigin} />}
           {explorable && <EnemySpawner />}
           {/* The title text is HTML in client-page now: a 3D drei <Text> here
               orphaned in the persistent canvas across the title→game transition,
               showing up as stray letters in the aerial view. */}
 
-          <ContactShadows position={[0, 0.01, 0]} opacity={0.45} scale={20} blur={2.4} far={6} />
+          {!forceBrightTestLighting && <ContactShadows position={[0, 0.01, 0]} opacity={0.45} scale={20} blur={2.4} far={6} />}
 
           {NPC_LIST.map((npc) => (
             <Character
@@ -3498,6 +3829,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
           <div className="pointer-events-none absolute top-20 left-4 z-10 flex flex-col items-start gap-1.5 text-sm text-[#f4e8d0]">
             <span className="inline-flex items-center rounded-md bg-black/45 px-2.5 py-1" title="Wood"><WoodIcon />{world.inventory.wood}/{MAX_WOOD}</span>
             <span className="inline-flex items-center rounded-md bg-black/45 px-2.5 py-1" title="Coin"><CoinIcon />{world.inventory.coin}</span>
+            <span className="inline-flex items-center rounded-md bg-black/45 px-2.5 py-1" title="Repair kits">Repair {world.repairKits}</span>
           </div>
           <button
             onClick={switchView}
@@ -3508,81 +3840,105 @@ export default function Scene3D({ memories = null, active = null, talking = fals
 
           {/* Build palette (aerial only). */}
           {aerialExploring && (
-            <div className="absolute top-32 right-4 z-10 flex flex-col items-end gap-1.5">
-              {([
-                ['wall', '🧱', 'Wall', BUILD_COST.wall],
-                ['house', '🏠', 'House', BUILD_COST.house],
-                ['demolish', '🧨', 'Demolish', null],
-              ] as const).map(([m, icon, label, cost]) => (
+            <>
+              <PublicRelationsPanel world={world} onRelationChange={markBuildDraftDirty} />
+              <div className="absolute top-32 right-4 z-10 flex flex-col items-end gap-1.5">
+                {([
+                  ['wall', '🧱', 'Wall', BUILD_COST.wall],
+                  ['house', '🏠', 'House', BUILD_COST.house],
+                  ['repair', '🧰', 'Repair', null],
+                  ['demolish', '🧨', 'Demolish', null],
+                  ...(localhostGod ? [['damage', '💥', 'Damage test', null] as const] : []),
+                ] as const).map(([m, icon, label, cost]) => (
+                  <button
+                    key={m}
+                    onClick={() => setBuildMode((cur) => (cur === m ? null : m))}
+                    className="inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-sm text-[#f4e8d0]"
+                    style={{
+                      background: buildMode === m ? 'rgba(95,150,90,0.85)' : 'rgba(0,0,0,0.5)',
+                      borderColor: buildMode === m ? '#8fd06a' : '#5a4a28',
+                    }}
+                  >
+                    <span>{icon} {label}</span>
+                    {cost !== null && (
+                      <span className="inline-flex items-center gap-0.5">({cost}<WoodIcon />)</span>
+                    )}
+                  </button>
+                ))}
                 <button
-                  key={m}
-                  onClick={() => setBuildMode((cur) => (cur === m ? null : m))}
-                  className="inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-sm text-[#f4e8d0]"
+                  onClick={() => {
+                    setBuildMode(null);
+                    setAiMsg(null);
+                    setAiOpen(true);
+                  }}
+                  className="rounded-md border border-[#7a6ad6] bg-black/50 px-3 py-1.5 text-sm text-[#f4e8d0] hover:border-[#b98bff]"
+                >
+                  🤖 Build with AI
+                </button>
+                <button
+                  onClick={() => void publishWorld()}
+                  disabled={publishStatus === 'saving' || (!buildDraftDirty && publishStatus !== 'error')}
+                  className="rounded-md border bg-black/50 px-3 py-1.5 text-sm text-[#f4e8d0] hover:border-[#70d6ff] disabled:cursor-not-allowed disabled:opacity-50"
                   style={{
-                    background: buildMode === m ? 'rgba(95,150,90,0.85)' : 'rgba(0,0,0,0.5)',
-                    borderColor: buildMode === m ? '#8fd06a' : '#5a4a28',
+                    borderColor:
+                      publishStatus === 'saving' ? '#4a8aa8'
+                      : publishStatus === 'error' ? '#d06a5f'
+                      : buildDraftDirty ? '#d6b84a'
+                      : '#8fd06a',
+                    boxShadow: buildDraftDirty && publishStatus !== 'saving' ? '0 0 0 1px rgba(214,184,74,0.55)' : undefined,
                   }}
                 >
-                  <span>{icon} {label}</span>
-                  {cost !== null && (
-                    <span className="inline-flex items-center gap-0.5">({cost}<WoodIcon />)</span>
-                  )}
+                  {publishStatus === 'saving' ? '⏳ Saving…' : buildDraftDirty ? '💾 Save World ●' : '✓ Saved'}
                 </button>
-              ))}
-              <button
-                onClick={() => {
-                  setBuildMode(null);
-                  setAiMsg(null);
-                  setAiOpen(true);
-                }}
-                className="rounded-md border border-[#7a6ad6] bg-black/50 px-3 py-1.5 text-sm text-[#f4e8d0] hover:border-[#b98bff]"
-              >
-                🤖 Build with AI
-              </button>
-              <button
-                onClick={() => void publishWorld()}
-                disabled={publishStatus === 'saving' || (!buildDraftDirty && publishStatus !== 'error')}
-                className="rounded-md border bg-black/50 px-3 py-1.5 text-sm text-[#f4e8d0] hover:border-[#70d6ff] disabled:cursor-not-allowed disabled:opacity-50"
-                style={{
-                  borderColor:
-                    publishStatus === 'saving' ? '#4a8aa8'
-                    : publishStatus === 'error' ? '#d06a5f'
-                    : buildDraftDirty ? '#d6b84a'
-                    : '#8fd06a',
-                  boxShadow: buildDraftDirty && publishStatus !== 'saving' ? '0 0 0 1px rgba(214,184,74,0.55)' : undefined,
-                }}
-              >
-                {publishStatus === 'saving' ? '⏳ Saving…' : buildDraftDirty ? '💾 Save World ●' : '✓ Saved'}
-              </button>
-              {/* Save-state pill. The "all changes saved" confirmation auto-hides
-                  after a save; the unsaved/saving/error states always show. */}
-              {(() => {
-                const tone =
-                  publishStatus === 'saving' ? { c: '#9fd0e6', t: '⏳ Saving to 0G…' }
-                  : publishStatus === 'error' ? { c: '#ffb3a8', t: `⚠️ ${publishMsg ?? 'Save failed — try again.'}` }
-                  : buildDraftDirty ? { c: '#ffe39a', t: '● Unsaved changes — Save before leaving' }
-                  : showSavedPill ? { c: '#aee5a6', t: publishMsg ?? '✓ All changes saved' }
-                  : null;
-                if (!tone) return null;
-                return (
-                  <span className="max-w-[15rem] rounded bg-black/65 px-2 py-1 text-right text-xs" style={{ color: tone.c }}>
-                    {tone.t}
+                {/* Save-state pill. The "all changes saved" confirmation auto-hides
+                    after a save; the unsaved/saving/error states always show. */}
+                {(() => {
+                  const tone =
+                    publishStatus === 'saving' ? { c: '#9fd0e6', t: '⏳ Saving to 0G…' }
+                    : publishStatus === 'error' ? { c: '#ffb3a8', t: `⚠️ ${publishMsg ?? 'Save failed — try again.'}` }
+                    : buildDraftDirty ? { c: '#ffe39a', t: '● Unsaved changes — Save before leaving' }
+                    : showSavedPill ? { c: '#aee5a6', t: publishMsg ?? '✓ All changes saved' }
+                    : null;
+                  if (!tone) return null;
+                  return (
+                    <span className="max-w-[15rem] rounded bg-black/65 px-2 py-1 text-right text-xs" style={{ color: tone.c }}>
+                      {tone.t}
+                    </span>
+                  );
+                })()}
+                {buildMode && (
+                  <span className="rounded bg-black/60 px-2 py-1 text-xs text-[#f4e8d0]/80">
+                    {buildMode === 'demolish'
+                      ? 'Tap a building to demolish'
+                      : buildMode === 'repair'
+                        ? `Tap a damaged building to repair · costs ${REPAIR_WOOD_COST} wood`
+                        : buildMode === 'damage'
+                          ? 'Localhost only · tap your building to damage it'
+                        : 'Tap ground to place · tap tool to cancel'}
                   </span>
-                );
-              })()}
-              {buildMode && (
-                <span className="rounded bg-black/60 px-2 py-1 text-xs text-[#f4e8d0]/80">
-                  {buildMode === 'demolish' ? 'Tap a building to demolish' : 'Tap ground to place · tap tool to cancel'}
-                </span>
-              )}
-            </div>
+                )}
+                {toolFeedback && (
+                  <span
+                    className="max-w-[16rem] rounded bg-black/70 px-2 py-1 text-right text-xs"
+                    style={{
+                      color:
+                        toolFeedback.tone === 'good' ? '#aee5a6'
+                        : toolFeedback.tone === 'bad' ? '#ffb3a8'
+                        : '#d6b84a',
+                    }}
+                  >
+                    {toolFeedback.text}
+                  </span>
+                )}
+              </div>
+            </>
           )}
 
           {/* In-game "unsaved changes" prompt when leaving aerial view (replaces
               the native window.confirm). Offers Save & leave / Discard / Stay. */}
           {confirmLeave && (
-            <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/50 p-4">
-              <div className="w-full max-w-sm rounded-2xl border border-[#5a4a28] bg-[rgba(20,16,10,0.97)] p-5 text-[#f4e8d0] shadow-2xl">
+            <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center p-4">
+              <div className="pointer-events-auto w-full max-w-sm rounded-2xl border border-[#5a4a28] bg-[rgba(20,16,10,0.97)] p-5 text-[#f4e8d0] shadow-2xl">
                 <div className="mb-1 text-lg font-bold text-[#d6b84a]">Unsaved changes</div>
                 <p className="mb-4 text-sm text-[#f4e8d0]/80">
                   You have building changes that aren&apos;t saved to 0G yet. Leaving the aerial
@@ -3618,10 +3974,9 @@ export default function Scene3D({ memories = null, active = null, talking = fals
 
           {/* AI build modal: describe → /api/build → place around the avatar. */}
           {aiOpen && (
-            <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/50 p-4" onClick={() => !aiBusy && setAiOpen(false)}>
+            <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center p-4">
               <div
-                className="w-full max-w-md rounded-2xl border border-[#5a4a28] bg-[rgba(20,16,10,0.97)] p-5 text-[#f4e8d0] shadow-2xl"
-                onClick={(e) => e.stopPropagation()}
+                className="pointer-events-auto w-full max-w-md rounded-2xl border border-[#5a4a28] bg-[rgba(20,16,10,0.97)] p-5 text-[#f4e8d0] shadow-2xl"
               >
                 <div className="mb-1 flex items-baseline justify-between gap-2">
                   <span className="text-lg font-bold text-[#b98bff]">🤖 Build with AI</span>
@@ -3956,7 +4311,7 @@ Left-click to look around · right-click to act · WASD to walk · V for aerial
           {/* Build controls: drive the avatar to aim the ghost, then place. */}
           {buildMode && (
             <div className="absolute bottom-20 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2">
-              {buildMode !== 'demolish' && (
+              {buildMode !== 'demolish' && buildMode !== 'repair' && buildMode !== 'damage' && (
                 <button
                   onClick={() => setBuildRot((r) => (r + Math.PI / 4) % (Math.PI * 2))}
                   className="rounded-2xl border border-[#5a4a28] bg-black/70 px-4 py-3 text-sm font-semibold text-[#f4e8d0]"
@@ -3968,14 +4323,20 @@ Left-click to look around · right-click to act · WASD to walk · V for aerial
                 onClick={placeMobileBuilding}
                 className="rounded-2xl border border-[#8fd06a] bg-[rgba(16,20,10,0.95)] px-5 py-3 text-sm font-semibold text-[#f4e8d0]"
               >
-                {buildMode === 'demolish' ? '🧨 Demolish nearby' : '⬇ Place here'}
+                {buildMode === 'demolish' ? '🧨 Demolish nearby' : buildMode === 'repair' ? '🧰 Repair nearby' : buildMode === 'damage' ? '💥 Damage nearby' : '⬇ Place here'}
               </button>
             </div>
           )}
 
           {buildMode && (
             <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/40 px-3 py-1 text-center text-[11px] text-[#f4e8d0]/65">
-              {buildMode === 'demolish' ? 'Move next to a building · tap Demolish' : 'Drive to aim the ghost · tap Place'}
+              {buildMode === 'demolish'
+                ? 'Move next to a building · tap Demolish'
+                : buildMode === 'repair'
+                  ? 'Move next to a damaged building · tap Repair'
+                  : buildMode === 'damage'
+                    ? 'Localhost test · move next to a building · tap Damage'
+                    : 'Drive to aim the ghost · tap Place'}
             </div>
           )}
         </>

@@ -27,8 +27,8 @@ controls (drag joystick, touch look, no-scroll) + a no-wallet **guest mode**; **
 merchant loop** (sell wood for coin, raising his trust/memory); and **audio** (silent-safe
 cues wired for ambience/foley/UI, with **distance-based spatial ambience** — the
 campfire crackle and night-cricket pockets fade in/out by the player's distance to
-each emitter, like light but for sound; still awaiting the actual asset files + a
-mute toggle).
+each emitter, like light but for sound; core asset files and the persisted mute toggle
+are now present).
 Player-built **houses are now enterable** (hollow walls + door gap), the six
 **village cottages are also larger and hollow**, AI voxel construction now snaps to a
 **fine anti-overlap grid** with `BLOCK_UNIT = 0.2`, and demolition refunds **half of the
@@ -156,15 +156,22 @@ submit a revised version if you advance. Snapshot = `main` at the round deadline
       haggle); wood is **dynamically priced** (tree scarcity × coin inflation); and **stone** is a
       new **mineable** resource (rock outcrops, same hold-action) that's tradeable. Purchases
       build Aldric's trust and persist to 0G. (`d71358b`, `fbef41a`, `db60162`)
+- [x] **Player relations MVP** — public-world wallets can be marked neutral/allied/hostile;
+      relations persist in the player's 0G world bundle and public builds get relation markers.
+- [x] **Repair/durability MVP** — buildings have persisted HP, show damage visually with
+      WebGL HP bars, and repair costs wood; Aldric sells repair kits as a repair boost.
+      Wallet-loaded/public builds are clamped on hydrate so bad 0G data cannot cover the camera.
 
 **Still open (deferred):**
 1. Real-time multiplayer (biggest differentiator; new prompt #19, scoped) — **deferred to a
    later phase** by decision; coordinate with martelaxe when picked up.
 2. Further AV polish if wanted: avatar silhouettes (plain but recognisable).
-3. Repair kits (Prompt 14 leftover) — wait on building durability (Prompt 18).
+3. Repair/durability advanced rules (Prompt 18) — HP bars + wood repair are MVP; fair
+   offline damage logs/windows remain open.
 4. 💡 **Mining = real 0G Compute work** (Prompt 20) — on-thesis future idea: gathering stone
    triggers a verifiable 0G compute job (proof-of-useful-work), not a placeholder.
 
-Full backlog (still open) in `docs/ENGRAM_PROMPTS.md`: player relations/raids (13),
-market goods/repair leftover (14), fair demon sieges (15), gathering animation polish (16),
-editable terrain / bigger map (17), repair/durability (18), 0G-compute mining (20).
+Full backlog (still open) in `docs/ENGRAM_PROMPTS.md`: raids/sabotage fairness from player
+relations (13), more market goods/stock depth (14), fair demon sieges (15), gathering
+animation polish (16), editable terrain / bigger map (17), advanced repair/damage logs and
+fair offline maintenance rules (18), verified 0G-compute mining live test/funding (20).

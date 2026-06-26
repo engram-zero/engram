@@ -23,10 +23,12 @@ import {
   replantTree,
   upgradeAxe,
   receiveBoughtWood,
+  addRepairKits,
   woodQuote,
   MARKET,
   MAX_STONE,
   AXE_UPGRADE_COST,
+  REPAIR_KIT_COST,
   SAPLING_COST,
 } from '@/lib/world';
 import { TREES } from '@/components/engram/map';
@@ -170,6 +172,14 @@ function Game() {
     () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('shot'),
     []
   );
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPanelOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   // Latest active NPC, readable from inside a delayed retry without stale closure.
   const activeRef = useRef<NPCName | null>(active);
@@ -428,6 +438,20 @@ function Game() {
     setMerchantMsg(`Bought ${qty} stone for ${cost} coin (${price}/unit).`);
   }
 
+  async function buyRepairKitFromAldric() {
+    if (!memories || active !== 'aldric' || scene.loading) return;
+    if (world.inventory.coin < REPAIR_KIT_COST) {
+      setMerchantMsg(`Not enough coin — a repair kit is ${REPAIR_KIT_COST} coin.`);
+      return;
+    }
+    await addResource('coin', -REPAIR_KIT_COST);
+    await addRepairKits(1);
+    const next = applyAldricSpend(memories.aldric, `Bought a repair kit for ${REPAIR_KIT_COST} coin.`, 'Sold the traveller a repair kit to boost wood repairs.');
+    setMemories((prev) => (prev ? { ...prev, aldric: next } : prev));
+    setDirty((d) => ({ ...d, aldric: true }));
+    setMerchantMsg(`Repair kit acquired — it boosts your next wood repair. (−${REPAIR_KIT_COST} coin)`);
+  }
+
   // Leaving an NPC persists that conversation to 0G and anchors the new root if needed.
   async function leave() {
     const npc = active;
@@ -558,7 +582,7 @@ function Game() {
 
       {/* Loading memories (only when a wallet is connected; guests have none). */}
       {address && !memories && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center">
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
           <div className="engram-thinking text-xl text-[#d6b84a]">Reading Aldenmoor’s memory from 0G…</div>
         </div>
       )}
@@ -714,6 +738,14 @@ function Game() {
                       🌱 Sapling · {SAPLING_COST} coin
                     </button>
                     <button
+                      onClick={buyRepairKitFromAldric}
+                      disabled={scene.loading || world.inventory.coin < REPAIR_KIT_COST}
+                      className="bg-black/40 border border-[#8a6a32] hover:border-[#d6b84a] rounded-md px-3 py-2 text-sm disabled:opacity-40"
+                      title="Boost one wood repair from aerial view"
+                    >
+                      🧰 Repair kit · {REPAIR_KIT_COST} coin
+                    </button>
+                    <button
                       onClick={buyAxeUpgradeFromAldric}
                       disabled={scene.loading || world.axeLevel >= 1 || world.inventory.coin < AXE_UPGRADE_COST}
                       className="bg-black/40 border border-[#8a6a32] hover:border-[#d6b84a] rounded-md px-3 py-2 text-sm disabled:opacity-40"
@@ -782,7 +814,6 @@ function Game() {
           networkType={networkType}
         />
       )}
-      {panelOpen && <div className="fixed inset-0 z-40 bg-black/50" onClick={() => setPanelOpen(false)} />}
     </div>
   );
 }
@@ -807,6 +838,7 @@ function MemoryPanel({
       className="engram-panel fixed top-0 right-0 h-full w-[380px] max-w-[92vw] z-50 flex flex-col engram-serif text-[#f4e8d0]"
       style={{
         transform: open ? 'translateX(0)' : 'translateX(100%)',
+        pointerEvents: open ? 'auto' : 'none',
         background: 'linear-gradient(180deg,#1a1610,#110d08)',
         borderLeft: '3px solid #c79a3a',
         boxShadow: '-10px 0 40px rgba(0,0,0,0.6)',

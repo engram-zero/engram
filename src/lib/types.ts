@@ -5,6 +5,7 @@
 
 export type NPCName = 'aldric' | 'maren' | 'sable';
 export type ResourceType = 'wood' | 'stone' | 'coin';
+export type WalletRelation = 'neutral' | 'allied' | 'hostile';
 export const BLOCK_UNIT = 0.2;
 export const BLOCK_SCALE_MIN = BLOCK_UNIT;
 export const BLOCK_SCALE_MAX = 0.4;
@@ -44,6 +45,14 @@ export interface WorldState {
   enemiesKilled: number;
   /** Tool tier bought from Aldric. 0 = base axe, 1 = sharper axe (2× wood/chop). */
   axeLevel: number;
+  /** Consumable building repairs bought from Aldric. */
+  repairKits: number;
+  /**
+   * Player-declared social graph for public-world wallets. Neutral can be
+   * represented by absence; allied/hostile are persisted in the same 0G bundle
+   * as the player's world so future co-op/raid rules can read one source.
+   */
+  relations: Record<string, WalletRelation>;
 }
 
 /**

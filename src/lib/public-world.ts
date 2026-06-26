@@ -10,13 +10,18 @@ import { getRegistryAddress } from '@/lib/registry/registry';
 import { normalizeWorldState, type Building } from '@/lib/world';
 
 export type PublicBuilding = Building & { owner: string };
+export interface PublicWorldOwner {
+  owner: string;
+  buildingCount: number;
+}
 
 interface PublicWorldState {
   buildings: PublicBuilding[];
+  owners: PublicWorldOwner[];
   loading: boolean;
 }
 
-const EMPTY_PUBLIC_WORLD: PublicWorldState = { buildings: [], loading: false };
+const EMPTY_PUBLIC_WORLD: PublicWorldState = { buildings: [], owners: [], loading: false };
 const listeners = new Set<() => void>();
 let state = EMPTY_PUBLIC_WORLD;
 let lastKey = '';
@@ -88,6 +93,7 @@ export async function initPublicWorld(
   lastKey = key;
   setPublicWorld({
     buildings: options.quiet ? state.buildings : [],
+    owners: options.quiet ? state.owners : [],
     loading: true,
   });
 
@@ -119,21 +125,26 @@ export async function initPublicWorld(
       entries.map(([owner, root]) => downloadWorldBuildings(owner, root, storageRpc))
     )).flat();
     const byOwnerAndPosition = new Set<string>();
+    const counts = new Map<string, number>();
     const buildings = onchainBuildings.filter((building) => {
       const id = `${building.owner}:${building.type}:${building.x}:${building.z}:${building.rot}`;
       if (byOwnerAndPosition.has(id)) return false;
       byOwnerAndPosition.add(id);
+      counts.set(building.owner, (counts.get(building.owner) ?? 0) + 1);
       return true;
     });
+    const owners = Array.from(counts.entries())
+      .map(([owner, buildingCount]) => ({ owner, buildingCount }))
+      .sort((a, b) => b.buildingCount - a.buildingCount);
 
     console.info('[engram] public world refresh done', {
       wallets: entries.length,
       buildings: buildings.length,
     });
-    setPublicWorld({ buildings, loading: false });
+    setPublicWorld({ buildings, owners, loading: false });
   } catch (error) {
     console.warn('[engram] public world load failed:', error);
-    setPublicWorld({ buildings: state.buildings, loading: false });
+    setPublicWorld({ buildings: state.buildings, owners: state.owners, loading: false });
   }
 }
 
