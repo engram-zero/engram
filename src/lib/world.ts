@@ -46,6 +46,8 @@ export interface ResourcePrice {
   buy: number;
 }
 export const MARKET: Partial<Record<ResourceType, ResourcePrice>> = {
+  // Static fallback; wood is priced dynamically via woodQuote(). Future resources
+  // (e.g. stone) can sit here as fixed quotes until they get their own model.
   wood: { sell: 2, buy: 6 },
 };
 
@@ -53,6 +55,43 @@ export const MARKET: Partial<Record<ResourceType, ResourcePrice>> = {
 export const AXE_UPGRADE_COST = 70;
 /** Cost in coin of one sapling (regrows one felled tree). */
 export const SAPLING_COST = 5;
+
+// ── Dynamic wood pricing (Phase 2) ────────────────────────────────────────────
+// A relative market: wood's coin value rises with scarcity (fewer trees left on
+// the map) and with coin inflation (the more coin the player hoards, the less
+// each coin is worth). A symmetric multiplicative house spread means buying
+// always costs HOUSE_SPREAD× the mid and selling pays mid ÷ HOUSE_SPREAD — the
+// merchant profits on BOTH directions, so any round-trip loses value.
+export const HOUSE_SPREAD = 1.3;
+export const WOOD_BASE_PRICE = 3; // coin per wood at neutral scarcity & inflation
+export const COIN_INFLATION_REF = 200; // coin balance at which inflation maxes out
+
+export interface WoodQuote {
+  /** Fair mid price (coin/unit) before the house spread. */
+  mid: number;
+  /** Coin the player RECEIVES per unit on a quick sale (mid ÷ spread). */
+  sell: number;
+  /** Coin the player PAYS per unit to buy (mid × spread, always > any haggle). */
+  buy: number;
+  /** Most Aldric will pay per unit even when haggled hard (≈ the fair mid). */
+  haggleCeil: number;
+}
+
+/**
+ * Live wood quote for this player's world. `totalTrees` is passed in (from
+ * map.ts TREES.length) to keep this module decoupled from the heavy scene graph.
+ */
+export function woodQuote(world: WorldState, totalTrees: number): WoodQuote {
+  const remaining = Math.max(0, totalTrees - world.choppedTrees.length);
+  const forest = totalTrees > 0 ? remaining / totalTrees : 1; // 1 full → 0 clearcut
+  const scarcity = 0.8 + 1.0 * (1 - forest); // 0.8 (abundant) → 1.8 (scarce)
+  const inflation = 1 + Math.min(world.inventory.coin / COIN_INFLATION_REF, 1) * 0.5; // 1 → 1.5
+  const mid = WOOD_BASE_PRICE * scarcity * inflation;
+  const sell = Math.max(1, Math.round(mid / HOUSE_SPREAD));
+  const haggleCeil = Math.max(sell, Math.round(mid)); // best negotiable = the fair mid
+  const buy = Math.max(Math.round(mid * HOUSE_SPREAD), haggleCeil + 1); // strictly above haggle
+  return { mid, sell, buy, haggleCeil };
+}
 
 const LOCALHOST_FREE_BUILD_WALLETS = new Set([
   '0xc77b3982d324c6e812119eea7dc94f0a856da59e',

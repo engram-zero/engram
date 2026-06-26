@@ -150,34 +150,54 @@ function sanitizeOffer(offer: unknown): TradeOffer | null {
   const quantity = clamp(o.quantity, 1, MAX_OFFER_QTY);
   const pricePerUnit = clamp(o.pricePerUnit, 0, 999);
   if (quantity < 1) return null;
-  return { resource: 'wood', quantity, pricePerUnit };
+  const offerOut: TradeOffer = { resource: 'wood', quantity, pricePerUnit };
+  const ref = Number(o.referencePrice);
+  if (Number.isFinite(ref) && ref > 0) offerOut.referencePrice = Math.min(999, ref);
+  return offerOut;
+}
+
+// Haggle thresholds. With a live market mid (referencePrice) they float with the
+// dynamic price; otherwise they fall back to the Phase-1 static constants.
+//   fair    = a good deal for Aldric (he accepts happily at/below it)
+//   ceil    = the most he'll ever pay, even haggled hard (≈ the fair mid)
+//   abusive = an ask this high is gouging → refuse + trust hit (≈ the buy price)
+function haggleParams(ref?: number): { fair: number; ceil: number; abusive: number } {
+  if (ref && ref > 0) {
+    const fair = Math.max(1, Math.round(ref / 1.3));
+    const ceil = Math.max(fair, Math.round(ref));
+    const abusive = Math.max(ceil + 1, Math.round(ref * 1.3));
+    return { fair, ceil, abusive };
+  }
+  return { fair: FAIR_WOOD_PRICE, ceil: MAX_WOOD_PRICE, abusive: ABUSIVE_WOOD_PRICE };
 }
 
 // The negotiation rules appended to Aldric's system prompt when an offer is live.
 function negotiationInstruction(offer: TradeOffer, trust: number): string {
   const total = offer.quantity * offer.pricePerUnit;
+  const { fair, ceil, abusive } = haggleParams(offer.referencePrice);
   return `
 # ACTIVE TRADE OFFER (the player is SELLING wood; you are buying)
 The player offers ${offer.quantity} wood at ${offer.pricePerUnit} coin per unit (total ${total} coin).
-Your fair reference price is ${FAIR_WOOD_PRICE} coin/unit; you will NEVER pay more than
-${MAX_WOOD_PRICE} coin/unit, no matter what. Their trust in your ledger is ${trust}/100.
+Your fair reference price right now is ${fair} coin/unit; you will NEVER pay more than
+${ceil} coin/unit, no matter what. Their trust in your ledger is ${trust}/100.
 Decide in character:
-- A fair or low ask (≤ ${FAIR_WOOD_PRICE}): accept happily; trust rises a little.
-- A slightly high ask: counter with a price between ${FAIR_WOOD_PRICE} and ${MAX_WOOD_PRICE} and accept at that counter.
-- An abusive ask (≥ ${ABUSIVE_WOOD_PRICE} coin/unit) or any attempt to cheat: refuse; trust falls; call out the gouging.
+- A fair or low ask (≤ ${fair}): accept happily; trust rises a little.
+- A slightly high ask: counter with a price between ${fair} and ${ceil} and accept at that counter.
+- An abusive ask (≥ ${abusive} coin/unit) or any attempt to cheat: refuse; trust falls; call out the gouging.
 - Reward loyal sellers (high trust) with a slightly more generous price.
 Include a "trade" field in your JSON alongside the usual fields:
-  "trade": { "accepted": <true|false>, "agreedPricePerUnit": <integer coin you will pay, ≤ ${offer.pricePerUnit} and ≤ ${MAX_WOOD_PRICE}>, "quantity": <integer ≤ ${offer.quantity}> }
+  "trade": { "accepted": <true|false>, "agreedPricePerUnit": <integer coin you will pay, ≤ ${offer.pricePerUnit} and ≤ ${ceil}>, "quantity": <integer ≤ ${offer.quantity}> }
 Your spoken dialogue MUST match the verdict: name the agreed price if you accept (or your counter), or your refusal if you reject.`;
 }
 
 // Deterministic settlement: used when no AI key is set, or when the model
 // forgot to return a usable trade. Aldric is greedy but fair.
 function decideTradeFallback(offer: TradeOffer, trust: number): { trade: TradeDecision; summary: string; dialogue: string; trustDelta: number; mood: string } {
+  const { fair, ceil, abusive } = haggleParams(offer.referencePrice);
   const loyal = trust >= 70;
-  const maxPay = loyal ? FAIR_WOOD_PRICE + 2 : FAIR_WOOD_PRICE + 1; // 4 / 3
+  const maxPay = loyal ? ceil : Math.max(fair, Math.round((fair + ceil) / 2));
   const asked = offer.pricePerUnit;
-  if (asked >= ABUSIVE_WOOD_PRICE) {
+  if (asked >= abusive) {
     return {
       trade: { accepted: false, agreedPricePerUnit: 0, quantity: 0 },
       summary: `Refused a gouging offer of ${asked} coin/wood.`,
@@ -186,7 +206,7 @@ function decideTradeFallback(offer: TradeOffer, trust: number): { trade: TradeDe
       mood: 'affronted',
     };
   }
-  const agreed = Math.min(asked, maxPay);
+  const agreed = Math.max(1, Math.min(asked, maxPay));
   const counter = agreed < asked;
   const total = agreed * offer.quantity;
   return {
@@ -195,18 +215,19 @@ function decideTradeFallback(offer: TradeOffer, trust: number): { trade: TradeDe
     dialogue: counter
       ? `Aldric weighs the timber. "I'll not pay ${asked}. ${agreed} a log, ${total} coin for the lot — take it or leave it." He counts out the coin.`
       : `Aldric nods. "${agreed} a log, fair enough. ${total} coin for ${offer.quantity} wood." He counts it into your palm.`,
-    trustDelta: asked <= FAIR_WOOD_PRICE ? 2 : 1,
+    trustDelta: asked <= fair ? 2 : 1,
     mood: loyal ? 'warm' : 'pleased',
   };
 }
 
 // Clamp the model's trade verdict to the real offer: never pay above the asked
-// price or the hard ceiling, never buy more than offered.
+// price or the live ceiling, never buy more than offered.
 function clampTrade(trade: TradeDecision | undefined, offer: TradeOffer): TradeDecision | undefined {
   if (!trade) return undefined;
   if (!trade.accepted) return { accepted: false, agreedPricePerUnit: 0, quantity: 0 };
-  const ceiling = Math.min(offer.pricePerUnit, MAX_WOOD_PRICE);
-  const agreedPricePerUnit = clamp(trade.agreedPricePerUnit, 1, ceiling);
+  const { ceil } = haggleParams(offer.referencePrice);
+  const ceiling = Math.min(offer.pricePerUnit, ceil);
+  const agreedPricePerUnit = clamp(trade.agreedPricePerUnit, 1, Math.max(1, ceiling));
   const quantity = clamp(trade.quantity || offer.quantity, 1, offer.quantity);
   return { accepted: true, agreedPricePerUnit, quantity };
 }

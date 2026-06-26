@@ -23,10 +23,11 @@ import {
   replantTree,
   upgradeAxe,
   receiveBoughtWood,
-  MARKET,
+  woodQuote,
   AXE_UPGRADE_COST,
   SAPLING_COST,
 } from '@/lib/world';
+import { TREES } from '@/components/engram/map';
 import { createBundleWorldPersistence } from '@/lib/world-0g';
 import { startPublicWorldPolling } from '@/lib/public-world';
 import { Portrait } from '@/components/engram/Art';
@@ -82,7 +83,6 @@ function trustColor(t: number) {
   return '#cc5a4a';
 }
 
-const ALDRIC_WOOD_PRICE = 2;
 
 function clampInt(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, Math.round(value)));
@@ -143,6 +143,8 @@ function Game() {
   const { networkType } = useNetwork();
   const { play, muted, setMuted } = useEngramAudio();
   const world = useWorld();
+  // Live wood quote (dynamic: tree scarcity × coin inflation, with house spread).
+  const quote = useMemo(() => woodQuote(world, TREES.length), [world]);
 
   const [memories, setMemories] = useState<Record<NPCName, NPCMemory> | null>(null);
   const [active, setActive] = useState<NPCName | null>(null);
@@ -260,7 +262,7 @@ function Game() {
     }
 
     const quantity = clampInt(merchantQty, 1, availableWood);
-    const totalCoins = quantity * ALDRIC_WOOD_PRICE;
+    const totalCoins = quantity * quote.sell;
     const nextMemory = applyAldricSale(memories.aldric, quantity, totalCoins);
 
     await addResource('wood', -quantity);
@@ -292,7 +294,7 @@ function Game() {
     setMerchantMsg(null);
     setScene((s) => ({ ...s, loading: true }));
     try {
-      const offer: TradeOffer = { resource: 'wood', quantity, pricePerUnit };
+      const offer: TradeOffer = { resource: 'wood', quantity, pricePerUnit, referencePrice: quote.mid };
       const data = await chat(address, 'aldric', '', memories.aldric, undefined, world.enemiesKilled, offer);
       setMemories((prev) => (prev ? { ...prev, aldric: data.memory } : prev));
       setDirty((d) => ({ ...d, aldric: true }));
@@ -327,7 +329,7 @@ function Game() {
   // The house-edge spread lives in MARKET (buy > sell), so trading round-trips lose.
   async function buyWoodFromAldric() {
     if (!memories || active !== 'aldric' || scene.loading) return;
-    const price = MARKET.wood?.buy ?? 6;
+    const price = quote.buy;
     const want = clampInt(merchantBuyQty, 1, 999);
     const affordable = Math.floor(world.inventory.coin / price);
     const qty = Math.min(want, affordable);
@@ -581,7 +583,7 @@ function Game() {
             {active === 'aldric' && (
               <div className="mt-3.5 rounded-xl border border-[#6a5832] bg-black/25 px-4 py-3">
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-                  <span className="text-[#d6b84a]">Aldric pays {ALDRIC_WOOD_PRICE} coin / wood</span>
+                  <span className="text-[#d6b84a]" title="Price rises as the forest thins and as coin piles up">Aldric pays {quote.sell} coin / wood ↻</span>
                   <span>Your wood: <strong>{world.inventory.wood}</strong></span>
                   <span>Your coin: <strong>{world.inventory.coin}</strong></span>
                   <span>
@@ -604,7 +606,7 @@ function Game() {
                     className="w-24 bg-black/40 border border-[#5a4a28] focus:border-[#d6b84a] outline-none rounded-md px-3 py-2 text-sm"
                   />
                   <span className="text-sm text-[#f4e8d0]/75">
-                    Quick sale: <strong>{clampInt(merchantQty, 1, Math.max(1, world.inventory.wood)) * ALDRIC_WOOD_PRICE}</strong> coin
+                    Quick sale: <strong>{clampInt(merchantQty, 1, Math.max(1, world.inventory.wood)) * quote.sell}</strong> coin
                   </span>
                 </div>
 
@@ -639,7 +641,7 @@ function Game() {
                 <div className="mt-3 border-t border-[#6a5832]/60 pt-2.5">
                   <div className="text-sm text-[#d6b84a] mb-2">Buy from Aldric <span className="text-[#f4e8d0]/55">· he always trades in his favour</span></div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-sm text-[#f4e8d0]/85">Wood @ <strong>{MARKET.wood?.buy}</strong> coin/unit</span>
+                    <span className="text-sm text-[#f4e8d0]/85">Wood @ <strong>{quote.buy}</strong> coin/unit</span>
                     <input
                       type="number"
                       min={1}
@@ -650,10 +652,10 @@ function Game() {
                       onChange={(e) => setMerchantBuyQty(clampInt(Number(e.target.value || 1), 1, 999))}
                       className="w-20 bg-black/40 border border-[#5a4a28] focus:border-[#d6b84a] outline-none rounded-md px-3 py-2 text-sm"
                     />
-                    <span className="text-sm text-[#f4e8d0]/75">Cost: <strong>{clampInt(merchantBuyQty, 1, 999) * (MARKET.wood?.buy ?? 6)}</strong> coin</span>
+                    <span className="text-sm text-[#f4e8d0]/75">Cost: <strong>{clampInt(merchantBuyQty, 1, 999) * quote.buy}</strong> coin</span>
                     <button
                       onClick={buyWoodFromAldric}
-                      disabled={scene.loading || world.inventory.coin < (MARKET.wood?.buy ?? 6) || world.inventory.wood >= 100}
+                      disabled={scene.loading || world.inventory.coin < quote.buy || world.inventory.wood >= 100}
                       className="bg-black/40 border border-[#8a6a32] hover:border-[#d6b84a] rounded-md px-3 py-2 text-sm disabled:opacity-40"
                     >
                       Buy wood

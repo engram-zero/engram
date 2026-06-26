@@ -149,6 +149,9 @@ export interface TradeOffer {
   quantity: number;
   /** Coin per unit the player is asking for. */
   pricePerUnit: number;
+  /** Live market mid-price (coin/unit) so the haggle floats with the dynamic
+   * market instead of a fixed reference. Optional for backward compatibility. */
+  referencePrice?: number;
 }
 
 /** Aldric's verdict on a {@link TradeOffer}. The CLIENT applies the resource move. */

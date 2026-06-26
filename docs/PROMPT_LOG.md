@@ -858,4 +858,22 @@ memoria de Aldric (`applyAldricSpend`, +1 trust) para que persista con Leave & s
 escasez de árboles × inflación de coin. Fase 3: gathering de stone.)
 **Qué se hizo:** `axeLevel` + `MARKET`/costos + `replantTree`/`upgradeAxe`/`receiveBoughtWood` en
 `world.ts`; yield del hacha en `harvestTree`; handlers + UI de compra en `client-page.tsx`.
-`npx tsc --noEmit` limpio. **Commit:** _(este commit)_
+`npx tsc --noEmit` limpio. **Commit:** d71358b
+
+### 25 jun 2026 · Mercado v2 — Fase 2: precio dinámico relativo (Prompt 14)
+**Pedido (humano):** Que el precio del mercado sea relativo: la madera depende de cuántos
+árboles quedan vs cuántas monedas hay. Y el spread simétrico multiplicativo (la casa gana 1.3×
+en ambas direcciones: comprar 1 madera ≈ 1.3 coin; obtener 1 coin ≈ 1.3 madera).
+**Prompt sintetizado:** Implementa pricing dinámico de madera v1. En `world.ts`: `woodQuote(world,
+totalTrees)` con `scarcity = 0.8 + (1−forest)` (forest = árbolesRestantes/total), `inflation =
+1 + min(coin/200,1)*0.5`, `mid = 3*scarcity*inflation`, y **spread multiplicativo** `HOUSE_SPREAD=1.3`:
+`sell = round(mid/1.3)`, `buy = round(mid*1.3)` forzado `> haggleCeil` (= round(mid)) para que NUNCA
+se pueda arbitrar contra el regateo. `TradeOffer` gana `referencePrice` (el mid vivo). En
+`/api/npc`: `haggleParams(ref)` deriva fair/ceil/abusive del mid (fallback a constantes si falta);
+`negotiationInstruction`, `decideTradeFallback` y `clampTrade` los usan, así el regateo flota con el
+mercado. En `client-page.tsx`: `quote = woodQuote(world, TREES.length)` (useMemo); venta rápida,
+compra, regateo y labels usan `quote.sell/buy/mid`; se elimina el `ALDRIC_WOOD_PRICE` fijo. tsc debe
+pasar y mantenerse el invariante buy>ceil (la casa siempre gana).
+**Qué se hizo:** `woodQuote` + constantes en `world.ts`; `referencePrice` en el contrato;
+`haggleParams` + integración en `/api/npc`; quote vivo cableado en `client-page.tsx`. Verificado el
+invariante (houseWins=true) y la curva en 6 estados. `npx tsc --noEmit` limpio. **Commit:** _(este commit)_
