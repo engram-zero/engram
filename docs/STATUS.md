@@ -110,9 +110,31 @@ better pending/saved feedback or a relayer/meta-tx flow.
 - [x] Save to 0G working end-to-end (criterion #1). ✅
 - [x] **Group Stage submitted & ACCEPTED → through to Round of 32.** ✅ (jun 2026)
 - [x] Demo video (AI voiceover, ElevenLabs), logo, thumbnail, MIT license. ✅
-- [ ] Update the 0g.ai dashboard **Description** to the corrected, honest copy (no
-      "MetaMask signature / no server / cross-device" — see README / chat history).
-- [ ] Post on X (`#TheZeroCup`, `@0G_labs`).
+- [ ] **Update the dashboard Description for the R32 submission** (wave opens ~JUN 27 with
+      results + draw; deadline JUN 28). The Group Stage copy claims *"your wallet pays"* in the
+      present tense, but storage is sponsored server-side (`ENGRAM_SPONSOR_KEY`) — a
+      **misrepresentation/DQ-shaped** wording (low risk, but free to fix). The player only signs
+      the registry pointer tx. **Paste-ready corrected description below.**
+- [ ] Post on X (`#TheZeroCup`, `@0G_labs`) — **only relevant from the Quarter Finals on**
+      (community voting JUL 8–10+). R32 and R16 are judged, so it does **not** affect this round's
+      score. Optional/strategic for later; a human must post it.
+
+### Paste-ready corrected dashboard Description (honest copy)
+Only the last paragraph changed vs the Group Stage copy: drops the false present-tense
+*"your wallet pays"*, keeps the (true) one-signature pointer + ownership claim, and discloses the
+demo sponsor as a positive. Rest is accurate as-is.
+
+> **Engram** is a browser RPG where three villagers keep a **persistent, player-owned memory of you** — stored on **0G Storage**, where no developer, reset, or patch can make them forget.
+>
+> Connect your wallet and **explore the village of Aldenmoor in first person**. Talk to **Aldric** (merchant), **Maren** (guard captain) and **Sable** (information broker) — each keeps their own memory of you: trust, debts, mood, history. Your past decisions visibly change how they treat you next time.
+>
+> **Why 0G is the core:** every NPC's memory is stored on 0G, **auditable by its root hash** and unalterable — *not even we, the developers, can edit or erase it.* Remove 0G and the premise collapses.
+>
+> Each conversation is anchored to 0G with **one signature from your wallet** — you sign the on-chain pointer to your own memory, so **you own it and can audit it by root hash.** *(The storage fee is sponsored for this testnet demo; the design puts that cost on the player's own wallet.)* Live on 0G Galileo Testnet (Chain ID 16602) with real on-chain uploads.
+
+Optional for R32: add a line about the new **haggle-with-Aldric** loop (propose a price, he
+accepts/counters/refuses in character, and the trust change persists to 0G) — it showcases the
+"NPCs remember you" thesis the judges reward.
 
 ## Round of 32 — what to do next
 Knockout round, judged. The Group Stage submission is locked but you can iterate and

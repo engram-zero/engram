@@ -823,4 +823,20 @@ En `STATUS.md`, en "Round of 32 — what to do next", marca como hechos: mundo p
 mute toggle, regateo con Aldric (v2) y pulido del río + relleno lunar, con sus commits; deja
 multiplayer como diferido. tsc debe pasar.
 **Qué se hizo:** piso nocturno 0.32→0.42 en `computeDayNight`; sección Round of 32 de
-`STATUS.md` actualizada con los cuatro hechos. `npx tsc --noEmit` limpio. **Commit:** _(este commit)_
+`STATUS.md` actualizada con los cuatro hechos. `npx tsc --noEmit` limpio. **Commit:** 6c84778
+
+### 25 jun 2026 · Copy honesta del dashboard (riesgo de misrepresentation)
+**Pedido (humano):** La descripción del dashboard dice "your wallet pays" pero el storage lo
+paga la sponsor wallet server-side — ¿riesgo de DQ? Guarda una versión corregida lista para
+pegar cuando abra el submit del R32.
+**Prompt sintetizado:** En `docs/STATUS.md` (Tournament progress) reemplaza el ítem del
+dashboard por una versión que (1) explique que la copy actual afirma en presente "your wallet
+pays" mientras el storage es sponsoreado (`ENGRAM_SPONSOR_KEY`) → wording DQ-shaped de bajo
+riesgo; (2) incluya una **descripción corregida lista para pegar** que cambia solo el último
+párrafo: mantiene "one signature from your wallet" + "you own it / auditable by root hash"
+(ambos ciertos: el jugador firma el puntero `setRoot`), elimina el "your wallet pays" falso y
+**declara el sponsor del demo como diseño**. Reencuadra el post en X como relevante solo desde
+cuartos (community voting), no en R32/R16 (jueces).
+**Qué se hizo:** ítem del dashboard reescrito + bloque "Paste-ready corrected dashboard
+Description" en `STATUS.md`; nota del X reencuadrada. (Análisis del flujo real: storage =
+sponsor; puntero `setRoot` = firma del jugador.) **Commit:** _(este commit)_
