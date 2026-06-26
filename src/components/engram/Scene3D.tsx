@@ -96,6 +96,12 @@ const WALK_SPEED = 4.6;
 const TALK_RANGE = 3.2; // how close you must stand before "Press E" appears
 const CHOP_RANGE = 2.8; // how close to a tree before "Press F to chop"
 const MINE_RANGE = 2.8; // how close to a rock before "Hold F to mine"
+// Prompt 20: when a rock is exhausted, back the batch with a verifiable 0G
+// Compute inference (proof-of-useful-work). OFF unless the env flag is set AND
+// the compute ledger is funded server-side; mining always works either way.
+const COMPUTE_ENABLED = process.env.NEXT_PUBLIC_ENGRAM_COMPUTE === '1';
+
+type MineReceipt = { status: 'verifying' | 'verified' | 'local'; chatID?: string | null; model?: string };
 const SPAWN_XZ: [number, number] = [0, 9]; // y is sampled from the terrain
 
 const keyboardMap = [
@@ -2800,6 +2806,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
   const [nearby, setNearby] = useState<NPCName | null>(null);
   const [nearbyTree, setNearbyTree] = useState<number | null>(null);
   const [nearbyRock, setNearbyRock] = useState<number | null>(null);
+  const [mineReceipt, setMineReceipt] = useState<MineReceipt | null>(null);
   const [locked, setLocked] = useState(false);
   const [view, setView] = useState<ViewMode>('fp');
   const [isTouchDevice, setIsTouchDevice] = useState(false);
@@ -3095,6 +3102,32 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     };
   }, [activateNearbyNpc, buildDraftDirty, exploring, switchView, view]);
 
+  // Prompt 20: when a rock is exhausted, ask the server to run a verifiable 0G
+  // Compute inference for this batch. The stone is already granted locally; this
+  // only surfaces an honest receipt — "verified" only when the TEE check passes,
+  // otherwise "local" (compute disabled/unfunded/unavailable).
+  const runMineReceipt = useCallback(async () => {
+    const wallet = getWorldWallet();
+    if (!wallet) return;
+    setMineReceipt({ status: 'verifying' });
+    try {
+      const res = await fetch('/api/mine', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ walletAddress: wallet }),
+      });
+      const data = await res.json().catch(() => ({}));
+      setMineReceipt(
+        data?.verified
+          ? { status: 'verified', chatID: data.chatID, model: data.model }
+          : { status: 'local' }
+      );
+    } catch {
+      setMineReceipt({ status: 'local' });
+    }
+    window.setTimeout(() => setMineReceipt(null), 15000);
+  }, []);
+
   // Chopping takes time: hold F near a tree to fill a progress bar, then it falls.
   useEffect(() => {
     if (!fpExploring) {
@@ -3128,7 +3161,10 @@ export default function Scene3D({ memories = null, active = null, talking = fals
             if (depleted) setNearbyTree(null); // tree gone; Player repicks next frame
           } else {
             const { depleted } = harvestRock(rock!); // grant 1 stone; deplete after ROCK_STONE
-            if (depleted) setNearbyRock(null); // rock gone; Player repicks next frame
+            if (depleted) {
+              setNearbyRock(null); // rock gone; Player repicks next frame
+              if (COMPUTE_ENABLED) void runMineReceipt(); // back the batch with 0G Compute
+            }
           }
           chopRef.current = 0;
         }
@@ -3139,7 +3175,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
       setChopPct(chopRef.current); // React skips re-render when unchanged
     }, TICK);
     return () => window.clearInterval(id);
-  }, [fpExploring, play]);
+  }, [fpExploring, play, runMineReceipt]);
 
   // Player combat / action listener. Left-click while locked attacks (combat).
   // Right-click is a context "action" button in first person: attack a nearby
@@ -3756,6 +3792,24 @@ Left-click to look around · right-click to act · WASD to walk · V for aerial
                 style={{ background: 'rgba(20,16,10,0.88)', borderColor: nearbyNpc.accent }}
               >
                 Press <span style={{ color: nearbyNpc.accent }}>E</span> to speak with {nearbyNpc.name}
+              </div>
+            </div>
+          )}
+
+          {mineReceipt && (
+            <div className="pointer-events-none absolute top-20 left-1/2 z-20 -translate-x-1/2">
+              <div
+                className="rounded-full border px-4 py-2 text-xs font-semibold text-[#f4e8d0] shadow-lg"
+                style={{ background: 'rgba(14,16,20,0.92)', borderColor: mineReceipt.status === 'verified' ? '#5fb86a' : '#7a8a9a' }}
+              >
+                {mineReceipt.status === 'verifying' && '⛏ verifying work on 0G Compute…'}
+                {mineReceipt.status === 'verified' && (
+                  <>
+                    ✓ batch verified on <span className="text-[#8fd0a0]">0G Compute</span>
+                    {mineReceipt.chatID ? <> · <span className="font-mono">{mineReceipt.chatID.slice(0, 10)}…</span></> : null}
+                  </>
+                )}
+                {mineReceipt.status === 'local' && '⛏ mined locally · 0G Compute unavailable'}
               </div>
             </div>
           )}

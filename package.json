@@ -8,9 +8,11 @@
     "start": "next start",
     "lint": "next lint",
     "build:sdk": "webpack --config webpack.sdk.config.js",
-    "deploy:registry": "tsx scripts/deploy-registry.ts"
+    "deploy:registry": "tsx scripts/deploy-registry.ts",
+    "fund:compute": "tsx scripts/fund-compute.ts"
   },
   "dependencies": {
+    "@0gfoundation/0g-compute-ts-sdk": "^0.8.4",
     "@0gfoundation/0g-storage-ts-sdk": "^1.2.10",
     "@anthropic-ai/sdk": "^0.104.2",
     "@google/generative-ai": "^0.24.1",

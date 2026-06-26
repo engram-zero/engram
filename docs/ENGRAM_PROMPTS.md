@@ -31,7 +31,7 @@
 16. [Animaciones de gathering y feedback físico](#prompt-16--animaciones-de-gathering-y-feedback-físico) — ⏳ pendiente
 17. [Terreno editable, ríos y mapa más grande](#prompt-17--terreno-editable-ríos-y-mapa-más-grande) — 🟡 partial: **riachuelo** (cinta de agua drapeada, no tala terreno) hecho; terreno editable / mapa más grande siguen pendientes
 18. [Reparación, durabilidad y mantenimiento del mundo](#prompt-18--reparación-durabilidad-y-mantenimiento-del-mundo) — ⏳ pendiente
-20. [Minar = trabajo real en 0G Compute (proof-of-useful-work)](#prompt-20--minar--trabajo-real-en-0g-compute) — 💡 idea (post-torneo)
+20. [Minar = trabajo real en 0G Compute (proof-of-useful-work)](#prompt-20--minar--trabajo-real-en-0g-compute) — 🟡 construido, **gateado OFF + sin verificar en vivo** (falta fondear el ledger y probar)
 
 > **Tareas no-código (ADMIN):** ✅ deploy a Vercel + env vars · ✅ save a 0G end-to-end ·
 > ✅ **Group Stage ENVIADO y ACEPTADO** (pasa a Round of 32) · ✅ video demo (voz IA, ElevenLabs) ·
@@ -924,6 +924,17 @@ juego un simulador de chores.
 ---
 
 ## Prompt 20 — Minar = trabajo real en 0G Compute
+
+> **🟡 CONSTRUIDO pero GATEADO OFF y SIN VERIFICAR EN VIVO — 25 jun 2026.** Implementado:
+> `src/app/api/mine/route.ts` (broker `@0gfoundation/0g-compute-ts-sdk`, inferencia real +
+> `processResponse` TEE), `scripts/fund-compute.ts` (`npm run fund:compute`), y el cableado en
+> `Scene3D.tsx` (al agotar una roca llama `/api/mine`, píldora HUD con el recibo). **Honestidad:**
+> NO se probó el camino feliz end-to-end porque no había una cuenta de 0G Compute fondeada al
+> escribirlo; el flag `ENGRAM_COMPUTE`/`NEXT_PUBLIC_ENGRAM_COMPUTE` está **OFF por defecto**, así
+> que el juego se comporta igual que antes (minería local, sin recibo). El recibo solo dice
+> "verified on 0G Compute" cuando `processResponse` devuelve true; si no, dice "mined locally".
+> `tsc` y `next build` limpios. **Para activarlo:** fondear (`npm run fund:compute` con ≥3 OG del
+> faucet) y poner ambos flags en `1`, luego probar en vivo. Idea original abajo.
 
 > 💡 **Idea (post-torneo), de AriiBen.** Hoy "minar piedra" (Prompt 14 fase 3) es la mecánica
 > de hold-action habitual. La idea: que **minar dispare trabajo descentralizado real**, de modo

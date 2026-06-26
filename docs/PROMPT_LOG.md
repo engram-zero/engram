@@ -896,4 +896,26 @@ en el panel de Aldric. tsc debe pasar. (Verificación headless omitida por satur
 la integración espeja el sistema de árboles ya probado.)
 **Qué se hizo:** `ROCKS`+colliders en `map.ts`; `minedRocks`/minería/`MARKET.stone` en `world.ts`;
 `Rocks` + colisión + detección + loop + hints en `Scene3D.tsx`; comercio de stone en
-`client-page.tsx`. `npx tsc --noEmit` limpio. **Commit:** _(este commit)_
+`client-page.tsx`. `npx tsc --noEmit` limpio. **Commit:** db60162
+
+### 25 jun 2026 · Prompt 20 — Minería verificable en 0G Compute (gateado OFF)
+**Pedido (humano):** Implementar la idea: que minar dispare **trabajo real en 0G Compute**
+(proof-of-useful-work). Decisiones: construir ahora detrás de flag + fallback; disparar al
+agotar una roca.
+**Prompt sintetizado:** Investiga el SDK real de 0G Compute (`@0gfoundation/0g-compute-ts-sdk`,
+`createZGComputeNetworkBroker`; es **inferencia LLM verificable** por TEE, no PoW). Crea
+`/api/mine` (runtime nodejs, import dinámico del SDK): con el sponsor wallet hace `listService` →
+`getServiceMetadata`/`getRequestHeaders` → POST `/chat/completions` → **`processResponse`** (verifica
+TEE) y devuelve `{ verified, chatID, provider, model }`; rate-limit fuerte; gateado por
+`ENGRAM_COMPUTE` (default OFF) con fallback `{verified:false}`. Script admin `scripts/fund-compute.ts`
+(`npm run fund:compute`: `addLedger`/`depositFund` + `transferFund` a un proveedor). En `Scene3D`,
+al agotar una roca y si `NEXT_PUBLIC_ENGRAM_COMPUTE`, llama `/api/mine` y muestra una píldora HUD
+con el recibo ("verifying" → "verified on 0G Compute · chatID" o "mined locally"). Honestidad:
+solo dice "verified" si `processResponse` es true; **no verificado end-to-end** (sin cuenta
+fondeada al escribir) → flag OFF, juego idéntico. `.env.example` documentado. tsc y `next build`
+deben pasar.
+**Qué se hizo:** dep `@0gfoundation/0g-compute-ts-sdk`; `/api/mine` con broker + verificación TEE +
+fallback; `scripts/fund-compute.ts` + npm script `fund:compute`; cableado + píldora HUD en
+`Scene3D.tsx`; flags y notas en `.env.example`; estado actualizado en `ENGRAM_PROMPTS.md` (🟡
+construido, gateado OFF, sin verificar en vivo). `npx tsc --noEmit` y `next build` limpios.
+**Commit:** _(este commit)_
