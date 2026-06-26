@@ -31,6 +31,7 @@
 16. [Animaciones de gathering y feedback físico](#prompt-16--animaciones-de-gathering-y-feedback-físico) — ⏳ pendiente
 17. [Terreno editable, ríos y mapa más grande](#prompt-17--terreno-editable-ríos-y-mapa-más-grande) — 🟡 partial: **riachuelo** (cinta de agua drapeada, no tala terreno) hecho; terreno editable / mapa más grande siguen pendientes
 18. [Reparación, durabilidad y mantenimiento del mundo](#prompt-18--reparación-durabilidad-y-mantenimiento-del-mundo) — ⏳ pendiente
+20. [Minar = trabajo real en 0G Compute (proof-of-useful-work)](#prompt-20--minar--trabajo-real-en-0g-compute) — 💡 idea (post-torneo)
 
 > **Tareas no-código (ADMIN):** ✅ deploy a Vercel + env vars · ✅ save a 0G end-to-end ·
 > ✅ **Group Stage ENVIADO y ACEPTADO** (pasa a Round of 32) · ✅ video demo (voz IA, ElevenLabs) ·
@@ -919,6 +920,40 @@ juego un simulador de chores.
 1. Un edificio puede dañarse y luego repararse.
 2. El costo de reparación es menor que reconstruir desde cero, pero no gratis.
 3. El estado dañado/reparado persiste correctamente.
+
+---
+
+## Prompt 20 — Minar = trabajo real en 0G Compute
+
+> 💡 **Idea (post-torneo), de AriiBen.** Hoy "minar piedra" (Prompt 14 fase 3) es la mecánica
+> de hold-action habitual. La idea: que **minar dispare trabajo descentralizado real**, de modo
+> que picar piedra *haga algo* en 0G — no un placeholder. Encaja con el criterio #1 del torneo
+> ("0G tiene que hacer trabajo real").
+
+### Por qué 0G Compute y no PoW vanidoso
+- **PoW literal** (el navegador hashea hasta cierta dificultad → da stone) es minería "de verdad"
+  pero **quema CPU/batería del jugador** y, sin consentimiento explícito, es el patrón de
+  *cryptojacking* (lo marcan antivirus). En testnet no hay recompensa real → sería demo conceptual.
+- **0G Compute** (o "proof-of-useful-work"): minar **encola un job de cómputo real en 0G** (o
+  contribuye a almacenamiento/disponibilidad) y la piedra se otorga al **completarse/verificarse**
+  ese trabajo. Es verificable, on-theme, y no desperdicia ciclos.
+
+### Primera versión a explorar
+- Un endpoint server-side (patrón de `/api/npc`/`/api/save`) que **lanza un job en 0G Compute**
+  cuando el jugador "mina", y devuelve un recibo/prueba verificable.
+- La barra de minado refleja el progreso real del job; al completarse (y verificarse), `harvestRock`
+  otorga stone. Si el job falla, no hay recompensa.
+- Opt-in y transparente (mostrar qué cómputo se hace). Nada de hashing oculto.
+
+### Preguntas abiertas
+- ¿Qué cómputo "útil" tiene sentido y es barato/verificable en 0G Compute hoy?
+- ¿Cómo evitar que un job lento haga el gathering tedioso? (¿pre-encolar, batch, dificultad baja?)
+- ¿El recibo del job se ancla también en 0G (auditable) como la memoria?
+
+### Criterios de aceptación (cuando se implemente)
+1. Minar lanza un job real en 0G Compute y la piedra se otorga solo al completarse/verificarse.
+2. Es opt-in y transparente; no hay hashing oculto ni cryptojacking.
+3. El trabajo y su recibo quedan auditables (idealmente anclados en 0G).
 
 ---
 

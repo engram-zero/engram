@@ -151,12 +151,20 @@ submit a revised version if you advance. Snapshot = `main` at the round deadline
       a price, he accepts / counters / refuses in character; trust persists to 0G. (`69b79e9`)
 - [x] **AV polish — river** — softer faded banks, muted dusk teal, meandering width (no
       longer a flat saturated band). (`fd02145`) + a touch more **moonlight fill** at night.
+- [x] **Market v2 (Prompt 14), 3 phases** — Aldric now **sells** goods (sharper axe, sapling,
+      buy wood/stone) with a **house-edge spread** (buy > sell, can't be arbitraged against the
+      haggle); wood is **dynamically priced** (tree scarcity × coin inflation); and **stone** is a
+      new **mineable** resource (rock outcrops, same hold-action) that's tradeable. Purchases
+      build Aldric's trust and persist to 0G. (`d71358b`, `fbef41a`, `db60162`)
 
 **Still open (deferred):**
 1. Real-time multiplayer (biggest differentiator; new prompt #19, scoped) — **deferred to a
    later phase** by decision; coordinate with martelaxe when picked up.
 2. Further AV polish if wanted: avatar silhouettes (plain but recognisable).
+3. Repair kits (Prompt 14 leftover) — wait on building durability (Prompt 18).
+4. 💡 **Mining = real 0G Compute work** (Prompt 20) — on-thesis future idea: gathering stone
+   triggers a verifiable 0G compute job (proof-of-useful-work), not a placeholder.
 
 Full backlog (still open) in `docs/ENGRAM_PROMPTS.md`: player relations/raids (13),
-market goods (14), fair demon sieges (15), gathering animation polish (16),
-editable terrain / bigger map (17), repair/durability (18).
+market goods/repair leftover (14), fair demon sieges (15), gathering animation polish (16),
+editable terrain / bigger map (17), repair/durability (18), 0G-compute mining (20).
