@@ -15,7 +15,18 @@ import { useWallet } from '@/hooks/useWallet';
 import { NPC_LIST } from '@/lib/npcs';
 import type { NPCName, NPCMemory, TradeOffer, TradeDecision } from '@/lib/types';
 import { readAllMemories, writeMemory, getBundleRoot } from '@/lib/memory';
-import { addResource, initWorld, setWorldPersistence, useWorld } from '@/lib/world';
+import {
+  addResource,
+  initWorld,
+  setWorldPersistence,
+  useWorld,
+  replantTree,
+  upgradeAxe,
+  receiveBoughtWood,
+  MARKET,
+  AXE_UPGRADE_COST,
+  SAPLING_COST,
+} from '@/lib/world';
 import { createBundleWorldPersistence } from '@/lib/world-0g';
 import { startPublicWorldPolling } from '@/lib/public-world';
 import { Portrait } from '@/components/engram/Art';
@@ -99,6 +110,22 @@ function applyAldricSale(memory: NPCMemory, quantity: number, totalCoins: number
   };
 }
 
+// A coin purchase at Aldric's stall: a paying customer earns a little goodwill,
+// recorded in his memory like a sale so it persists to 0G with Leave & save.
+function applyAldricSpend(memory: NPCMemory, player: string, summary: string): NPCMemory {
+  const trustDelta = 1;
+  const nextTrust = clampInt(memory.trust_level + trustDelta, 0, 100);
+  return {
+    ...memory,
+    trust_level: nextTrust,
+    last_seen: Date.now(),
+    interaction_history: [
+      ...memory.interaction_history,
+      { at: Date.now(), player, summary, trust_delta: trustDelta },
+    ].slice(-50),
+  };
+}
+
 function aldricSaleDialogue(trustLevel: number, quantity: number, totalCoins: number) {
   if (trustLevel >= 75) {
     return `Aldric counts out ${totalCoins} coin for ${quantity} wood and gives you a knowing nod. "Clean timber, prompt trade. You may yet become one of my preferred sellers."`;
@@ -127,6 +154,7 @@ function Game() {
   const [err, setErr] = useState<string | null>(null);
   const [merchantQty, setMerchantQty] = useState(1);
   const [merchantPrice, setMerchantPrice] = useState(3);
+  const [merchantBuyQty, setMerchantBuyQty] = useState(1);
   const [merchantMsg, setMerchantMsg] = useState<string | null>(null);
   // "Explore as guest" — roam Aldenmoor without a wallet (no dialogue/saving).
   // The best mobile fallback when there's no injected wallet / WalletConnect.
@@ -293,6 +321,66 @@ function Game() {
       }
       setScene((s) => ({ ...s, loading: false, dialogue: `(${error.message})` }));
     }
+  }
+
+  // ── Buy from Aldric (coin sinks) ── spend coin → utility, recorded in his memory.
+  // The house-edge spread lives in MARKET (buy > sell), so trading round-trips lose.
+  async function buyWoodFromAldric() {
+    if (!memories || active !== 'aldric' || scene.loading) return;
+    const price = MARKET.wood?.buy ?? 6;
+    const want = clampInt(merchantBuyQty, 1, 999);
+    const affordable = Math.floor(world.inventory.coin / price);
+    const qty = Math.min(want, affordable);
+    if (qty <= 0) {
+      setMerchantMsg(`Not enough coin — wood is ${price} coin/unit here.`);
+      return;
+    }
+    const got = await receiveBoughtWood(qty);
+    if (got <= 0) {
+      setMerchantMsg('Your pack is full of wood already.');
+      return;
+    }
+    const cost = got * price;
+    await addResource('coin', -cost);
+    const next = applyAldricSpend(memories.aldric, `Bought ${got} wood for ${cost} coin.`, `Sold ${got} wood to the traveller at ${price} coin each.`);
+    setMemories((prev) => (prev ? { ...prev, aldric: next } : prev));
+    setDirty((d) => ({ ...d, aldric: true }));
+    setMerchantMsg(`Bought ${got} wood for ${cost} coin (${price}/unit).`);
+  }
+
+  async function buySaplingFromAldric() {
+    if (!memories || active !== 'aldric' || scene.loading) return;
+    if (world.inventory.coin < SAPLING_COST) {
+      setMerchantMsg(`Not enough coin — a sapling is ${SAPLING_COST} coin.`);
+      return;
+    }
+    if (!(await replantTree())) {
+      setMerchantMsg('No felled trees to replant right now.');
+      return;
+    }
+    await addResource('coin', -SAPLING_COST);
+    const next = applyAldricSpend(memories.aldric, `Bought a sapling for ${SAPLING_COST} coin.`, 'Sold the traveller a sapling to replant the wood.');
+    setMemories((prev) => (prev ? { ...prev, aldric: next } : prev));
+    setDirty((d) => ({ ...d, aldric: true }));
+    setMerchantMsg(`Planted a sapling — a felled tree returns. (−${SAPLING_COST} coin)`);
+  }
+
+  async function buyAxeUpgradeFromAldric() {
+    if (!memories || active !== 'aldric' || scene.loading) return;
+    if (world.axeLevel >= 1) {
+      setMerchantMsg('You already carry the sharper axe.');
+      return;
+    }
+    if (world.inventory.coin < AXE_UPGRADE_COST) {
+      setMerchantMsg(`Not enough coin — the sharper axe is ${AXE_UPGRADE_COST} coin.`);
+      return;
+    }
+    if (!(await upgradeAxe())) return;
+    await addResource('coin', -AXE_UPGRADE_COST);
+    const next = applyAldricSpend(memories.aldric, `Bought the sharper axe for ${AXE_UPGRADE_COST} coin.`, 'Sold the traveller a sharper axe — they mean to fell more wood.');
+    setMemories((prev) => (prev ? { ...prev, aldric: next } : prev));
+    setDirty((d) => ({ ...d, aldric: true }));
+    setMerchantMsg(`Sharper axe acquired — you now gather 2× wood per chop. (−${AXE_UPGRADE_COST} coin)`);
   }
 
   // Leaving an NPC persists that conversation to 0G and anchors the new root if needed.
@@ -547,6 +635,50 @@ function Game() {
                     Propose deal
                   </button>
                 </div>
+                {/* v2 — buy from Aldric: coin sinks. Buy price > sell (house edge). */}
+                <div className="mt-3 border-t border-[#6a5832]/60 pt-2.5">
+                  <div className="text-sm text-[#d6b84a] mb-2">Buy from Aldric <span className="text-[#f4e8d0]/55">· he always trades in his favour</span></div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm text-[#f4e8d0]/85">Wood @ <strong>{MARKET.wood?.buy}</strong> coin/unit</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={999}
+                      inputMode="numeric"
+                      value={merchantBuyQty}
+                      disabled={scene.loading}
+                      onChange={(e) => setMerchantBuyQty(clampInt(Number(e.target.value || 1), 1, 999))}
+                      className="w-20 bg-black/40 border border-[#5a4a28] focus:border-[#d6b84a] outline-none rounded-md px-3 py-2 text-sm"
+                    />
+                    <span className="text-sm text-[#f4e8d0]/75">Cost: <strong>{clampInt(merchantBuyQty, 1, 999) * (MARKET.wood?.buy ?? 6)}</strong> coin</span>
+                    <button
+                      onClick={buyWoodFromAldric}
+                      disabled={scene.loading || world.inventory.coin < (MARKET.wood?.buy ?? 6) || world.inventory.wood >= 100}
+                      className="bg-black/40 border border-[#8a6a32] hover:border-[#d6b84a] rounded-md px-3 py-2 text-sm disabled:opacity-40"
+                    >
+                      Buy wood
+                    </button>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={buySaplingFromAldric}
+                      disabled={scene.loading || world.inventory.coin < SAPLING_COST || world.choppedTrees.length === 0}
+                      className="bg-black/40 border border-[#8a6a32] hover:border-[#d6b84a] rounded-md px-3 py-2 text-sm disabled:opacity-40"
+                      title={world.choppedTrees.length === 0 ? 'No felled trees to replant' : 'Regrow one felled tree'}
+                    >
+                      🌱 Sapling · {SAPLING_COST} coin
+                    </button>
+                    <button
+                      onClick={buyAxeUpgradeFromAldric}
+                      disabled={scene.loading || world.axeLevel >= 1 || world.inventory.coin < AXE_UPGRADE_COST}
+                      className="bg-black/40 border border-[#8a6a32] hover:border-[#d6b84a] rounded-md px-3 py-2 text-sm disabled:opacity-40"
+                      title="Gather 2× wood per chop"
+                    >
+                      {world.axeLevel >= 1 ? '🪓 Sharper axe · owned' : `🪓 Sharper axe · ${AXE_UPGRADE_COST} coin`}
+                    </button>
+                  </div>
+                </div>
+
                 <div className="mt-2 text-xs text-[#f4e8d0]/65">
                   Selling updates your local resource draft immediately; Aldric&apos;s memory is persisted when you use <strong>Leave &amp; save</strong>. Haggle hard and he&apos;ll remember it.
                 </div>

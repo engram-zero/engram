@@ -839,4 +839,23 @@ párrafo: mantiene "one signature from your wallet" + "you own it / auditable by
 cuartos (community voting), no en R32/R16 (jueces).
 **Qué se hizo:** ítem del dashboard reescrito + bloque "Paste-ready corrected dashboard
 Description" en `STATUS.md`; nota del X reencuadrada. (Análisis del flujo real: storage =
-sponsor; puntero `setRoot` = firma del jugador.) **Commit:** _(este commit)_
+sponsor; puntero `setRoot` = firma del jugador.) **Commit:** 60562e8
+
+### 25 jun 2026 · Mercado v2 — Fase 1: lado de compra + spread + sinks (Prompt 14)
+**Pedido (humano):** Que Aldric VENDA bienes con coin y que el mercado tenga "ventaja de la
+casa" (spread bid/ask, como un casino): comprar siempre cuesta más coin del que se recibe al
+vender, para no poder arbitrar contra el regateo. Hacha a 70 coin.
+**Prompt sintetizado:** Fase 1 del mercado v2 con precios estáticos. (1) `WorldState` gana
+`axeLevel` (types + normalize/clone/EMPTY). (2) En `world.ts`: tabla `MARKET` con
+`{ wood: { sell: 2, buy: 6 } }` (buy > sell SIEMPRE, y buy > el techo del regateo 5 para que
+ni el mejor regateo permita arbitraje), constantes `AXE_UPGRADE_COST=70` y `SAPLING_COST=5`, y
+acciones `replantTree()` (saca el último árbol de `choppedTrees` → reaparece), `upgradeAxe()`
+(`axeLevel=1`) y `receiveBoughtWood(units)` (suma madera capada a MAX_WOOD); `harvestTree` rinde
+×2 con `axeLevel>=1`. (3) En `client-page.tsx`: handlers `buyWoodFromAldric`/`buySaplingFromAldric`/
+`buyAxeUpgradeFromAldric` que descuentan coin, aplican el efecto y registran la compra en la
+memoria de Aldric (`applyAldricSpend`, +1 trust) para que persista con Leave & save; sección
+"Buy from Aldric" en el panel del comerciante. tsc debe pasar. (Fase 2: precio dinámico por
+escasez de árboles × inflación de coin. Fase 3: gathering de stone.)
+**Qué se hizo:** `axeLevel` + `MARKET`/costos + `replantTree`/`upgradeAxe`/`receiveBoughtWood` en
+`world.ts`; yield del hacha en `harvestTree`; handlers + UI de compra en `client-page.tsx`.
+`npx tsc --noEmit` limpio. **Commit:** _(este commit)_

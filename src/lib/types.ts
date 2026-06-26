@@ -40,6 +40,8 @@ export interface WorldState {
   buildings: Building[];
   /** Enemies the player has killed. */
   enemiesKilled: number;
+  /** Tool tier bought from Aldric. 0 = base axe, 1 = sharper axe (2× wood/chop). */
+  axeLevel: number;
 }
 
 /**

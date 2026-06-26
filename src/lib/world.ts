@@ -30,7 +30,29 @@ export const BUILD_COST: Record<BuildingType, number> = { wall: 3, house: 10, bl
  * Blocks are decorative voxels — they don't collide (radius 0). */
 export const BUILD_RADIUS: Record<BuildingType, number> = { wall: 0.9, house: 1.8, block: 0 };
 
-export const EMPTY_WORLD: WorldState = { inventory: { wood: 0, stone: 0, coin: 0 }, choppedTrees: [], buildings: [], enemiesKilled: 0 };
+export const EMPTY_WORLD: WorldState = { inventory: { wood: 0, stone: 0, coin: 0 }, choppedTrees: [], buildings: [], enemiesKilled: 0, axeLevel: 0 };
+
+// ── Market (Aldric) ───────────────────────────────────────────────────────────
+// House-edge spread: the BUY price (player buys a resource with coin) is always
+// higher than the SELL price (player sells a resource for coin), so any
+// round-trip loses value — the merchant always wins. BUY must also clear the
+// haggle hard ceiling (see /api/npc MAX_WOOD_PRICE = 5) so a great negotiation
+// still can't be arbitraged against the buy-back. Prices are static in Phase 1;
+// Phase 2 makes the wood `mid` dynamic (tree scarcity × coin inflation).
+export interface ResourcePrice {
+  /** Coin the player RECEIVES per unit when selling to Aldric. */
+  sell: number;
+  /** Coin the player PAYS per unit when buying from Aldric. */
+  buy: number;
+}
+export const MARKET: Partial<Record<ResourceType, ResourcePrice>> = {
+  wood: { sell: 2, buy: 6 },
+};
+
+/** Cost in coin of the one-time "sharper axe" upgrade (2× wood per chop). */
+export const AXE_UPGRADE_COST = 70;
+/** Cost in coin of one sapling (regrows one felled tree). */
+export const SAPLING_COST = 5;
 
 const LOCALHOST_FREE_BUILD_WALLETS = new Set([
   '0xc77b3982d324c6e812119eea7dc94f0a856da59e',
@@ -97,6 +119,7 @@ export function normalizeWorldState(raw: unknown): WorldState {
     choppedTrees,
     buildings: normalizeBuildings(p?.buildings),
     enemiesKilled: Math.max(0, Number(p?.enemiesKilled ?? 0)),
+    axeLevel: Math.max(0, Math.round(Number(p?.axeLevel ?? 0))),
   };
 }
 
@@ -106,6 +129,7 @@ export function cloneWorldState(value: WorldState = EMPTY_WORLD): WorldState {
     choppedTrees: [...value.choppedTrees],
     buildings: value.buildings.map((b) => ({ ...b })),
     enemiesKilled: value.enemiesKilled,
+    axeLevel: value.axeLevel,
   };
 }
 
@@ -240,12 +264,46 @@ export function harvestTree(index: number): { depleted: boolean; gained: boolean
   if (state.inventory.wood >= MAX_WOOD) return { depleted: false, gained: false };
   const units = (harvested[index] = (harvested[index] ?? 0) + 1);
   const depleted = units >= TREE_CHOPS;
+  // Sharper axe (bought from Aldric) doubles the wood gained per chop.
+  const yieldPerChop = WOOD_PER_CHOP * (state.axeLevel >= 1 ? 2 : 1);
   commit({
     ...state,
-    inventory: { ...state.inventory, wood: Math.min(MAX_WOOD, state.inventory.wood + WOOD_PER_CHOP) },
+    inventory: { ...state.inventory, wood: Math.min(MAX_WOOD, state.inventory.wood + yieldPerChop) },
     choppedTrees: depleted ? [...state.choppedTrees, index] : state.choppedTrees,
   });
   return { depleted, gained: true };
+}
+
+// ── Market actions (coin sinks bought from Aldric) ────────────────────────────
+// These mutate world state only; the CLIENT deducts/sees coin via addResource and
+// records the interaction in Aldric's memory (so spending also builds trust and
+// persists to 0G with Leave & save), mirroring the sell/haggle flow.
+
+/** Regrow one felled tree (the most recently chopped). Returns false if the
+ * forest is already whole. The caller charges {@link SAPLING_COST} coin. */
+export function replantTree(): boolean {
+  if (state.choppedTrees.length === 0) return false;
+  commit({ ...state, choppedTrees: state.choppedTrees.slice(0, -1) });
+  return true;
+}
+
+/** Buy the one-time sharper-axe upgrade. Returns false if already owned. The
+ * caller charges {@link AXE_UPGRADE_COST} coin. */
+export function upgradeAxe(): boolean {
+  if (state.axeLevel >= 1) return false;
+  commit({ ...state, axeLevel: 1 });
+  return true;
+}
+
+/** Add bought wood to the inventory (capped at MAX_WOOD). Returns the units
+ * actually received (may be less than requested if near the cap). The caller
+ * charges `units × MARKET.wood.buy` coin for the units received. */
+export function receiveBoughtWood(units: number): number {
+  const room = Math.max(0, MAX_WOOD - state.inventory.wood);
+  const got = Math.max(0, Math.min(Math.floor(units), room));
+  if (got <= 0) return 0;
+  commit({ ...state, inventory: { ...state.inventory, wood: state.inventory.wood + got } });
+  return got;
 }
 
 // ── Building ──────────────────────────────────────────────────────────────────
