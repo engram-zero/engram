@@ -15,9 +15,9 @@
 //     NOT cross-device, NOT on-chain).
 
 import { useSyncExternalStore } from 'react';
-import { BLOCK_SCALE_MAX, BLOCK_SCALE_MIN, BLOCK_UNIT, type ResourceType, type WalletRelation, type WorldState, type Building, type BuildingType } from '@/lib/types';
+import { BLOCK_SCALE_MAX, BLOCK_SCALE_MIN, BLOCK_UNIT, type RaidEvent, type ResourceType, type WalletRelation, type WorldState, type Building, type BuildingType } from '@/lib/types';
 
-export type { ResourceType, WalletRelation, WorldState, Building, BuildingType } from '@/lib/types';
+export type { RaidEvent, ResourceType, WalletRelation, WorldState, Building, BuildingType } from '@/lib/types';
 
 /** How much wood the player can carry before they must use/drop some. Raised to
  * support AI-built structures and the pricier builds near the village centre. */
@@ -31,6 +31,8 @@ export const BUILD_COST: Record<BuildingType, number> = { wall: 3, house: 10, bl
 export const BUILD_RADIUS: Record<BuildingType, number> = { wall: 0.9, house: 1.8, block: 0 };
 const MAX_BUILD_COORD = 150;
 const MAX_BLOCK_Y = 12;
+const MAX_RAID_EVENTS = 120;
+const RAID_EVENT_TTL_MS = 1000 * 60 * 60 * 24 * 7;
 
 export const EMPTY_WORLD: WorldState = {
   inventory: { wood: 0, stone: 0, coin: 0 },
@@ -40,6 +42,7 @@ export const EMPTY_WORLD: WorldState = {
   enemiesKilled: 0,
   axeLevel: 0,
   repairKits: 0,
+  raidEvents: [],
   relations: {},
 };
 
@@ -76,6 +79,10 @@ export const REPAIR_WOOD_COST = 2;
 export const REPAIR_WOOD_HEAL = 30;
 /** HP restored when a repair kit is consumed with the wood repair. */
 export const REPAIR_KIT_HEAL = 60;
+/** Public-world hostile raid cost/damage. Future weapon upgrades can scale these. */
+export const RAID_STONE_COST = 2;
+export const RAID_BASE_DAMAGE = 18;
+export const RAID_COOLDOWN_MS = 1000 * 60 * 10;
 
 // ── Dynamic wood pricing (Phase 2) ────────────────────────────────────────────
 // A relative market: wood's coin value rises with scarcity (fewer trees left on
@@ -125,10 +132,33 @@ function applyLocalhostFreeBuild(state: WorldState, addr: string | null = wallet
   if (!isLocalhostFreeBuildWallet(addr)) return state;
   return {
     ...state,
-    inventory: { ...state.inventory, wood: MAX_WOOD, coin: Math.max(state.inventory.coin, 999) },
+    inventory: { ...state.inventory, wood: MAX_WOOD, stone: MAX_STONE, coin: Math.max(state.inventory.coin, 999) },
     axeLevel: Math.max(state.axeLevel, 1),
     repairKits: Math.max(state.repairKits, 99),
   };
+}
+
+function cleanId(raw: unknown, fallback: string): string {
+  const value = typeof raw === 'string' ? raw.trim() : '';
+  return /^[a-zA-Z0-9:_-]{1,96}$/.test(value) ? value : fallback;
+}
+
+function legacyBuildingId(b: Building, index: number): string {
+  const parts = [
+    'legacy',
+    index,
+    b.type,
+    Math.round(b.x * 10),
+    Math.round(b.z * 10),
+    Math.round((b.rot ?? 0) * 100),
+    Math.round((b.y ?? 0) * 10),
+    Math.round((b.scale ?? 0) * 100),
+  ];
+  return parts.join(':');
+}
+
+function createId(prefix: string): string {
+  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function normalizeBuildings(raw: unknown): Building[] {
@@ -144,8 +174,9 @@ function normalizeBuildings(raw: unknown): Building[] {
       Math.abs(b.x) <= MAX_BUILD_COORD &&
       Math.abs(b.z) <= MAX_BUILD_COORD
     )
-    .map((b) => {
+    .map((b, index) => {
       const base: Building = {
+        id: cleanId((b as any).id, legacyBuildingId(b, index)),
         type: b.type,
         x: b.x,
         z: b.z,
@@ -180,6 +211,36 @@ function normalizeRelations(raw: unknown): Record<string, WalletRelation> {
   return relations;
 }
 
+function normalizeRaidEvents(raw: unknown): RaidEvent[] {
+  if (!Array.isArray(raw)) return [];
+  const now = Date.now();
+  const events: RaidEvent[] = [];
+  for (const value of raw) {
+    if (!value || typeof value !== 'object') continue;
+    const p = value as Record<string, unknown>;
+    const attacker = typeof p.attacker === 'string' ? p.attacker.toLowerCase() : '';
+    const defender = typeof p.defender === 'string' ? p.defender.toLowerCase() : '';
+    if (!/^0x[a-f0-9]{40}$/.test(attacker) || !/^0x[a-f0-9]{40}$/.test(defender)) continue;
+    const at = Math.round(Number(p.at ?? 0));
+    if (!Number.isFinite(at) || at <= 0 || at > now + 1000 * 60 * 10) continue;
+    if (now - at > RAID_EVENT_TTL_MS) continue;
+    const damage = Math.max(1, Math.min(60, Math.round(Number(p.damage ?? RAID_BASE_DAMAGE))));
+    const stoneCost = Math.max(0, Math.min(20, Math.round(Number(p.stoneCost ?? RAID_STONE_COST))));
+    const weaponLevel = Math.max(0, Math.min(5, Math.round(Number(p.weaponLevel ?? 0))));
+    events.push({
+      id: cleanId(p.id, createId('raid')),
+      attacker,
+      defender,
+      buildingId: cleanId(p.buildingId, ''),
+      damage,
+      stoneCost,
+      weaponLevel,
+      at,
+    });
+  }
+  return events.filter((event) => event.buildingId).sort((a, b) => b.at - a.at).slice(0, MAX_RAID_EVENTS);
+}
+
 export function normalizeWorldState(raw: unknown): WorldState {
   const p = raw && typeof raw === 'object' ? (raw as any) : {};
   const intIndexSet = (raw: unknown): number[] =>
@@ -201,6 +262,7 @@ export function normalizeWorldState(raw: unknown): WorldState {
     enemiesKilled: Math.max(0, Number(p?.enemiesKilled ?? 0)),
     axeLevel: Math.max(0, Math.round(Number(p?.axeLevel ?? 0))),
     repairKits: Math.max(0, Math.round(Number(p?.repairKits ?? 0))),
+    raidEvents: normalizeRaidEvents(p?.raidEvents),
     relations: normalizeRelations(p?.relations),
   };
 }
@@ -214,6 +276,7 @@ export function cloneWorldState(value: WorldState = EMPTY_WORLD): WorldState {
     enemiesKilled: value.enemiesKilled,
     axeLevel: value.axeLevel,
     repairKits: value.repairKits,
+    raidEvents: value.raidEvents.map((event) => ({ ...event })),
     relations: { ...value.relations },
   };
 }
@@ -447,6 +510,53 @@ export function setWalletRelation(targetWallet: string, relation: WalletRelation
   return true;
 }
 
+export function raidDamageForWeapon(weaponLevel = 0): number {
+  return RAID_BASE_DAMAGE + Math.max(0, Math.min(5, Math.round(weaponLevel))) * 6;
+}
+
+export function latestRaidAgainst(defender: string, buildingId: string): RaidEvent | null {
+  const target = defender.toLowerCase();
+  return state.raidEvents
+    .filter((event) => event.defender === target && event.buildingId === buildingId)
+    .sort((a, b) => b.at - a.at)[0] ?? null;
+}
+
+export function recordRaidEvent(defender: string, buildingId: string): { ok: boolean; reason?: string; event?: RaidEvent } {
+  const attacker = wallet?.toLowerCase();
+  const target = defender.toLowerCase();
+  if (!attacker) return { ok: false, reason: 'Connect a wallet first.' };
+  if (!/^0x[a-f0-9]{40}$/.test(target)) return { ok: false, reason: 'Invalid defender wallet.' };
+  if (attacker === target) return { ok: false, reason: 'Cannot raid your own buildings.' };
+  if (relationForWallet(target) !== 'hostile') return { ok: false, reason: 'Mark this wallet Hostile before raiding.' };
+  if (!buildingId) return { ok: false, reason: 'Missing building id.' };
+  const freeBuild = isLocalhostFreeBuildWallet();
+  if (!freeBuild && state.inventory.stone < RAID_STONE_COST) return { ok: false, reason: `Need ${RAID_STONE_COST} stone to raid.` };
+  const previous = latestRaidAgainst(target, buildingId);
+  const now = Date.now();
+  if (previous && now - previous.at < RAID_COOLDOWN_MS) {
+    const mins = Math.ceil((RAID_COOLDOWN_MS - (now - previous.at)) / 60000);
+    return { ok: false, reason: `Raid cooldown: ${mins} min.` };
+  }
+
+  const event: RaidEvent = {
+    id: createId('raid'),
+    attacker,
+    defender: target,
+    buildingId,
+    damage: raidDamageForWeapon(0),
+    stoneCost: RAID_STONE_COST,
+    weaponLevel: 0,
+    at: now,
+  };
+  const raidEvents = [event, ...state.raidEvents].slice(0, MAX_RAID_EVENTS);
+  commit({
+    ...state,
+    inventory: { ...state.inventory, stone: freeBuild ? MAX_STONE : Math.max(0, state.inventory.stone - RAID_STONE_COST) },
+    raidEvents,
+  });
+  return { ok: true, event };
+}
+
 // ── Building ──────────────────────────────────────────────────────────────────
 
 /** Place a structure if the player can afford it (deducts `cost` wood). The
@@ -460,7 +570,7 @@ export function placeBuilding(b: Building, cost: number = BUILD_COST[b.type]): b
   if (b.type === 'house') maxHp = 150;
   if (b.type === 'wall') maxHp = 80;
 
-  const nextBuilding: Building = { ...b, woodCost: freeBuild ? 0 : cost, hp: maxHp, maxHp };
+  const nextBuilding: Building = { ...b, id: b.id ?? createId('build'), woodCost: freeBuild ? 0 : cost, hp: maxHp, maxHp };
   commit({
     ...state,
     inventory: { ...state.inventory, wood: freeBuild ? MAX_WOOD : state.inventory.wood - cost },

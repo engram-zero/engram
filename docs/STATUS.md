@@ -158,6 +158,9 @@ submit a revised version if you advance. Snapshot = `main` at the round deadline
       build Aldric's trust and persist to 0G. (`d71358b`, `fbef41a`, `db60162`)
 - [x] **Player relations MVP** — public-world wallets can be marked neutral/allied/hostile;
       relations persist in the player's 0G world bundle and public builds get relation markers.
+      Hostile wallets can now be raided via outgoing `RaidEvent`s: the attacker spends stone,
+      saves their world bundle to 0G, and the on-chain registry root makes the event discoverable.
+      Defender bundles are not directly mutated.
 - [x] **Repair/durability MVP** — buildings have persisted HP, show damage visually with
       WebGL HP bars, and repair costs wood; Aldric sells repair kits as a repair boost.
       Wallet-loaded/public builds are clamped on hydrate so bad 0G data cannot cover the camera.
@@ -172,6 +175,6 @@ submit a revised version if you advance. Snapshot = `main` at the round deadline
    triggers a verifiable 0G compute job (proof-of-useful-work), not a placeholder.
 
 Full backlog (still open) in `docs/ENGRAM_PROMPTS.md`: raids/sabotage fairness from player
-relations (13), more market goods/stock depth (14), fair demon sieges (15), gathering
+relations (13: cooldowns/defense/weapon upgrades), more market goods/stock depth (14), fair demon sieges (15), gathering
 animation polish (16), editable terrain / bigger map (17), advanced repair/damage logs and
 fair offline maintenance rules (18), verified 0G-compute mining live test/funding (20).
