@@ -31,8 +31,15 @@ The Zero Cup rewards **building with prompts**, so we keep an auditable trail. F
 ## Conventions
 - **Run `npx tsc --noEmit` before committing.** Prefer not to run `next build` while
   a dev server holds `.next` (Windows EPERM) — rely on tsc.
-- `npm install` needs **`--legacy-peer-deps`** (react19 / web3modal peer conflict).
-- End commit messages with `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
+- **Use `pnpm install`** — Vercel deploys with **pnpm + `--frozen-lockfile`**, so
+  `pnpm-lock.yaml` is the single source of truth. Adding/updating a dep MUST run
+  `pnpm install` (which updates `pnpm-lock.yaml`); installing with **npm breaks the
+  Vercel build** (stale pnpm lockfile). pnpm handles the react19/web3modal peer
+  conflict with no flags. (`package-lock.json` is gitignored — don't commit it.)
+- End commit messages with the co-author identity of the actual agent that made
+  the change. Do not impersonate a different agent just because this file is
+  named `CLAUDE.md`. If Codex did the work, use Codex's co-author identity; if
+  Claude did the work, use Claude's co-author identity.
 - **Never commit** `.claude/settings.json` (local harness config) or any real key.
   `.env*` are gitignored. `ENGRAM_SPONSOR_KEY` is a server-only throwaway testnet key.
 - Multiple people push to `main` concurrently (martelaxe = 0G/contracts, henrique =

@@ -3,6 +3,10 @@
 /.pnp
 .pnp.*
 
+# Vercel deploys with pnpm; keep pnpm-lock.yaml as the only lockfile. Installing
+# with npm regenerates this and breaks the frozen pnpm install on Vercel.
+package-lock.json
+
 # next.js
 /.next/
 /out/
