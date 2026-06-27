@@ -15,6 +15,8 @@ export type BuildingType = 'wall' | 'house' | 'block';
  * voxel the AI stacks/colours to sculpt arbitrary shapes (trees, statues…);
  * y/color/scale only apply to blocks. */
 export interface Building {
+  /** Stable ID used by public raid/repair history. Older saves get a deterministic fallback on load. */
+  id?: string;
   type: BuildingType;
   x: number;
   z: number;
@@ -33,6 +35,25 @@ export interface Building {
   maxHp?: number;
 }
 
+export interface RaidEvent {
+  /** Stable event ID inside the attacker's world bundle. */
+  id: string;
+  /** Wallet that authored/spent resources for this event. */
+  attacker: string;
+  /** Wallet whose public building is targeted. */
+  defender: string;
+  /** Target `Building.id` in the defender's world bundle. */
+  buildingId: string;
+  /** HP removed from effective public-world health. */
+  damage: number;
+  /** Stone spent to publish this event. */
+  stoneCost: number;
+  /** Reserved for future weapon upgrades. */
+  weaponLevel: number;
+  /** Epoch ms when the attacker created the event. */
+  at: number;
+}
+
 export interface WorldState {
   inventory: Record<ResourceType, number>;
   /** Indices (into map.ts TREES) of trees the player has chopped. */
@@ -47,6 +68,8 @@ export interface WorldState {
   axeLevel: number;
   /** Consumable building repairs bought from Aldric. */
   repairKits: number;
+  /** Outgoing public-world raid/sabotage events authored by this wallet. */
+  raidEvents: RaidEvent[];
   /**
    * Player-declared social graph for public-world wallets. Neutral can be
    * represented by absence; allied/hostile are persisted in the same 0G bundle

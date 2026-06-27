@@ -25,7 +25,7 @@
 10. [Mercado: vender recursos a los NPCs → reputación en 0G](#prompt-10--mercado-vender-recursos--reputación) — ✅ v1 + v2 done (venta simple + **regateo con LLM**: Aldric acepta/contraoferta/rechaza, ajusta trust, persiste en 0G)
 11. [Construcción con IA + tokens (describir y que la IA edifique)](#prompt-11--construcción-con-ia--tokens) — ✅ done (`/api/build` + modal; **bloques voxel** refinados a grid fino, preview, costo USD, tope de gasto, BYO key)
 12. [Edificios habitables (entrar dentro)](#prompt-12--edificios-habitables-entrar) — ✅ done (casas huecas con puerta libre)
-13. [Relaciones entre players: aliados, enemigos y sabotaje](#prompt-13--relaciones-entre-players-aliados-enemigos-y-sabotaje) — 🟡 MVP done: ally/hostile por wallet persistido en 0G; sabotaje/raids pendiente
+13. [Relaciones entre players: aliados, enemigos y sabotaje](#prompt-13--relaciones-entre-players-aliados-enemigos-y-sabotaje) — 🟡 MVP+ done: ally/hostile por wallet + raid events sobre edificios públicos, persistidos en 0G y anclados por registry; fairness/weapon upgrades pendiente
 14. [Mercado v2: bienes comprables, sinks y reparación](#prompt-14--mercado-v2-bienes-comprables-sinks-y-reparación) — 🟡 mayormente done (Aldric **vende** bienes con coin; **spread de casa** + **precio dinámico** madera; **stone** minable/comerciable; repair kits como boost de reparación). Más bienes/stock depth pendiente
 15. [Asedios y demonios con fairness offline](#prompt-15--asedios-y-demonios-con-fairness-offline) — ⏳ pendiente
 16. [Animaciones de gathering y feedback físico](#prompt-16--animaciones-de-gathering-y-feedback-físico) — ⏳ pendiente

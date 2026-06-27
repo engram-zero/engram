@@ -970,3 +970,24 @@ badge DOM de HP y los anillos neutrales públicos; `normalizeBuildings` ahora cl
 desde bundles 0G; edificios dañados muestran barras HP WebGL; `repairBuilding` cuesta madera y
 consume kit solo como boost si existe; copies de Repair/Aldric actualizadas. `npx tsc --noEmit`
 limpio. **Commit:** _(este commit)_
+
+### 26 jun 2026 · Task 13b — Raid events sobre edificios públicos
+**Pedido (humano):** Pulir Task 13: que la gente pueda dañar edificios de otros jugadores, pero
+sin editar directamente el bundle del defensor. Preparar el harness/wrapper para eventos, historia
+por edificio, coste en stone, y dejar listo el camino para upgrades de armas; "on-chain como siempre".
+**Prompt sintetizado:** Implementa el siguiente incremento de relaciones PvP como **event sourcing**
+portable. No permitas que wallet B mute el `WorldState` de wallet A; en su lugar, crea `RaidEvent`s
+en el bundle 0G del atacante (`attacker`, `defender`, `buildingId`, `damage`, `stoneCost`,
+`weaponLevel`, `at`). Añade IDs estables a `Building` y backfill determinístico para saves antiguos.
+La acción de raid solo funciona contra wallets marcadas `hostile`, cuesta stone, respeta cooldown, y
+marca el mundo como dirty para que **Save World** suba el bundle a 0G y ancle el nuevo root en
+`EngramRegistry`. `public-world` debe escanear bundles, leer eventos salientes y aplicar daño efectivo
+al render público del edificio objetivo (`effectiveHP = ownerHP - raidEvents`). En la UI aérea añade
+herramienta **Raid** sobre edificios públicos hostiles y feedback claro: evento en cola hasta guardar.
+No implementar weapon upgrades todavía, solo dejar `weaponLevel` y `raidDamageForWeapon` preparados.
+Verifica con `npx tsc --noEmit`.
+**Qué se hizo:** `Building.id` + `RaidEvent` en tipos; `WorldState.raidEvents` normalizado/clonado;
+`recordRaidEvent` hostile-only con coste `RAID_STONE_COST`, cooldown y `weaponLevel`; `public-world`
+descarga builds + raid events de los bundles 0G y calcula HP público efectivo; herramienta aérea
+**Raid** crea eventos locales, muestra daño inmediato y exige **Save World** para publicarlos/on-chain
+via root registry. `npx tsc --noEmit` limpio. **Commit:** _(este commit)_

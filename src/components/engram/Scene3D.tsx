@@ -46,10 +46,12 @@ import {
   removeBuilding,
   repairBuilding,
   damageBuilding,
+  recordRaidEvent,
   recordEnemyKill,
   setWalletRelation,
   BUILD_COST,
   BUILD_RADIUS,
+  RAID_STONE_COST,
   REPAIR_WOOD_COST,
   isLocalhostFreeBuildWallet,
   type WalletRelation,
@@ -70,7 +72,7 @@ type PlayerPos = { x: number; z: number; heading: number };
 type PlayerPosRef = React.MutableRefObject<PlayerPos>;
 type ViewMode = 'fp' | 'aerial';
 type MovementInput = { forward: boolean; backward: boolean; left: boolean; right: boolean };
-type BuildTool = BuildingType | 'demolish' | 'repair' | 'damage';
+type BuildTool = BuildingType | 'demolish' | 'repair' | 'raid' | 'damage';
 type ToolFeedback = { text: string; tone: 'good' | 'bad' | 'info' };
 
 const shortWallet = (wallet: string) => `${wallet.slice(0, 6)}…${wallet.slice(-4)}`;
@@ -1969,6 +1971,25 @@ function Buildings({
 }) {
   const world = useWorld();
   const publicWorld = usePublicWorld();
+  const handlePublicBuildingClick = (b: (Building & { owner?: string; raidEvents?: { id: string }[] }), relation: WalletRelation) => {
+    if (tool !== 'raid') return;
+    if (!b.owner || !b.id) {
+      onToolFeedback({ text: 'This building is missing raid metadata.', tone: 'bad' });
+      return;
+    }
+    if (relation !== 'hostile') {
+      onToolFeedback({ text: 'Mark that wallet Hostile before raiding.', tone: 'info' });
+      return;
+    }
+    const result = recordRaidEvent(b.owner, b.id);
+    if (!result.ok) {
+      onToolFeedback({ text: result.reason ?? 'Raid failed.', tone: 'bad' });
+      return;
+    }
+    onDraftChange();
+    onToolFeedback({ text: `Raid event queued: -${result.event?.damage ?? 0} HP (-${RAID_STONE_COST} stone). Save World to publish.`, tone: 'bad' });
+  };
+
   const handleOwnBuildingClick = (index: number) => {
     if (tool === 'demolish') {
       removeBuilding(index);
@@ -2008,20 +2029,49 @@ function Buildings({
     <group>
       {publicWorld.buildings.map((b, i) => {
         const relation = world.relations[b.owner.toLowerCase()] ?? 'neutral';
-        return <PublicBuildingMesh key={`public-${b.owner}-${i}`} b={b} relation={relation} />;
+        const publicEventIds = new Set((b.raidEvents ?? []).map((event) => event.id));
+        const localRaidDamage = world.raidEvents
+          .filter((event) => event.defender === b.owner && event.buildingId === b.id && !publicEventIds.has(event.id))
+          .reduce((sum, event) => sum + event.damage, 0);
+        const displayBuilding = localRaidDamage > 0
+          ? { ...b, hp: Math.max(0, (b.hp ?? b.maxHp ?? 1) - localRaidDamage), raidDamage: (b.raidDamage ?? 0) + localRaidDamage }
+          : b;
+        return (
+          <group
+            key={`public-${b.owner}-${b.id ?? i}`}
+            onClick={(e) => {
+              if (tool !== 'raid') return;
+              e.stopPropagation();
+              handlePublicBuildingClick(displayBuilding, relation);
+            }}
+          >
+            <PublicBuildingMesh b={displayBuilding} relation={relation} />
+          </group>
+        );
       })}
-      {world.buildings.map((b, i) => (
-        <group
-          key={i}
-          onClick={(e) => {
-            if (tool !== 'demolish' && tool !== 'repair' && tool !== 'damage') return;
-            e.stopPropagation();
-            handleOwnBuildingClick(i);
-          }}
-        >
-          <BuildingMesh b={b} />
-        </group>
-      ))}
+      {world.buildings.map((b, i) => {
+        const owner = getWorldWallet()?.toLowerCase();
+        const incomingRaidDamage = owner && b.id
+          ? publicWorld.raidEvents
+            .filter((event) => event.defender === owner && event.buildingId === b.id)
+            .reduce((sum, event) => sum + event.damage, 0)
+          : 0;
+        const displayBuilding = incomingRaidDamage > 0
+          ? { ...b, hp: Math.max(0, (b.hp ?? b.maxHp ?? 1) - incomingRaidDamage) }
+          : b;
+        return (
+          <group
+            key={b.id ?? i}
+            onClick={(e) => {
+              if (tool !== 'demolish' && tool !== 'repair' && tool !== 'damage') return;
+              e.stopPropagation();
+              handleOwnBuildingClick(i);
+            }}
+          >
+            <BuildingMesh b={displayBuilding} />
+          </group>
+        );
+      })}
     </group>
   );
 }
@@ -2165,7 +2215,7 @@ function BuildController({
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const isBuild = mode !== 'demolish' && mode !== 'repair' && mode !== 'damage';
+  const isBuild = mode !== 'demolish' && mode !== 'repair' && mode !== 'raid' && mode !== 'damage';
   // `world` keeps the ghost validity reactive to inventory/buildings changes.
   void world;
   const valid = isBuild && !!ghost && canPlaceBuilding(mode, ghost[0], ghost[1]);
@@ -2195,6 +2245,8 @@ function BuildController({
       } else {
         onToolFeedback({ text: `No damaged building in range, or not enough wood (${REPAIR_WOOD_COST}).`, tone: 'info' });
       }
+    } else if (mode === 'raid') {
+      onToolFeedback({ text: 'Click a hostile public building to queue a raid event.', tone: 'info' });
     } else if (mode === 'damage') {
       if (isLocalhostFreeBuildWallet() && damageNearestForTest(px, pz)) {
         onDraftChange();
@@ -3244,6 +3296,10 @@ export default function Scene3D({ memories = null, active = null, talking = fals
       }
       return;
     }
+    if (buildMode === 'raid') {
+      showToolFeedback({ text: 'Click a hostile public building to queue a raid event.', tone: 'info' });
+      return;
+    }
     if (buildMode === 'damage') {
       if (isLocalhostFreeBuildWallet() && damageNearestForTest(p.x, p.z, 3)) {
         markBuildDraftDirty();
@@ -3784,7 +3840,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
                 </mesh>
               )}
               {explorable && buildMode && !isTouchDevice && <BuildController mode={buildMode} onDraftChange={markBuildDraftDirty} onToolFeedback={showToolFeedback} />}
-              {explorable && buildMode && buildMode !== 'demolish' && buildMode !== 'repair' && buildMode !== 'damage' && isTouchDevice && (
+              {explorable && buildMode && buildMode !== 'demolish' && buildMode !== 'repair' && buildMode !== 'raid' && buildMode !== 'damage' && isTouchDevice && (
                 <MobileBuildGhost mode={buildMode} posRef={posRef} rot={buildRot} />
               )}
             </>
@@ -3847,6 +3903,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
                   ['wall', '🧱', 'Wall', BUILD_COST.wall],
                   ['house', '🏠', 'House', BUILD_COST.house],
                   ['repair', '🧰', 'Repair', null],
+                  ['raid', '⚔️', 'Raid', null],
                   ['demolish', '🧨', 'Demolish', null],
                   ...(localhostGod ? [['damage', '💥', 'Damage test', null] as const] : []),
                 ] as const).map(([m, icon, label, cost]) => (
@@ -3912,6 +3969,8 @@ export default function Scene3D({ memories = null, active = null, talking = fals
                       ? 'Tap a building to demolish'
                       : buildMode === 'repair'
                         ? `Tap a damaged building to repair · costs ${REPAIR_WOOD_COST} wood`
+                        : buildMode === 'raid'
+                          ? `Tap a hostile public building to raid · costs ${RAID_STONE_COST} stone`
                         : buildMode === 'damage'
                           ? 'Localhost only · tap your building to damage it'
                         : 'Tap ground to place · tap tool to cancel'}
@@ -4311,7 +4370,7 @@ Left-click to look around · right-click to act · WASD to walk · V for aerial
           {/* Build controls: drive the avatar to aim the ghost, then place. */}
           {buildMode && (
             <div className="absolute bottom-20 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2">
-              {buildMode !== 'demolish' && buildMode !== 'repair' && buildMode !== 'damage' && (
+              {buildMode !== 'demolish' && buildMode !== 'repair' && buildMode !== 'raid' && buildMode !== 'damage' && (
                 <button
                   onClick={() => setBuildRot((r) => (r + Math.PI / 4) % (Math.PI * 2))}
                   className="rounded-2xl border border-[#5a4a28] bg-black/70 px-4 py-3 text-sm font-semibold text-[#f4e8d0]"
@@ -4323,7 +4382,7 @@ Left-click to look around · right-click to act · WASD to walk · V for aerial
                 onClick={placeMobileBuilding}
                 className="rounded-2xl border border-[#8fd06a] bg-[rgba(16,20,10,0.95)] px-5 py-3 text-sm font-semibold text-[#f4e8d0]"
               >
-                {buildMode === 'demolish' ? '🧨 Demolish nearby' : buildMode === 'repair' ? '🧰 Repair nearby' : buildMode === 'damage' ? '💥 Damage nearby' : '⬇ Place here'}
+                {buildMode === 'demolish' ? '🧨 Demolish nearby' : buildMode === 'repair' ? '🧰 Repair nearby' : buildMode === 'raid' ? '⚔️ Raid target' : buildMode === 'damage' ? '💥 Damage nearby' : '⬇ Place here'}
               </button>
             </div>
           )}
@@ -4334,6 +4393,8 @@ Left-click to look around · right-click to act · WASD to walk · V for aerial
                 ? 'Move next to a building · tap Demolish'
                 : buildMode === 'repair'
                   ? 'Move next to a damaged building · tap Repair'
+                  : buildMode === 'raid'
+                    ? `Tap a hostile public building · costs ${RAID_STONE_COST} stone`
                   : buildMode === 'damage'
                     ? 'Localhost test · move next to a building · tap Damage'
                     : 'Drive to aim the ghost · tap Place'}
