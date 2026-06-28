@@ -1026,3 +1026,16 @@ es bajo. En `/api/mine`: mismo helper, pasarlo a `acknowledgeProviderSigner` (la
 flujo). Evitar literales BigInt (`10n`) por el target del tsconfig. tsc debe pasar.
 **Qué se hizo:** `legacyGasPrice` + chequeo de saldo en `fund-compute.ts`; gas legacy en
 `acknowledgeProviderSigner` en `/api/mine`. `npx tsc --noEmit` limpio. **Commit:** _(este commit)_
+
+### 28 jun 2026 · Afinar arma FP: aparece solo al golpear + lanza en combate (sobre Prompt 16)
+**Pedido (humano):** Afinar la animación de hachazos/golpes de Henrique; que la herramienta
+aparezca **solo cuando se la llama** (al talar/atacar), no sostenida todo el tiempo.
+**Prompt sintetizado:** Reescribe `ChopArm` en `Scene3D.tsx` (sin tocar las partículas/feedback de
+Henrique): (1) ocultar el arma en idle y mostrarla solo mientras `chopArmSwing.phase > 0.02`, con
+un escalado `sin(phase·π)` para que crezca/desaparezca suave (no "pop"). (2) Dos armas distintas
+según la acción: **hacha** (golpe vertical) para talar/minar y **lanza** (estocada hacia adelante)
+para combate, alternando la visibilidad de sub-grupos `axeRef`/`spearRef` por `chopArmSwing.type`.
+El disparo del swing ya ocurre en cada golpe del hold (tala) y por ataque (combate). tsc debe pasar.
+**Qué se hizo:** `ChopArm` reescrito con gating de visibilidad + escalado suave + geometría de lanza
+para combate; hacha para gather. `npx tsc --noEmit` limpio. (FX view-space; verificación visual en
+navegador pendiente del usuario.) **Commit:** _(este commit)_

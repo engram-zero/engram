@@ -1520,10 +1520,13 @@ function HitDust() {
 }
 
 // ─── Prompt 16: ChopArm ───────────────────────────────────────────────────────
-// A view-space axe handle + head that swings down (recoil) each time the player
-// chops, then springs back to idle. Mounted only while fpExploring.
+// A view-space weapon that appears ONLY while the player is actually striking,
+// then vanishes — no tool is held at idle. An AXE swings down for chopping; a
+// SPEAR thrusts forward for combat. Mounted while fpExploring; hidden until a swing.
 function ChopArm() {
   const groupRef = useRef<THREE.Group>(null);
+  const axeRef = useRef<THREE.Group>(null);
+  const spearRef = useRef<THREE.Group>(null);
   const { camera } = useThree();
   const _fwd   = useMemo(() => new THREE.Vector3(), []);
   const _right  = useMemo(() => new THREE.Vector3(), []);
@@ -1536,59 +1539,83 @@ function ChopArm() {
     const dt = Math.min(dtRaw, 0.05);
     // Decay swing phase (1 → 0 over ~0.33s)
     chopArmSwing.phase = Math.max(0, chopArmSwing.phase - dt * 3.0);
-    // Bell-shaped swing: fast down, then back up
-    const swing = Math.sin(chopArmSwing.phase * Math.PI) * 0.65;
+    const phase = chopArmSwing.phase;
+
+    // The weapon only exists while striking; hide it (and skip posing) at idle.
+    const active = phase > 0.02;
+    grp.visible = active;
+    const isChop = chopArmSwing.type === 'chop';
+    if (axeRef.current) axeRef.current.visible = isChop;
+    if (spearRef.current) spearRef.current.visible = !isChop;
+    if (!active) return;
+
+    // Grow in / shrink out quickly so it reads as a strike, not a hard pop-in.
+    grp.scale.setScalar(Math.min(1, Math.sin(phase * Math.PI) * 2.4));
+    // Bell-shaped swing: fast out, then back.
+    const swing = Math.sin(phase * Math.PI) * 0.65;
 
     camera.getWorldDirection(_fwd);
     _right.crossVectors(_fwd, _up).normalize();
 
-    if (chopArmSwing.type === 'chop') {
-      // Position in front-right-below the camera
+    if (isChop) {
+      // Axe: vertical chop in front-right-below the camera.
       grp.position
         .copy(camera.position)
         .addScaledVector(_fwd,   0.46)
         .addScaledVector(_right, 0.23)
         .addScaledVector(_up,   -0.24 - swing * 0.09);
-
-      // Match camera orientation, then tilt vertically by the swing angle
       grp.quaternion.copy(camera.quaternion);
       _swingQ.setFromAxisAngle(_right, -swing * 0.9);
       grp.quaternion.premultiply(_swingQ);
     } else {
-      // Lateral attack (from right to left)
+      // Spear: thrust straight forward (punches out on the swing, retracts back).
       grp.position
         .copy(camera.position)
-        .addScaledVector(_fwd,   0.46 + swing * 0.1)
-        .addScaledVector(_right, 0.23 - swing * 0.45)
-        .addScaledVector(_up,   -0.20 - swing * 0.05);
-
+        .addScaledVector(_fwd,   0.40 + swing * 0.55)
+        .addScaledVector(_right, 0.16)
+        .addScaledVector(_up,   -0.20 + swing * 0.04);
       grp.quaternion.copy(camera.quaternion);
-      // Yaw left
-      _swingQ.setFromAxisAngle(_up, swing * 1.2);
-      grp.quaternion.premultiply(_swingQ);
-      // Roll/tilt weapon horizontally
-      _swingQ.setFromAxisAngle(_fwd, swing * 0.8);
+      // Slight downward dip as it lands.
+      _swingQ.setFromAxisAngle(_right, -swing * 0.18);
       grp.quaternion.premultiply(_swingQ);
     }
   });
 
   return (
-    <group ref={groupRef}>
-      {/* Handle */}
-      <mesh rotation={[Math.PI / 2, 0, 0]}>
-        <cylinderGeometry args={[0.018, 0.013, 0.4, 6]} />
-        <meshStandardMaterial color="#7a5a32" roughness={0.95} />
-      </mesh>
-      {/* Axe head */}
-      <mesh position={[0.012, 0, -0.22]} rotation={[0, 0.12, Math.PI / 4]}>
-        <boxGeometry args={[0.13, 0.17, 0.032]} />
-        <meshStandardMaterial color="#9a9ab0" roughness={0.3} metalness={0.72} />
-      </mesh>
-      {/* Blade shine */}
-      <mesh position={[0.008, 0.065, -0.233]}>
-        <boxGeometry args={[0.018, 0.11, 0.008]} />
-        <meshStandardMaterial color="#d8d8f0" roughness={0.15} metalness={0.92} />
-      </mesh>
+    <group ref={groupRef} visible={false}>
+      {/* Axe — chopping */}
+      <group ref={axeRef}>
+        <mesh rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[0.018, 0.013, 0.4, 6]} />
+          <meshStandardMaterial color="#7a5a32" roughness={0.95} />
+        </mesh>
+        <mesh position={[0.012, 0, -0.22]} rotation={[0, 0.12, Math.PI / 4]}>
+          <boxGeometry args={[0.13, 0.17, 0.032]} />
+          <meshStandardMaterial color="#9a9ab0" roughness={0.3} metalness={0.72} />
+        </mesh>
+        <mesh position={[0.008, 0.065, -0.233]}>
+          <boxGeometry args={[0.018, 0.11, 0.008]} />
+          <meshStandardMaterial color="#d8d8f0" roughness={0.15} metalness={0.92} />
+        </mesh>
+      </group>
+      {/* Spear — combat (hidden until an attack) */}
+      <group ref={spearRef} visible={false}>
+        {/* Shaft pointing forward (−z) */}
+        <mesh position={[0, 0, -0.16]} rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[0.014, 0.012, 0.64, 6]} />
+          <meshStandardMaterial color="#6f4f2e" roughness={0.95} />
+        </mesh>
+        {/* Steel tip */}
+        <mesh position={[0, 0, -0.54]} rotation={[-Math.PI / 2, 0, 0]}>
+          <coneGeometry args={[0.03, 0.14, 8]} />
+          <meshStandardMaterial color="#c6cad8" roughness={0.18} metalness={0.88} />
+        </mesh>
+        {/* Binding collar */}
+        <mesh position={[0, 0, -0.44]} rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[0.022, 0.022, 0.03, 6]} />
+          <meshStandardMaterial color="#3a2a1a" roughness={0.9} />
+        </mesh>
+      </group>
     </group>
   );
 }
