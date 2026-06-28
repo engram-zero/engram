@@ -111,6 +111,15 @@ export const dynamicEnemyState: Record<string, { x: number; z: number; speed: nu
 
 export const dynamicPlayerState = { x: 0, z: 0, hp: 100, maxHp: 100, dead: false, attackTimer: 0 };
 
+// ─── Gathering & combat animation state (module-level mutable, read by useFrame) ─
+// Same pattern as dynamicEnemyState: zero React overhead, picked up every frame.
+const enemyHitFlash: Record<string, number> = {};          // 0..1 flash intensity per enemy
+const enemyKnockback: Record<string, { vx: number; vz: number }> = {};
+const treeShake: Record<number, { amp: number }> = {};     // amp decays from 0.15 → 0 after each hit
+const woodChipQueue: Array<{ x: number; y: number; z: number; big: boolean }> = [];
+const hitDustQueue: Array<{ x: number; y: number; z: number }> = [];
+const chopArmSwing = { phase: 0, type: 'chop' as 'chop' | 'attack' }; // 1 = just triggered, decays to 0 at ~3/s
+
 // ─── First-person walking constants ───────────────────────────────────────────
 const EYE_HEIGHT = 1.7;
 const PLAYER_RADIUS = 0.45;
@@ -1185,10 +1194,10 @@ function TreePart({
   chopped: ReadonlySet<number>;
 }) {
   const ref = useRef<THREE.InstancedMesh>(null);
+  const dummy = useMemo(() => new THREE.Object3D(), []);
   useLayoutEffect(() => {
     const mesh = ref.current;
     if (!mesh) return;
-    const dummy = new THREE.Object3D();
     items.forEach((t, i) => {
       // A chopped tree collapses to zero scale (invisible) but keeps its slot.
       if (chopped.has(t.idx)) {
@@ -1204,7 +1213,35 @@ function TreePart({
     });
     mesh.instanceMatrix.needsUpdate = true;
     mesh.computeBoundingSphere();
-  }, [items, localY, chopped]);
+  }, [items, localY, chopped, dummy]);
+
+  // Shake animation: per-frame matrix update for the currently-hit tree only.
+  useFrame((state) => {
+    const mesh = ref.current;
+    if (!mesh) return;
+    let dirty = false;
+    const t = state.clock.elapsedTime;
+    for (const idxStr of Object.keys(treeShake)) {
+      const idx = Number(idxStr);
+      const shake = treeShake[idx];
+      if (!shake || shake.amp <= 0.002) continue;
+      const slot = items.findIndex((it) => it.idx === idx);
+      if (slot < 0 || chopped.has(idx)) continue;
+      const tree = items[slot];
+      dummy.position.set(tree.x, getHeightAt(tree.x, tree.z) + localY * tree.scale, tree.z);
+      dummy.scale.setScalar(tree.scale);
+      dummy.rotation.set(
+        Math.sin(t * 38) * shake.amp * 0.18,
+        tree.rot,
+        Math.sin(t * 38 + 1.1) * shake.amp * 0.12,
+      );
+      dummy.updateMatrix();
+      mesh.setMatrixAt(slot, dummy.matrix);
+      dirty = true;
+    }
+    if (dirty) mesh.instanceMatrix.needsUpdate = true;
+  });
+
   if (items.length === 0) return null;
   return <instancedMesh ref={ref} args={[geometry, material, items.length]} castShadow />;
 }
@@ -1299,6 +1336,15 @@ function InstancedTrees() {
     return { pine, broad, bush };
   }, [withIdx]);
 
+  // Decay all active tree-shake amplitudes each frame.
+  useFrame((_, dtRaw) => {
+    const dt = Math.min(dtRaw, 0.05);
+    for (const idxStr of Object.keys(treeShake)) {
+      const idx = Number(idxStr);
+      if (treeShake[idx]) treeShake[idx].amp = Math.max(0, treeShake[idx].amp - dt * 2.8);
+    }
+  });
+
   return (
     <group>
       {Array.from({ length: TREE_BUCKETS }, (_, b) => (
@@ -1316,6 +1362,214 @@ function InstancedTrees() {
           <TreePart items={groups.bush[b]} geometry={geo.bush} material={buckets[b].bushLeaf} localY={0.55} chopped={chopped} />
         </group>
       ))}
+    </group>
+  );
+}
+
+// ─── Prompt 16: WoodChips ────────────────────────────────────────────────────
+// Burst of flying wood chips emitted on each axe hit and a bigger burst when the
+// tree falls. Reads from the module-level woodChipQueue (populated by the chop loop).
+const MAX_CHIPS = 48;
+type ChipParticle = { x: number; y: number; z: number; vx: number; vy: number; vz: number; life: number; maxLife: number; active: boolean };
+
+function WoodChips() {
+  const pointsRef = useRef<THREE.Points>(null);
+  const particles = useMemo<ChipParticle[]>(
+    () => Array.from({ length: MAX_CHIPS }, () => ({ x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, life: 0, maxLife: 0.6, active: false })),
+    []
+  );
+  const positions = useMemo(() => new Float32Array(MAX_CHIPS * 3), []);
+  const colors    = useMemo(() => new Float32Array(MAX_CHIPS * 3), []);
+
+  useFrame((_, dtRaw) => {
+    const dt = Math.min(dtRaw, 0.05);
+    // Drain emit queue
+    while (woodChipQueue.length > 0) {
+      const emit = woodChipQueue.shift()!;
+      const count = emit.big ? 8 : 5;
+      let spawned = 0;
+      for (let i = 0; i < MAX_CHIPS && spawned < count; i++) {
+        const p = particles[i];
+        if (p.active) continue;
+        p.x = emit.x + (Math.random() - 0.5) * 0.3;
+        p.y = emit.y;
+        p.z = emit.z + (Math.random() - 0.5) * 0.3;
+        const speed = emit.big ? 1.8 + Math.random() * 2.0 : 1.0 + Math.random() * 1.2;
+        const angle = Math.random() * Math.PI * 2;
+        p.vx = Math.cos(angle) * speed * 0.7;
+        p.vy = 1.5 + Math.random() * (emit.big ? 2.5 : 1.8);
+        p.vz = Math.sin(angle) * speed * 0.7;
+        p.life = emit.big ? 0.8 : 0.6;
+        p.maxLife = p.life;
+        p.active = true;
+        spawned++;
+      }
+    }
+    // Simulate
+    for (let i = 0; i < MAX_CHIPS; i++) {
+      const p = particles[i];
+      if (!p.active) { positions[i * 3 + 1] = -1000; continue; }
+      p.vy -= 7.0 * dt; // gravity
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.z += p.vz * dt;
+      p.life -= dt;
+      if (p.life <= 0 || p.y < -1) { p.active = false; positions[i * 3 + 1] = -1000; continue; }
+      positions[i * 3] = p.x; positions[i * 3 + 1] = p.y; positions[i * 3 + 2] = p.z;
+      const fade = p.life / p.maxLife;
+      colors[i * 3] = 0.55 * fade; colors[i * 3 + 1] = 0.33 * fade; colors[i * 3 + 2] = 0.12 * fade;
+    }
+    if (pointsRef.current) {
+      pointsRef.current.geometry.attributes.position.needsUpdate = true;
+      pointsRef.current.geometry.attributes.color.needsUpdate = true;
+    }
+  });
+
+  return (
+    <points ref={pointsRef}>
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-position" args={[positions, 3]} />
+        <bufferAttribute attach="attributes-color" args={[colors, 3]} />
+      </bufferGeometry>
+      <pointsMaterial size={0.11} sizeAttenuation vertexColors transparent depthWrite={false} />
+    </points>
+  );
+}
+
+// ─── Prompt 16: HitDust ───────────────────────────────────────────────────────
+// Gray/white dust puff at the enemy's position when struck.
+const MAX_DUST = 32;
+type DustParticle = { x: number; y: number; z: number; vx: number; vy: number; vz: number; life: number; maxLife: number; active: boolean };
+
+function HitDust() {
+  const pointsRef = useRef<THREE.Points>(null);
+  const particles = useMemo<DustParticle[]>(
+    () => Array.from({ length: MAX_DUST }, () => ({ x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, life: 0, maxLife: 0.4, active: false })),
+    []
+  );
+  const positions = useMemo(() => new Float32Array(MAX_DUST * 3), []);
+  const colors    = useMemo(() => new Float32Array(MAX_DUST * 3), []);
+
+  useFrame((_, dtRaw) => {
+    const dt = Math.min(dtRaw, 0.05);
+    while (hitDustQueue.length > 0) {
+      const emit = hitDustQueue.shift()!;
+      let spawned = 0;
+      for (let i = 0; i < MAX_DUST && spawned < 5; i++) {
+        const p = particles[i];
+        if (p.active) continue;
+        p.x = emit.x + (Math.random() - 0.5) * 0.2;
+        p.y = emit.y;
+        p.z = emit.z + (Math.random() - 0.5) * 0.2;
+        const speed = 0.7 + Math.random() * 1.5;
+        const angle = Math.random() * Math.PI * 2;
+        p.vx = Math.cos(angle) * speed * 0.5;
+        p.vy = 0.5 + Math.random() * 1.2;
+        p.vz = Math.sin(angle) * speed * 0.5;
+        p.life = 0.3 + Math.random() * 0.15;
+        p.maxLife = p.life;
+        p.active = true;
+        spawned++;
+      }
+    }
+    for (let i = 0; i < MAX_DUST; i++) {
+      const p = particles[i];
+      if (!p.active) { positions[i * 3 + 1] = -1000; continue; }
+      p.vy -= 2.5 * dt;
+      p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
+      p.life -= dt;
+      if (p.life <= 0) { p.active = false; positions[i * 3 + 1] = -1000; continue; }
+      positions[i * 3] = p.x; positions[i * 3 + 1] = p.y; positions[i * 3 + 2] = p.z;
+      const fade = p.life / p.maxLife;
+      colors[i * 3] = 0.82 * fade; colors[i * 3 + 1] = 0.72 * fade; colors[i * 3 + 2] = 0.58 * fade;
+    }
+    if (pointsRef.current) {
+      pointsRef.current.geometry.attributes.position.needsUpdate = true;
+      pointsRef.current.geometry.attributes.color.needsUpdate = true;
+    }
+  });
+
+  return (
+    <points ref={pointsRef}>
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-position" args={[positions, 3]} />
+        <bufferAttribute attach="attributes-color" args={[colors, 3]} />
+      </bufferGeometry>
+      <pointsMaterial size={0.22} sizeAttenuation vertexColors transparent opacity={0.8} depthWrite={false} />
+    </points>
+  );
+}
+
+// ─── Prompt 16: ChopArm ───────────────────────────────────────────────────────
+// A view-space axe handle + head that swings down (recoil) each time the player
+// chops, then springs back to idle. Mounted only while fpExploring.
+function ChopArm() {
+  const groupRef = useRef<THREE.Group>(null);
+  const { camera } = useThree();
+  const _fwd   = useMemo(() => new THREE.Vector3(), []);
+  const _right  = useMemo(() => new THREE.Vector3(), []);
+  const _up     = useMemo(() => new THREE.Vector3(0, 1, 0), []);
+  const _swingQ = useMemo(() => new THREE.Quaternion(), []);
+
+  useFrame((_, dtRaw) => {
+    const grp = groupRef.current;
+    if (!grp) return;
+    const dt = Math.min(dtRaw, 0.05);
+    // Decay swing phase (1 → 0 over ~0.33s)
+    chopArmSwing.phase = Math.max(0, chopArmSwing.phase - dt * 3.0);
+    // Bell-shaped swing: fast down, then back up
+    const swing = Math.sin(chopArmSwing.phase * Math.PI) * 0.65;
+
+    camera.getWorldDirection(_fwd);
+    _right.crossVectors(_fwd, _up).normalize();
+
+    if (chopArmSwing.type === 'chop') {
+      // Position in front-right-below the camera
+      grp.position
+        .copy(camera.position)
+        .addScaledVector(_fwd,   0.46)
+        .addScaledVector(_right, 0.23)
+        .addScaledVector(_up,   -0.24 - swing * 0.09);
+
+      // Match camera orientation, then tilt vertically by the swing angle
+      grp.quaternion.copy(camera.quaternion);
+      _swingQ.setFromAxisAngle(_right, -swing * 0.9);
+      grp.quaternion.premultiply(_swingQ);
+    } else {
+      // Lateral attack (from right to left)
+      grp.position
+        .copy(camera.position)
+        .addScaledVector(_fwd,   0.46 + swing * 0.1)
+        .addScaledVector(_right, 0.23 - swing * 0.45)
+        .addScaledVector(_up,   -0.20 - swing * 0.05);
+
+      grp.quaternion.copy(camera.quaternion);
+      // Yaw left
+      _swingQ.setFromAxisAngle(_up, swing * 1.2);
+      grp.quaternion.premultiply(_swingQ);
+      // Roll/tilt weapon horizontally
+      _swingQ.setFromAxisAngle(_fwd, swing * 0.8);
+      grp.quaternion.premultiply(_swingQ);
+    }
+  });
+
+  return (
+    <group ref={groupRef}>
+      {/* Handle */}
+      <mesh rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[0.018, 0.013, 0.4, 6]} />
+        <meshStandardMaterial color="#7a5a32" roughness={0.95} />
+      </mesh>
+      {/* Axe head */}
+      <mesh position={[0.012, 0, -0.22]} rotation={[0, 0.12, Math.PI / 4]}>
+        <boxGeometry args={[0.13, 0.17, 0.032]} />
+        <meshStandardMaterial color="#9a9ab0" roughness={0.3} metalness={0.72} />
+      </mesh>
+      {/* Blade shine */}
+      <mesh position={[0.008, 0.065, -0.233]}>
+        <boxGeometry args={[0.018, 0.11, 0.008]} />
+        <meshStandardMaterial color="#d8d8f0" roughness={0.15} metalness={0.92} />
+      </mesh>
     </group>
   );
 }
@@ -1491,13 +1745,26 @@ function NightFillLight({ active = true }: { active?: boolean }) {
   );
 }
 
-function EnemyBody() {
+// Prompt 16: EnemyBody now reads enemyHitFlash[id] to flash red emissive on hit.
+function EnemyBody({ id }: { id: string }) {
+  const bodyMatRef = useRef<THREE.MeshStandardMaterial>(null);
+
+  // Decay flash and update emissive each frame — no React state involved.
+  useFrame((_, dtRaw) => {
+    if (!bodyMatRef.current) return;
+    const dt = Math.min(dtRaw, 0.05);
+    const f = enemyHitFlash[id] ?? 0;
+    if (f > 0) enemyHitFlash[id] = Math.max(0, f - dt * 5);
+    bodyMatRef.current.emissive.setRGB(f * 0.9, f * 0.04, 0);
+    bodyMatRef.current.emissiveIntensity = f;
+  });
+
   return (
     <group>
-      {/* Abstract dark spiky figure */}
+      {/* Abstract dark spiky figure — body mat has ref for hit-flash */}
       <mesh castShadow position={[0, 0.7, 0]}>
         <coneGeometry args={[0.5, 1.4, 6]} />
-        <meshStandardMaterial color="#1a0f1c" flatShading roughness={0.8} />
+        <meshStandardMaterial ref={bodyMatRef} color="#1a0f1c" flatShading roughness={0.8} />
       </mesh>
       {/* Shoulders / Spikes */}
       <mesh castShadow position={[-0.3, 1.0, 0]} rotation={[0, 0, 0.5]}>
@@ -1647,6 +1914,17 @@ function Enemy({ id }: { id: string }) {
       [dyn.x, dyn.z] = resolveBuildings(dyn.x, dyn.z, 0.5); // can't walk through walls
     }
 
+    // Prompt 16: apply + decay knockback impulse (e.g. from player hit).
+    const kb = enemyKnockback[id];
+    if (kb) {
+      dyn.x += kb.vx * dt;
+      dyn.z += kb.vz * dt;
+      const decay = Math.pow(0.04, dt); // very fast falloff (~0 in ~0.15 s)
+      kb.vx *= decay;
+      kb.vz *= decay;
+      if (Math.abs(kb.vx) < 0.02 && Math.abs(kb.vz) < 0.02) delete enemyKnockback[id];
+    }
+
     const phase = dyn.x * 2.1;
     const speed = isMoving ? 5 : 2;
     const amp = isMoving ? 0.15 : 0.08;
@@ -1670,7 +1948,7 @@ function Enemy({ id }: { id: string }) {
 
   return (
     <group ref={group} position={[dyn.x, 0, dyn.z]}>
-      <EnemyBody />
+      <EnemyBody id={id} />
     </group>
   );
 }
@@ -3467,9 +3745,18 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     if (!id) return;
     const enemy = dynamicEnemyState[id];
     if (!enemy || enemy.dead) return;
+    chopArmSwing.type = 'attack';
+    chopArmSwing.phase = 1;
     void play('attack_swing');
     enemy.hp -= 25;
     if (enemy.hp <= 0) enemy.dead = true;
+    // Prompt 16 combat FX: hit-flash, knockback, dust burst
+    enemyHitFlash[id] = 1;
+    const kbDx = enemy.x - dynamicPlayerState.x;
+    const kbDz = enemy.z - dynamicPlayerState.z;
+    const kbLen = Math.hypot(kbDx, kbDz) || 1;
+    enemyKnockback[id] = { vx: (kbDx / kbLen) * 4.2, vz: (kbDz / kbLen) * 4.2 };
+    hitDustQueue.push({ x: enemy.x, y: getHeightAt(enemy.x, enemy.z) + 1.0, z: enemy.z });
     setFlash(true);
     window.setTimeout(() => setFlash(false), 80);
   };
@@ -3550,12 +3837,25 @@ export default function Scene3D({ memories = null, active = null, talking = fals
         if (sinceSwing >= SWING_MS) {
           void play('axe_chop');
           sinceSwing = 0;
+          // Prompt 16 gathering FX: arm swing + tree shake + wood chip burst
+          chopArmSwing.type = 'chop';
+          chopArmSwing.phase = 1;
+          if (tree !== null) {
+            treeShake[tree] = { amp: 0.15 };
+            const td = TREES[tree];
+            woodChipQueue.push({ x: td.x, y: getHeightAt(td.x, td.z) + 1.0, z: td.z, big: false });
+          }
         }
         chopRef.current = Math.min(100, chopRef.current + (TICK / PER_UNIT_MS) * 100);
         if (chopRef.current >= 100) {
           if (canChop) {
             const { depleted } = harvestTree(tree!); // grant 1 wood; deplete after TREE_WOOD
-            if (depleted) setNearbyTree(null); // tree gone; Player repicks next frame
+            if (depleted) {
+              setNearbyTree(null); // tree gone; Player repicks next frame
+              // Prompt 16: big chip burst when the tree finally falls
+              const td = TREES[tree!];
+              woodChipQueue.push({ x: td.x, y: getHeightAt(td.x, td.z) + 0.8, z: td.z, big: true });
+            }
           } else {
             const { depleted } = harvestRock(rock!); // grant 1 stone; deplete after ROCK_STONE
             if (depleted) {
@@ -3589,20 +3889,35 @@ export default function Scene3D({ memories = null, active = null, talking = fals
       if (!id) return false;
       const enemy = dynamicEnemyState[id];
       if (!enemy || enemy.dead) return false;
+      chopArmSwing.type = 'attack';
+      chopArmSwing.phase = 1;
       void play('attack_swing');
       enemy.hp -= 25;
       if (enemy.hp <= 0) {
         enemy.dead = true;
         recordEnemyKill();
       }
+      // Prompt 16 combat FX: hit-flash, knockback, dust burst
+      enemyHitFlash[id] = 1;
+      const kbDx = enemy.x - dynamicPlayerState.x;
+      const kbDz = enemy.z - dynamicPlayerState.z;
+      const kbLen = Math.hypot(kbDx, kbDz) || 1;
+      enemyKnockback[id] = { vx: (kbDx / kbLen) * 4.2, vz: (kbDz / kbLen) * 4.2 };
+      hitDustQueue.push({ x: enemy.x, y: getHeightAt(enemy.x, enemy.z) + 1.0, z: enemy.z });
       setFlash(true);
       setTimeout(() => setFlash(false), 80);
       return true;
     };
     const onMouseDown = (e: MouseEvent) => {
-      // Left-click attack (only while pointer-locked) — unchanged combat.
-      if (document.pointerLockElement && e.button === 0 && nearbyEnemyRef.current) {
-        attack();
+      // Left-click swing (only while pointer-locked)
+      if (document.pointerLockElement && e.button === 0) {
+        chopArmSwing.type = 'attack';
+        chopArmSwing.phase = 1;
+        if (nearbyEnemyRef.current) {
+          attack();
+        } else {
+          void play('attack_swing');
+        }
         return;
       }
       // Right-click = action button in first person (works locked or not).
@@ -3864,6 +4179,10 @@ export default function Scene3D({ memories = null, active = null, talking = fals
           {explorable && <Buildings tool={buildMode} onDraftChange={markBuildDraftDirty} onToolFeedback={showToolFeedback} />}
           {explorable && aiPreview && aiOrigin && <AIPreviewGhosts pieces={aiPreview} origin={aiOrigin} />}
           {explorable && <EnemySpawner />}
+          {/* Prompt 16: particle FX & view-space arm — always alive while exploring */}
+          {explorable && <WoodChips />}
+          {explorable && <HitDust />}
+          {fpExploring && <ChopArm />}
           {/* The title text is HTML in client-page now: a 3D drei <Text> here
               orphaned in the persistent canvas across the title→game transition,
               showing up as stray letters in the aerial view. */}

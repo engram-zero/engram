@@ -122,10 +122,8 @@ export function woodQuote(world: WorldState, totalTrees: number): WoodQuote {
 }
 
 export function isLocalhostFreeBuildWallet(addr: string | null = wallet): boolean {
-  if (!addr || typeof window === 'undefined') return false;
-  const host = window.location.hostname;
-  const isLocalhost = host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0';
-  return isLocalhost;
+  // Hard disable for now to allow proper testing of gathering and building locally
+  return false;
 }
 
 function applyLocalhostFreeBuild(state: WorldState, addr: string | null = wallet): WorldState {
