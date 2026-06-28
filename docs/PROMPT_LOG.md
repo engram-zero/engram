@@ -1005,3 +1005,13 @@ nuevo invisible al jugar) → añade `StoneIcon` y el contador `stone/MAX_STONE`
 **Qué se hizo:** descripción R32 + progreso del torneo en `STATUS.md`; ADMIN actualizado en
 `ENGRAM_PROMPTS.md`; `StoneIcon` + contador de stone en el HUD de `Scene3D.tsx`. `npx tsc --noEmit`
 limpio. **Commit:** _(este commit)_
+
+### 27 jun 2026 · Guion de demo R32 (voiceover)
+**Pedido (humano):** Dame el guion del video y documéntalo; lo paso por ElevenLabs.
+**Prompt sintetizado:** Extiende `docs/DEMO_SCRIPT.md` (sin pisar el guion base de la tesis de
+memoria) con una sección "R32 cut": shot list + voiceover continuo (~90s) que entreteje las
+features nuevas (regateo, minar stone, mercado dinámico, build con IA, raids) alrededor del beat
+headline reload→recuerda. Reglas anti-DQ: no decir "your wallet pays", **no** mostrar/afirmar
+minería en 0G Compute (gateada/sin verificar), y mostrar raids solo porque el build los hace.
+**Qué se hizo:** sección "R32 cut" en `DEMO_SCRIPT.md` (shot list + VO continuo + notas de
+honestidad + pasos de subida del video). **Commit:** _(este commit)_
