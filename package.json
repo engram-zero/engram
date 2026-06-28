@@ -9,6 +9,7 @@
     "lint": "next lint",
     "build:sdk": "webpack --config webpack.sdk.config.js",
     "deploy:registry": "tsx scripts/deploy-registry.ts",
+    "deploy:parcel-registry": "tsx scripts/deploy-parcel-registry.ts",
     "fund:compute": "tsx scripts/fund-compute.ts"
   },
   "dependencies": {

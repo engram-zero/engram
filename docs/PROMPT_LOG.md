@@ -1117,3 +1117,29 @@ tiene `interaction_history.length > 0` y existe `getBundleRoot(wallet)` (honesto
 wallets nuevas/invitados). `npx tsc --noEmit` limpio.
 **Qué se hizo:** estado `showIntro`/`dismissIntro` + overlay del cartel; banner de recall inline en
 el diálogo; keyframes no requeridos. Tono 65/35 técnico/inmersivo. **Commit:** _(este commit)_
+
+### 28 jun 2026 · Prompt 21 v0 jugable: parcelas data-driven + renta
+**Pedido (humano):** Trabajar Task/Prompt 21.
+**Prompt sintetizado:** Hacer una primera versión real y probabe del "mapa que crece" sin esperar
+un contrato nuevo: guardar `ParcelClaim` y `ParcelRentEvent` en el `WorldState`, publicarlos en el
+mismo bundle 0G, descubrirlos con el registry root existente, renderizar overlays de parcelas en
+runtime y cobrar coin cuando alguien construye sobre tierra ajena. Documentar que el
+`ParcelRegistry` dedicado sigue como hardening futuro.
+**Qué se hizo:** tipos de parcela/renta; normalización/clonado en `world`; herramienta **Claim
+land** en vista aérea; overlays WebGL para parcelas propias/públicas; `public-world` agrega
+parcelas/rentas desde bundles; construir en tierra ajena registra renta y gasta coin; panel de
+wallets muestra land count y rent log. `npx tsc --noEmit` limpio. **Commit:** _(este commit)_
+
+### 28 jun 2026 · Prompt 21 completo: ParcelRegistry + renta cobrable + comisión
+**Pedido (humano):** Hacer las partes que faltaban de Task 21.
+**Prompt sintetizado:** Completar la versión fuerte de parcelas: contrato `ParcelRegistry`, script
+de deploy, ABI mínimo y cliente opcional/por defecto; descubrimiento público por eventos
+`ParcelClaimed`, renta cobrable por el dueño, comisión al recolectar en parcela ajena, recursos
+visuales data-driven por terreno y documentación actualizada. Mantener el bundle 0G como estado
+rico de parcela y el contrato como propiedad/anti-double-claim.
+**Qué se hizo:** `contracts/ParcelRegistry.sol`, `scripts/deploy-parcel-registry.ts`,
+`src/lib/registry/parcel-abi.ts` y `parcels.ts`; deploy Galileo en
+`0x11D2EB42d0BF30947EB36882A150ee25518f67d7`; claims ahora intentan tx on-chain antes de commitear
+local; `public-world` escanea `ParcelClaimed`; `parcelRentCollected` + botón Collect rent; comisión
+de gathering; overlays con recursos por `meadow/grove/quarry`; env/docs/status actualizados.
+`npx tsc --noEmit` limpio. **Commit:** _(este commit)_

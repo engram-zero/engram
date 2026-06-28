@@ -165,6 +165,12 @@ submit a revised version if you advance. Snapshot = `main` at the round deadline
       through the registry root, and shown in a maintenance log. Allied wallets can repair public
       buildings without directly mutating the owner's bundle. Wallet-loaded/public builds are
       clamped on hydrate so bad 0G data cannot cover the camera.
+- [x] **Growing map parcels (Prompt 21)** — aerial mode has **Claim land**; ownership is enforced
+      by `ParcelRegistry` on 0G Chain (`0x11D2EB42d0BF30947EB36882A150ee25518f67d7`) and parcel
+      metadata lives in the player's 0G world bundle. Public discovery reads both
+      `ParcelClaimed` events and wallet bundles. Building or gathering on another wallet's parcel
+      records `ParcelRentEvent`, spends coin, and the owner can collect rent. Parcels render
+      data-driven terrain/resource overlays without redeploy.
 
 **Still open (deferred):**
 1. Real-time multiplayer (biggest differentiator; new prompt #19, scoped) — **deferred to a
@@ -174,8 +180,10 @@ submit a revised version if you advance. Snapshot = `main` at the round deadline
    building-specific history panels, defense upgrades, and demon schedule windows.
 4. 💡 **Mining = real 0G Compute work** (Prompt 20) — on-thesis future idea: gathering stone
    triggers a verifiable 0G compute job (proof-of-useful-work), not a placeholder.
+5. Parcel economics polish (Prompt 21) — anti-hoarding, richer parcel inspector, fully harvestable
+   generated resources, and optional OG-real rent/claim pricing.
 
 Full backlog (still open) in `docs/ENGRAM_PROMPTS.md`: raids/sabotage fairness from player
 relations (13: defense/weapon upgrades), more market goods/stock depth (14), fair demon sieges (15), gathering
 animation polish (16), editable terrain / bigger map (17), repair/damage UI polish (18),
-verified 0G-compute mining live test/funding (20).
+verified 0G-compute mining live test/funding (20), parcel economics/resource polish (21).

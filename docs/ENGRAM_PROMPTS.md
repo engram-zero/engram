@@ -32,7 +32,7 @@
 17. [Terreno editable, ríos y mapa más grande](#prompt-17--terreno-editable-ríos-y-mapa-más-grande) — 🟡 partial: **riachuelo** (cinta de agua drapeada, no tala terreno) hecho; terreno editable / mapa más grande siguen pendientes
 18. [Reparación, durabilidad y mantenimiento del mundo](#prompt-18--reparación-durabilidad-y-mantenimiento-del-mundo) — 🟢 done: hp/maxHp + daño visual + barras HP WebGL + reparación con madera/kits + eventos públicos de mantenimiento/raid en 0G + reparación de aliados
 20. [Minar = trabajo real en 0G Compute (proof-of-useful-work)](#prompt-20--minar--trabajo-real-en-0g-compute) — 🟡 construido, **gateado OFF + sin verificar en vivo** (falta fondear el ledger y probar)
-21. [Mapa que crece: parcelas de tierra propiedad del jugador + renta (en 0G)](#prompt-21--mapa-que-crece-parcelas-de-tierra-en-0g) — 💡 idea/visión (post-torneo; martelaxe)
+21. [Mapa que crece: parcelas de tierra propiedad del jugador + renta (en 0G)](#prompt-21--mapa-que-crece-parcelas-de-tierra-en-0g) — 🟢 implemented core: ParcelRegistry on 0G Chain + 0G bundle parcel data + rent/commission loop + data-driven parcel resources
 
 > **Tareas no-código (ADMIN):** ✅ deploy a Vercel + env vars · ✅ save a 0G end-to-end ·
 > ✅ **Group Stage ENVIADO y ACEPTADO** · ✅ **Round of 32 CLASIFICADO (top 32)** · ✅ video demo
@@ -1005,9 +1005,13 @@ juego un simulador de chores.
 
 ## Prompt 21 — Mapa que crece: parcelas de tierra en 0G
 
-> 💡 **Idea/visión (post-torneo), de AriiBen.** Que el jugador pueda **hacer crecer el mapa**
-> pagando por **parcelas de tierra** propiedad suya (en 0G), donde quien construya pague **renta**
-> (estilo Monopoly), con recursos según lo pagado y **comisión** del dueño por explotarlos.
+> 🟢 **Core implementado — 28 jun 2026.** El jugador puede reclamar parcelas desde vista aérea
+> pagando coin + una tx opcional/real al `ParcelRegistry` de 0G Chain
+> (`0x11D2EB42d0BF30947EB36882A150ee25518f67d7`). Las parcelas se guardan como
+> `ParcelClaim` en su `WorldState`, se suben al mismo bundle 0G y también son descubribles por
+> eventos `ParcelClaimed`. El cliente renderiza parcelas públicas sin redeploy, muestra recursos
+> por terreno, cobra `ParcelRentEvent` cuando alguien construye o recolecta sobre tierra ajena, y
+> el dueño puede cobrar esa renta desde la UI.
 
 ### El insight de arquitectura (clave para que sea viable)
 La parte ingenua —"el pago regenera `map.ts` y redespliega un mapa más grande"— **no es realista**
@@ -1019,15 +1023,14 @@ para gameplay en vivo (no puedes redeployar la app por cada compra). La forma co
   que hoy el "public world" lee builds de otras wallets). Cero redeploy: comprar una parcela
   escribe un registro y aparece en el mundo.
 
-### Primera versión a explorar (v1)
-- **Contrato de parcelas** (martelaxe): `ParcelRegistry` con `claim(parcelId) payable`, dueño,
-  precio por distancia/escasez, y un mapeo `parcelId → owner`. Emite eventos para descubrir.
-- **Datos de parcela en 0G**: tipo de terreno, qué **recursos** spawnea (según lo pagado), y la
-  **comisión** que cobra el dueño por extraerlos.
-- **Renta / comisión**: construir o **minar/talar** en tu parcela paga una fracción al dueño
-  (coin in-game v1; OG real es v2). Loop económico tipo Monopoly, on-theme con "propiedad".
-- **Render data-driven**: extiende el `getHeightAt`/props para considerar parcelas reclamadas
-  (terreno + árboles/rocas extra) leídas del registry/0G, sin tocar el deploy.
+### Implementado
+- **Contrato de parcelas:** `ParcelRegistry` con `claim(parcelId)` y `ownerOf(parcelId)`;
+  desplegado en Galileo y con script `npm run deploy:parcel-registry`.
+- **Datos de parcela en 0G:** `ParcelClaim` guarda terreno, coste, comisión y coordenadas.
+- **Renta / comisión:** construir o recolectar en parcela ajena crea `ParcelRentEvent`; el dueño
+  puede cobrar los eventos entrantes como coin.
+- **Render data-driven:** overlays y recursos por parcela se renderizan en runtime leyendo eventos
+  del registry + bundles 0G, sin tocar `map.ts` ni redeployar.
 
 ### Por qué encaja con la tesis
 Es **0G haciendo trabajo real** otra vez: la **propiedad de la tierra y su estado** viven en 0G,
@@ -1035,10 +1038,10 @@ auditables y propiedad del jugador — el mundo *crece* porque la gente paga, no
 redespliega. Refuerza "own your world".
 
 ### Lo difícil / riesgos
-- Diseño económico (precios, renta, anti-griefing de acaparar tierra).
-- Coordinación render ↔ datos (que el terreno extra encaje con colisión/altura).
-- Es **semanas** de trabajo; north-star, no para el torneo. Dueño natural: **martelaxe**
-  (contrato + 0G). Encaja con multiplayer (#19) y relaciones (#13).
+- Diseño económico fino (precios, renta, anti-griefing de acaparar tierra).
+- Hacer que los recursos generados por parcela sean nodos recolectables completos, no solo
+  representación visual + comisión sobre recursos existentes.
+- V2 con OG real para renta/claim; v1 usa coin in-game para no bloquear el loop jugable.
 
 ### Criterios de aceptación (cuando se implemente)
 1. Un jugador reclama una parcela (paga) y aparece terreno/recursos nuevos **sin redeploy**.

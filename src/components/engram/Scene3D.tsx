@@ -50,6 +50,11 @@ import {
   repairBuilding,
   recordRepairEvent,
   repairHealForInventory,
+  commitParcelClaim,
+  previewParcelClaimAt,
+  parcelIdAt,
+  recordParcelRentEvent,
+  collectParcelRentIncome,
   damageBuilding,
   recordRaidEvent,
   recordEnemyKill,
@@ -58,6 +63,9 @@ import {
   BUILD_RADIUS,
   RAID_STONE_COST,
   REPAIR_WOOD_COST,
+  PARCEL_BUILD_RENT_COIN,
+  PARCEL_GATHER_RENT_COIN,
+  PARCEL_COMMISSION_BPS,
   isLocalhostFreeBuildWallet,
   type WalletRelation,
   type WorldState,
@@ -67,6 +75,7 @@ import {
 import { useEngramAudio } from '@/context/AudioContext';
 import type { AudioCueId } from '@/lib/audio/manifest';
 import { usePublicWorld } from '@/lib/public-world';
+import { claimParcelOnchain, getParcelRegistryAddress } from '@/lib/registry/parcels';
 
 // A tree carries its global index (into TREES) so chopping can target it.
 type TreeInst = TreeDef & { idx: number };
@@ -77,7 +86,7 @@ type PlayerPos = { x: number; z: number; heading: number };
 type PlayerPosRef = React.MutableRefObject<PlayerPos>;
 type ViewMode = 'fp' | 'aerial';
 type MovementInput = { forward: boolean; backward: boolean; left: boolean; right: boolean };
-type BuildTool = BuildingType | 'demolish' | 'repair' | 'raid' | 'damage';
+type BuildTool = BuildingType | 'demolish' | 'repair' | 'raid' | 'claim' | 'damage';
 type ToolFeedback = { text: string; tone: 'good' | 'bad' | 'info' };
 
 const shortWallet = (wallet: string) => `${wallet.slice(0, 6)}…${wallet.slice(-4)}`;
@@ -2460,6 +2469,145 @@ function PublicBuildingMesh({ b, relation }: { b: Building; relation: WalletRela
   );
 }
 
+function ParcelOverlays() {
+  const world = useWorld();
+  const publicWorld = usePublicWorld();
+  const current = getWorldWallet()?.toLowerCase();
+  const claims = [
+    ...publicWorld.parcels.filter((claim) => claim.owner !== current),
+    ...world.parcelClaims,
+  ];
+  const seen = new Set<string>();
+  const unique = claims.filter((claim) => {
+    const key = `${claim.owner}:${claim.id}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  return (
+    <group>
+      {unique.map((claim) => {
+        const own = claim.owner === current;
+        const color =
+          own ? '#8fd06a' :
+          claim.terrain === 'quarry' ? '#b9c4d0' :
+          claim.terrain === 'grove' ? '#6fbf76' :
+          '#d6b84a';
+        const y = getHeightAt(claim.x, claim.z) + 0.045;
+        return (
+          <group key={`parcel-${claim.owner}-${claim.id}`} position={[claim.x, y, claim.z]}>
+            <mesh rotation={[-Math.PI / 2, 0, 0]}>
+              <planeGeometry args={[claim.size, claim.size]} />
+              <meshBasicMaterial color={color} transparent opacity={own ? 0.13 : 0.09} depthWrite={false} />
+            </mesh>
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.012, 0]}>
+              <ringGeometry args={[claim.size * 0.5 - 0.08, claim.size * 0.5, 4]} />
+              <meshBasicMaterial color={color} transparent opacity={own ? 0.72 : 0.45} depthWrite={false} />
+            </mesh>
+            <ParcelResourceCluster claim={claim} />
+          </group>
+        );
+      })}
+    </group>
+  );
+}
+
+function ParcelResourceCluster({ claim }: { claim: { id: string; x: number; z: number; terrain: 'meadow' | 'grove' | 'quarry' } }) {
+  const seed = claim.id.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  const count = claim.terrain === 'quarry' ? 4 : claim.terrain === 'grove' ? 6 : 5;
+  const nodes = Array.from({ length: count }, (_, i) => {
+    const a = seed * 0.13 + i * 2.399;
+    const r = 2.4 + ((seed + i * 17) % 32) / 8;
+    const x = Math.cos(a) * r;
+    const z = Math.sin(a) * r;
+    return { x, z, y: getHeightAt(claim.x + x, claim.z + z) - getHeightAt(claim.x, claim.z) };
+  });
+
+  if (claim.terrain === 'quarry') {
+    return (
+      <group>
+        {nodes.map((node, i) => (
+          <mesh key={i} position={[node.x, node.y + 0.22, node.z]} rotation={[0.2, seed + i, -0.15]} castShadow receiveShadow>
+            <dodecahedronGeometry args={[0.42 + (i % 2) * 0.12, 0]} />
+            <meshStandardMaterial color={i % 3 === 0 ? '#c9b26b' : '#9aa4ad'} map={getTextureVariant('stone', seed + i)} flatShading />
+          </mesh>
+        ))}
+      </group>
+    );
+  }
+
+  if (claim.terrain === 'grove') {
+    return (
+      <group>
+        {nodes.map((node, i) => (
+          <group key={i} position={[node.x, node.y, node.z]} rotation={[0, seed + i, 0]}>
+            <mesh position={[0, 0.5, 0]} castShadow>
+              <cylinderGeometry args={[0.09, 0.14, 1.0, 5]} />
+              <meshStandardMaterial color="#5a3423" map={getTextureVariant('bark', seed + i)} flatShading />
+            </mesh>
+            <mesh position={[0, 1.16, 0]} castShadow>
+              <coneGeometry args={[0.54, 1.25, 7]} />
+              <meshStandardMaterial color="#264f31" map={getTextureVariant(i % 2 === 0 ? 'foliage_pine' : 'foliage_broadleaf', seed + i)} flatShading />
+            </mesh>
+          </group>
+        ))}
+      </group>
+    );
+  }
+
+  return (
+    <group>
+      {nodes.map((node, i) => (
+        <mesh key={i} position={[node.x, node.y + 0.16, node.z]} castShadow>
+          <coneGeometry args={[0.22, 0.34, 5]} />
+          <meshStandardMaterial color={i % 2 === 0 ? '#557a3a' : '#6f8d45'} flatShading />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function rentedParcelAt(x: number, z: number, parcels: { id: string; owner: string }[]): { id: string; owner: string } | null {
+  const current = getWorldWallet()?.toLowerCase();
+  const id = parcelIdAt(x, z);
+  return parcels.find((claim) => claim.id === id && claim.owner !== current) ?? null;
+}
+
+async function claimParcelFlow(
+  x: number,
+  z: number,
+  occupiedParcelIds: string[],
+  onDraftChange: () => void,
+  onToolFeedback: (feedback: ToolFeedback) => void
+) {
+  const preview = previewParcelClaimAt(x, z, occupiedParcelIds);
+  if (!preview.ok || !preview.claim) {
+    onToolFeedback({ text: preview.reason ?? 'Claim failed.', tone: 'bad' });
+    return;
+  }
+
+  const wallet = getWorldWallet();
+  if (!wallet) {
+    onToolFeedback({ text: 'Connect a wallet first.', tone: 'bad' });
+    return;
+  }
+
+  try {
+    const tx = await claimParcelOnchain(wallet, preview.claim.id, PARCEL_COMMISSION_BPS);
+    const committed = commitParcelClaim(preview.claim);
+    if (!committed.ok) {
+      onToolFeedback({ text: committed.reason ?? 'Claim failed.', tone: 'bad' });
+      return;
+    }
+    onDraftChange();
+    const txText = tx?.txHash ? ` · ${tx.txHash.slice(0, 10)}…` : getParcelRegistryAddress() ? '' : ' · bundle-only';
+    onToolFeedback({ text: `Parcel claimed for ${preview.claim.claimCost} coin${txText}. Save World to publish.`, tone: 'good' });
+  } catch (error) {
+    onToolFeedback({ text: error instanceof Error ? error.message : 'On-chain parcel claim failed.', tone: 'bad' });
+  }
+}
+
 function Buildings({
   tool = null,
   onDraftChange = () => {},
@@ -2762,6 +2910,7 @@ function BuildController({
   const [ghost, setGhost] = useState<[number, number] | null>(null);
   const [rot, setRot] = useState(0);
   const world = useWorld();
+  const publicWorld = usePublicWorld();
 
   // R rotates the building to place (45° steps).
   useEffect(() => {
@@ -2774,7 +2923,7 @@ function BuildController({
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const isBuild = mode !== 'demolish' && mode !== 'repair' && mode !== 'raid' && mode !== 'damage';
+  const isBuild = mode !== 'demolish' && mode !== 'repair' && mode !== 'raid' && mode !== 'claim' && mode !== 'damage';
   // `world` keeps the ghost validity reactive to inventory/buildings changes.
   void world;
   const valid = isBuild && !!ghost && canPlaceBuilding(mode, ghost[0], ghost[1]);
@@ -2806,13 +2955,30 @@ function BuildController({
       }
     } else if (mode === 'raid') {
       onToolFeedback({ text: 'Click a hostile public building to queue a raid event.', tone: 'info' });
+    } else if (mode === 'claim') {
+      const occupied = [
+        ...publicWorld.parcels.map((claim) => claim.id),
+        ...getWorld().parcelClaims.map((claim) => claim.id),
+      ];
+      void claimParcelFlow(px, pz, occupied, onDraftChange, onToolFeedback);
     } else if (mode === 'damage') {
       if (isLocalhostFreeBuildWallet() && damageNearestForTest(px, pz)) {
         onDraftChange();
         onToolFeedback({ text: 'Damage test applied. Click the building for exact HP.', tone: 'bad' });
       }
     } else if (valid) {
-      if (placeBuilding({ type: mode, x, z, rot }, buildCostAt(mode, x, z))) onDraftChange();
+      const rented = rentedParcelAt(x, z, publicWorld.parcels);
+      if (rented) {
+        const rent = recordParcelRentEvent(rented.owner, rented.id, 'build', PARCEL_BUILD_RENT_COIN);
+        if (!rent.ok) {
+          onToolFeedback({ text: rent.reason ?? 'Parcel rent failed.', tone: 'bad' });
+          return;
+        }
+      }
+      if (placeBuilding({ type: mode, x, z, rot }, buildCostAt(mode, x, z))) {
+        onDraftChange();
+        if (rented) onToolFeedback({ text: `Built on rented land (-${PARCEL_BUILD_RENT_COIN} coin). Save World to publish.`, tone: 'info' });
+      }
     }
   };
 
@@ -3589,6 +3755,10 @@ function PublicRelationsPanel({
 }) {
   const publicWorld = usePublicWorld();
   if (publicWorld.owners.length === 0) return null;
+  const currentWallet = getWorldWallet()?.toLowerCase();
+  const uncollectedRent = currentWallet
+    ? publicWorld.parcelRentEvents.filter((event) => event.owner === currentWallet && event.payer !== currentWallet && !world.parcelRentCollected.includes(event.id))
+    : [];
   const maintenanceLog = [
     ...publicWorld.raidEvents.map((event) => ({
       id: event.id,
@@ -3602,10 +3772,21 @@ function PublicRelationsPanel({
       text: `${shortWallet(event.repairer)} repaired ${shortWallet(event.owner)} +${event.heal} HP`,
       color: '#aee5a6',
     })),
+    ...publicWorld.parcelRentEvents.map((event) => ({
+      id: event.id,
+      at: event.at,
+      text: `${shortWallet(event.payer)} paid ${event.coin} coin rent to ${shortWallet(event.owner)}`,
+      color: '#ffe39a',
+    })),
   ].sort((a, b) => b.at - a.at).slice(0, 5);
 
   const setRelation = (owner: string, relation: WalletRelation) => {
     if (setWalletRelation(owner, relation)) onRelationChange();
+  };
+
+  const collectRent = () => {
+    const result = collectParcelRentIncome(publicWorld.parcelRentEvents);
+    if (result.collected > 0) onRelationChange();
   };
 
   return (
@@ -3614,14 +3795,23 @@ function PublicRelationsPanel({
         <span className="font-semibold text-[#d6b84a]">Nearby wallets</span>
         {publicWorld.loading && <span className="text-[#9fd0e6]">refreshing</span>}
       </div>
+      {uncollectedRent.length > 0 && (
+        <button
+          type="button"
+          onClick={collectRent}
+          className="mb-2 w-full rounded border border-[#d6b84a] bg-[#3a3216]/70 px-2 py-1 text-[11px] font-semibold text-[#ffe39a] hover:bg-[#4a3f1d]/80"
+        >
+          Collect {uncollectedRent.reduce((sum, event) => sum + event.coin, 0)} coin rent
+        </button>
+      )}
       <div className="flex max-h-56 flex-col gap-2 overflow-y-auto pr-1">
-        {publicWorld.owners.slice(0, 8).map(({ owner, buildingCount }) => {
+        {publicWorld.owners.slice(0, 8).map(({ owner, buildingCount, parcelCount }) => {
           const relation = world.relations[owner] ?? 'neutral';
           return (
             <div key={owner} className="rounded border border-[#3b3220] bg-black/35 p-2">
               <div className="mb-1 flex items-center justify-between gap-2">
                 <span className="font-mono text-[11px] text-[#f4e8d0]">{shortWallet(owner)}</span>
-                <span className="text-[11px] text-[#f4e8d0]/65">{buildingCount} build{buildingCount === 1 ? '' : 's'}</span>
+                <span className="text-[11px] text-[#f4e8d0]/65">{buildingCount} build{buildingCount === 1 ? '' : 's'} · {parcelCount} land</span>
               </div>
               <div className="grid grid-cols-3 gap-1">
                 {(['neutral', 'allied', 'hostile'] as const).map((next) => {
@@ -3686,6 +3876,7 @@ interface Scene3DProps {
 export default function Scene3D({ memories = null, active = null, talking = false, onSelect = () => {}, interactive = true, showTitle = false, uiOpen = false }: Scene3DProps) {
   const { networkType } = useNetwork();
   const { play, setLoopVolume } = useEngramAudio();
+  const publicWorld = usePublicWorld();
   // Walk-around mode kicks in once the village is interactive (wallet connected
   // and memories loaded). The title screen stays cinematic.
   const explorable = interactive && !showTitle;
@@ -3932,6 +4123,14 @@ export default function Scene3D({ memories = null, active = null, talking = fals
       showToolFeedback({ text: 'Click a hostile public building to queue a raid event.', tone: 'info' });
       return;
     }
+    if (buildMode === 'claim') {
+      const occupied = [
+        ...publicWorld.parcels.map((claim) => claim.id),
+        ...getWorld().parcelClaims.map((claim) => claim.id),
+      ];
+      void claimParcelFlow(p.x, p.z, occupied, markBuildDraftDirty, showToolFeedback);
+      return;
+    }
     if (buildMode === 'damage') {
       if (isLocalhostFreeBuildWallet() && damageNearestForTest(p.x, p.z, 3)) {
         markBuildDraftDirty();
@@ -3940,8 +4139,19 @@ export default function Scene3D({ memories = null, active = null, talking = fals
       return;
     }
     const [x, z] = mobileGhostXZ(p);
-    if (canPlaceBuilding(buildMode, x, z) && placeBuilding({ type: buildMode, x, z, rot: buildRot }, buildCostAt(buildMode, x, z))) {
-      markBuildDraftDirty();
+    if (canPlaceBuilding(buildMode, x, z)) {
+      const rented = rentedParcelAt(x, z, publicWorld.parcels);
+      if (rented) {
+        const rent = recordParcelRentEvent(rented.owner, rented.id, 'build', PARCEL_BUILD_RENT_COIN);
+        if (!rent.ok) {
+          showToolFeedback({ text: rent.reason ?? 'Parcel rent failed.', tone: 'bad' });
+          return;
+        }
+      }
+      if (placeBuilding({ type: buildMode, x, z, rot: buildRot }, buildCostAt(buildMode, x, z))) {
+        markBuildDraftDirty();
+        if (rented) showToolFeedback({ text: `Built on rented land (-${PARCEL_BUILD_RENT_COIN} coin). Save World to publish.`, tone: 'info' });
+      }
     }
   };
 
@@ -4219,6 +4429,17 @@ export default function Scene3D({ memories = null, active = null, talking = fals
         }
         chopRef.current = Math.min(100, chopRef.current + (TICK / PER_UNIT_MS) * 100);
         if (chopRef.current >= 100) {
+          const rented = rentedParcelAt(dynamicPlayerState.x, dynamicPlayerState.z, publicWorld.parcels);
+          if (rented) {
+            const rent = recordParcelRentEvent(rented.owner, rented.id, 'gather', PARCEL_GATHER_RENT_COIN);
+            if (!rent.ok) {
+              showToolFeedback({ text: rent.reason ?? 'Parcel commission failed.', tone: 'bad' });
+              chopRef.current = 0;
+              setChopPct(0);
+              return;
+            }
+            markBuildDraftDirty();
+          }
           if (canChop) {
             const { depleted } = harvestTree(tree!); // grant 1 wood; deplete after TREE_WOOD
             showPickup('Wood', '#8fd06a'); // Prompt 16: floating "+1" feedback
@@ -4246,7 +4467,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
       setChopPct(chopRef.current); // React skips re-render when unchanged
     }, TICK);
     return () => window.clearInterval(id);
-  }, [fpExploring, play, runMineReceipt, showPickup]);
+  }, [fpExploring, markBuildDraftDirty, play, publicWorld.parcels, runMineReceipt, showPickup, showToolFeedback]);
 
   // Player combat / action listener. Left-click while locked attacks (combat).
   // Right-click is a context "action" button in first person: attack a nearby
@@ -4565,7 +4786,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
                 </mesh>
               )}
               {explorable && buildMode && !isTouchDevice && <BuildController mode={buildMode} onDraftChange={markBuildDraftDirty} onToolFeedback={showToolFeedback} />}
-              {explorable && buildMode && buildMode !== 'demolish' && buildMode !== 'repair' && buildMode !== 'raid' && buildMode !== 'damage' && isTouchDevice && (
+              {explorable && buildMode && buildMode !== 'demolish' && buildMode !== 'repair' && buildMode !== 'raid' && buildMode !== 'claim' && buildMode !== 'damage' && isTouchDevice && (
                 <MobileBuildGhost mode={buildMode} posRef={posRef} rot={buildRot} />
               )}
             </>
@@ -4573,6 +4794,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
           {explorable && active && view === 'fp' && <TalkFraming active={active} />}
 
           <Village torchesLit={dn.torchesLit} />
+          {explorable && <ParcelOverlays />}
           <River />
           <Fireflies active={dn.torchesLit} />
           {explorable && <Buildings tool={buildMode} onDraftChange={markBuildDraftDirty} onToolFeedback={showToolFeedback} />}
@@ -4641,6 +4863,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
                   ['house', '🏠', 'House', BUILD_COST.house],
                   ['repair', '🧰', 'Repair', null],
                   ['raid', '⚔️', 'Raid', null],
+                  ['claim', '🗺️', 'Claim land', null],
                   ['demolish', '🧨', 'Demolish', null],
                   ...(localhostGod ? [['damage', '💥', 'Damage test', null] as const] : []),
                 ] as const).map(([m, icon, label, cost]) => (
@@ -4708,6 +4931,8 @@ export default function Scene3D({ memories = null, active = null, talking = fals
                         ? `Tap a damaged building to repair · costs ${REPAIR_WOOD_COST} wood`
                         : buildMode === 'raid'
                           ? `Tap a hostile public building to raid · costs ${RAID_STONE_COST} stone`
+                        : buildMode === 'claim'
+                          ? 'Tap land outside the village core to claim a parcel'
                         : buildMode === 'damage'
                           ? 'Localhost only · tap your building to damage it'
                         : 'Tap ground to place · tap tool to cancel'}
@@ -5126,7 +5351,7 @@ Left-click to look around · right-click to act · WASD to walk · V for aerial
           {/* Build controls: drive the avatar to aim the ghost, then place. */}
           {buildMode && (
             <div className="absolute bottom-20 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2">
-              {buildMode !== 'demolish' && buildMode !== 'repair' && buildMode !== 'raid' && buildMode !== 'damage' && (
+              {buildMode !== 'demolish' && buildMode !== 'repair' && buildMode !== 'raid' && buildMode !== 'claim' && buildMode !== 'damage' && (
                 <button
                   onClick={() => setBuildRot((r) => (r + Math.PI / 4) % (Math.PI * 2))}
                   className="rounded-2xl border border-[#5a4a28] bg-black/70 px-4 py-3 text-sm font-semibold text-[#f4e8d0]"
@@ -5138,7 +5363,7 @@ Left-click to look around · right-click to act · WASD to walk · V for aerial
                 onClick={placeMobileBuilding}
                 className="rounded-2xl border border-[#8fd06a] bg-[rgba(16,20,10,0.95)] px-5 py-3 text-sm font-semibold text-[#f4e8d0]"
               >
-                {buildMode === 'demolish' ? '🧨 Demolish nearby' : buildMode === 'repair' ? '🧰 Repair nearby' : buildMode === 'raid' ? '⚔️ Raid target' : buildMode === 'damage' ? '💥 Damage nearby' : '⬇ Place here'}
+                {buildMode === 'demolish' ? '🧨 Demolish nearby' : buildMode === 'repair' ? '🧰 Repair nearby' : buildMode === 'raid' ? '⚔️ Raid target' : buildMode === 'claim' ? '🗺️ Claim land' : buildMode === 'damage' ? '💥 Damage nearby' : '⬇ Place here'}
               </button>
             </div>
           )}
@@ -5151,6 +5376,8 @@ Left-click to look around · right-click to act · WASD to walk · V for aerial
                   ? 'Move next to a damaged building · tap Repair'
                   : buildMode === 'raid'
                     ? `Tap a hostile public building · costs ${RAID_STONE_COST} stone`
+                  : buildMode === 'claim'
+                    ? 'Drive to the parcel center · tap Claim land'
                   : buildMode === 'damage'
                     ? 'Localhost test · move next to a building · tap Damage'
                     : 'Drive to aim the ghost · tap Place'}

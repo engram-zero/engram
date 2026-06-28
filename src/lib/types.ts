@@ -75,6 +75,46 @@ export interface RepairEvent {
   at: number;
 }
 
+export interface ParcelClaim {
+  /** Stable grid parcel ID, e.g. `p:-1:2`. */
+  id: string;
+  /** Wallet that owns the parcel. */
+  owner: string;
+  /** Parcel grid coordinates. */
+  gx: number;
+  gz: number;
+  /** World-space parcel center. */
+  x: number;
+  z: number;
+  /** Square parcel width/depth in world units. */
+  size: number;
+  /** Coin paid to claim it. */
+  claimCost: number;
+  /** Commission paid by visitors in basis points. */
+  commissionBps: number;
+  /** Simple biome/material hint for data-driven rendering. */
+  terrain: 'meadow' | 'grove' | 'quarry';
+  /** Epoch ms when the owner claimed it. */
+  at: number;
+}
+
+export interface ParcelRentEvent {
+  /** Stable event ID inside the payer's world bundle. */
+  id: string;
+  /** Wallet that paid rent/commission. */
+  payer: string;
+  /** Wallet that owns the parcel. */
+  owner: string;
+  /** Target parcel ID. */
+  parcelId: string;
+  /** Action that caused rent. */
+  action: 'build' | 'gather';
+  /** Coin spent by the payer. */
+  coin: number;
+  /** Epoch ms when rent was paid. */
+  at: number;
+}
+
 export interface WorldState {
   inventory: Record<ResourceType, number>;
   /** Indices (into map.ts TREES) of trees the player has chopped. */
@@ -93,6 +133,12 @@ export interface WorldState {
   raidEvents: RaidEvent[];
   /** Public-world maintenance events authored by this wallet. */
   repairEvents: RepairEvent[];
+  /** Land parcels this wallet has claimed. */
+  parcelClaims: ParcelClaim[];
+  /** Outgoing rent/commission events this wallet paid on other players' parcels. */
+  parcelRentEvents: ParcelRentEvent[];
+  /** Public rent event IDs this wallet has already collected as parcel owner. */
+  parcelRentCollected: string[];
   /**
    * Player-declared social graph for public-world wallets. Neutral can be
    * represented by absence; allied/hostile are persisted in the same 0G bundle

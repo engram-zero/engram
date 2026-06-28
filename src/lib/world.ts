@@ -15,9 +15,9 @@
 //     NOT cross-device, NOT on-chain).
 
 import { useSyncExternalStore } from 'react';
-import { BLOCK_SCALE_MAX, BLOCK_SCALE_MIN, BLOCK_UNIT, type OreType, type RaidEvent, type RepairEvent, type ResourceType, type WalletRelation, type WorldState, type Building, type BuildingType } from '@/lib/types';
+import { BLOCK_SCALE_MAX, BLOCK_SCALE_MIN, BLOCK_UNIT, type OreType, type ParcelClaim, type ParcelRentEvent, type RaidEvent, type RepairEvent, type ResourceType, type WalletRelation, type WorldState, type Building, type BuildingType } from '@/lib/types';
 
-export type { OreType, RaidEvent, RepairEvent, ResourceType, WalletRelation, WorldState, Building, BuildingType } from '@/lib/types';
+export type { OreType, ParcelClaim, ParcelRentEvent, RaidEvent, RepairEvent, ResourceType, WalletRelation, WorldState, Building, BuildingType } from '@/lib/types';
 
 /** How much wood the player can carry before they must use/drop some. Raised to
  * support AI-built structures and the pricier builds near the village centre. */
@@ -33,6 +33,8 @@ const MAX_BUILD_COORD = 150;
 const MAX_BLOCK_Y = 12;
 const MAX_RAID_EVENTS = 120;
 const MAX_REPAIR_EVENTS = 160;
+const MAX_PARCEL_CLAIMS = 48;
+const MAX_PARCEL_RENT_EVENTS = 160;
 const RAID_EVENT_TTL_MS = 1000 * 60 * 60 * 24 * 7;
 const REPAIR_EVENT_TTL_MS = 1000 * 60 * 60 * 24 * 14;
 
@@ -46,6 +48,9 @@ export const EMPTY_WORLD: WorldState = {
   repairKits: 0,
   raidEvents: [],
   repairEvents: [],
+  parcelClaims: [],
+  parcelRentEvents: [],
+  parcelRentCollected: [],
   relations: {},
 };
 
@@ -88,6 +93,12 @@ export const REPAIR_KIT_HEAL = 60;
 export const RAID_STONE_COST = 2;
 export const RAID_BASE_DAMAGE = 18;
 export const RAID_COOLDOWN_MS = 1000 * 60 * 10;
+export const PARCEL_SIZE = 18;
+export const PARCEL_MIN_RADIUS = 26;
+export const PARCEL_BUILD_RENT_COIN = 2;
+export const PARCEL_GATHER_RENT_COIN = 1;
+export const PARCEL_COMMISSION_BPS = 1200;
+const WORLD_LIMIT_FOR_PARCELS = 126;
 
 // ── Dynamic wood pricing (Phase 2) ────────────────────────────────────────────
 // A relative market: wood's coin value rises with scarcity (fewer trees left on
@@ -273,6 +284,105 @@ function normalizeRepairEvents(raw: unknown): RepairEvent[] {
   return events.filter((event) => event.buildingId).sort((a, b) => b.at - a.at).slice(0, MAX_REPAIR_EVENTS);
 }
 
+export function parcelGridAt(x: number, z: number): { gx: number; gz: number } {
+  return { gx: Math.round(x / PARCEL_SIZE), gz: Math.round(z / PARCEL_SIZE) };
+}
+
+export function parcelIdFromGrid(gx: number, gz: number): string {
+  return `p:${gx}:${gz}`;
+}
+
+export function parcelIdAt(x: number, z: number): string {
+  const { gx, gz } = parcelGridAt(x, z);
+  return parcelIdFromGrid(gx, gz);
+}
+
+export function parcelClaimCost(gx: number, gz: number): number {
+  const distance = Math.hypot(gx, gz);
+  return Math.max(12, Math.round(18 + distance * 5));
+}
+
+export function parcelTerrainForGrid(gx: number, gz: number): ParcelClaim['terrain'] {
+  const n = Math.abs((gx * 73856093) ^ (gz * 19349663));
+  if (n % 7 === 0) return 'quarry';
+  if (n % 3 === 0) return 'grove';
+  return 'meadow';
+}
+
+function normalizeTerrain(raw: unknown): ParcelClaim['terrain'] {
+  return raw === 'grove' || raw === 'quarry' ? raw : 'meadow';
+}
+
+function normalizeParcelClaims(raw: unknown): ParcelClaim[] {
+  if (!Array.isArray(raw)) return [];
+  const claims: ParcelClaim[] = [];
+  for (const value of raw) {
+    if (!value || typeof value !== 'object') continue;
+    const p = value as Record<string, unknown>;
+    const owner = typeof p.owner === 'string' ? p.owner.toLowerCase() : '';
+    if (!/^0x[a-f0-9]{40}$/.test(owner)) continue;
+    const gx = Math.max(-12, Math.min(12, Math.round(Number(p.gx ?? 0))));
+    const gz = Math.max(-12, Math.min(12, Math.round(Number(p.gz ?? 0))));
+    const id = parcelIdFromGrid(gx, gz);
+    const x = gx * PARCEL_SIZE;
+    const z = gz * PARCEL_SIZE;
+    if (Math.hypot(x, z) < PARCEL_MIN_RADIUS || Math.hypot(x, z) > WORLD_LIMIT_FOR_PARCELS) continue;
+    const at = Math.round(Number(p.at ?? 0));
+    claims.push({
+      id,
+      owner,
+      gx,
+      gz,
+      x,
+      z,
+      size: PARCEL_SIZE,
+      claimCost: Math.max(0, Math.min(999, Math.round(Number(p.claimCost ?? parcelClaimCost(gx, gz))))),
+      commissionBps: Math.max(0, Math.min(5000, Math.round(Number(p.commissionBps ?? PARCEL_COMMISSION_BPS)))),
+      terrain: normalizeTerrain(p.terrain),
+      at: Number.isFinite(at) && at > 0 ? at : Date.now(),
+    });
+  }
+  const seen = new Set<string>();
+  return claims
+    .sort((a, b) => a.at - b.at)
+    .filter((claim) => {
+      if (seen.has(claim.id)) return false;
+      seen.add(claim.id);
+      return true;
+    })
+    .sort((a, b) => b.at - a.at)
+    .slice(0, MAX_PARCEL_CLAIMS);
+}
+
+function normalizeParcelRentEvents(raw: unknown): ParcelRentEvent[] {
+  if (!Array.isArray(raw)) return [];
+  const events: ParcelRentEvent[] = [];
+  for (const value of raw) {
+    if (!value || typeof value !== 'object') continue;
+    const p = value as Record<string, unknown>;
+    const payer = typeof p.payer === 'string' ? p.payer.toLowerCase() : '';
+    const owner = typeof p.owner === 'string' ? p.owner.toLowerCase() : '';
+    if (!/^0x[a-f0-9]{40}$/.test(payer) || !/^0x[a-f0-9]{40}$/.test(owner)) continue;
+    const action = p.action === 'gather' ? 'gather' : 'build';
+    const at = Math.round(Number(p.at ?? 0));
+    events.push({
+      id: cleanId(p.id, createId('rent')),
+      payer,
+      owner,
+      parcelId: cleanId(p.parcelId, ''),
+      action,
+      coin: Math.max(1, Math.min(99, Math.round(Number(p.coin ?? PARCEL_BUILD_RENT_COIN)))),
+      at: Number.isFinite(at) && at > 0 ? at : Date.now(),
+    });
+  }
+  return events.filter((event) => event.parcelId).sort((a, b) => b.at - a.at).slice(0, MAX_PARCEL_RENT_EVENTS);
+}
+
+function normalizeCollectedRentIds(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return Array.from(new Set(raw.map((id) => cleanId(id, '')).filter(Boolean))).slice(0, MAX_PARCEL_RENT_EVENTS);
+}
+
 export function normalizeWorldState(raw: unknown): WorldState {
   const p = raw && typeof raw === 'object' ? (raw as any) : {};
   const intIndexSet = (raw: unknown): number[] =>
@@ -298,6 +408,9 @@ export function normalizeWorldState(raw: unknown): WorldState {
     repairKits: Math.max(0, Math.round(Number(p?.repairKits ?? 0))),
     raidEvents: normalizeRaidEvents(p?.raidEvents),
     repairEvents: normalizeRepairEvents(p?.repairEvents),
+    parcelClaims: normalizeParcelClaims(p?.parcelClaims),
+    parcelRentEvents: normalizeParcelRentEvents(p?.parcelRentEvents),
+    parcelRentCollected: normalizeCollectedRentIds(p?.parcelRentCollected),
     relations: normalizeRelations(p?.relations),
   };
 }
@@ -313,6 +426,9 @@ export function cloneWorldState(value: WorldState = EMPTY_WORLD): WorldState {
     repairKits: value.repairKits,
     raidEvents: value.raidEvents.map((event) => ({ ...event })),
     repairEvents: value.repairEvents.map((event) => ({ ...event })),
+    parcelClaims: value.parcelClaims.map((claim) => ({ ...claim })),
+    parcelRentEvents: value.parcelRentEvents.map((event) => ({ ...event })),
+    parcelRentCollected: [...value.parcelRentCollected],
     relations: { ...value.relations },
   };
 }
@@ -556,6 +672,106 @@ export function setWalletRelation(targetWallet: string, relation: WalletRelation
   }
   commit({ ...state, relations: nextRelations });
   return true;
+}
+
+export function getOwnedParcelAt(x: number, z: number, claims: ParcelClaim[] = state.parcelClaims): ParcelClaim | null {
+  const id = parcelIdAt(x, z);
+  return claims.find((claim) => claim.id === id) ?? null;
+}
+
+export function previewParcelClaimAt(x: number, z: number, occupiedParcelIds: string[] = []): { ok: boolean; reason?: string; claim?: ParcelClaim } {
+  const owner = wallet?.toLowerCase();
+  if (!owner) return { ok: false, reason: 'Connect a wallet first.' };
+  const { gx, gz } = parcelGridAt(x, z);
+  const id = parcelIdFromGrid(gx, gz);
+  const cx = gx * PARCEL_SIZE;
+  const cz = gz * PARCEL_SIZE;
+  const radius = Math.hypot(cx, cz);
+  if (radius < PARCEL_MIN_RADIUS) return { ok: false, reason: 'Claim outside the village core.' };
+  if (radius > WORLD_LIMIT_FOR_PARCELS) return { ok: false, reason: 'This parcel is beyond the current frontier.' };
+  if (state.parcelClaims.some((claim) => claim.id === id) || occupiedParcelIds.includes(id)) {
+    return { ok: false, reason: 'That parcel is already claimed.' };
+  }
+  if (state.parcelClaims.length >= MAX_PARCEL_CLAIMS) return { ok: false, reason: 'Parcel claim cap reached.' };
+  const claimCost = parcelClaimCost(gx, gz);
+  const freeBuild = isLocalhostFreeBuildWallet();
+  if (!freeBuild && state.inventory.coin < claimCost) return { ok: false, reason: `Need ${claimCost} coin to claim this parcel.` };
+  const claim: ParcelClaim = {
+    id,
+    owner,
+    gx,
+    gz,
+    x: cx,
+    z: cz,
+    size: PARCEL_SIZE,
+    claimCost,
+    commissionBps: PARCEL_COMMISSION_BPS,
+    terrain: parcelTerrainForGrid(gx, gz),
+    at: Date.now(),
+  };
+  return { ok: true, claim };
+}
+
+export function commitParcelClaim(claim: ParcelClaim): { ok: boolean; reason?: string; claim?: ParcelClaim } {
+  const owner = wallet?.toLowerCase();
+  if (!owner) return { ok: false, reason: 'Connect a wallet first.' };
+  if (claim.owner !== owner) return { ok: false, reason: 'Cannot commit another wallet parcel.' };
+  if (state.parcelClaims.some((existing) => existing.id === claim.id)) return { ok: false, reason: 'That parcel is already claimed.' };
+  const freeBuild = isLocalhostFreeBuildWallet();
+  commit({
+    ...state,
+    inventory: { ...state.inventory, coin: freeBuild ? state.inventory.coin : Math.max(0, state.inventory.coin - claim.claimCost) },
+    parcelClaims: [claim, ...state.parcelClaims].slice(0, MAX_PARCEL_CLAIMS),
+  });
+  return { ok: true, claim };
+}
+
+export function claimParcelAt(x: number, z: number, occupiedParcelIds: string[] = []): { ok: boolean; reason?: string; claim?: ParcelClaim } {
+  const preview = previewParcelClaimAt(x, z, occupiedParcelIds);
+  if (!preview.ok || !preview.claim) return preview;
+  return commitParcelClaim(preview.claim);
+}
+
+export function recordParcelRentEvent(owner: string, parcelId: string, action: ParcelRentEvent['action'] = 'build', coin = PARCEL_BUILD_RENT_COIN): { ok: boolean; reason?: string; event?: ParcelRentEvent } {
+  const payer = wallet?.toLowerCase();
+  const target = owner.toLowerCase();
+  if (!payer) return { ok: false, reason: 'Connect a wallet first.' };
+  if (!/^0x[a-f0-9]{40}$/.test(target)) return { ok: false, reason: 'Invalid parcel owner.' };
+  if (payer === target) return { ok: true };
+  if (!parcelId) return { ok: false, reason: 'Missing parcel id.' };
+  const amount = Math.max(1, Math.min(99, Math.round(coin)));
+  const freeBuild = isLocalhostFreeBuildWallet();
+  if (!freeBuild && state.inventory.coin < amount) return { ok: false, reason: `Need ${amount} coin rent for this parcel.` };
+  const event: ParcelRentEvent = {
+    id: createId('rent'),
+    payer,
+    owner: target,
+    parcelId,
+    action,
+    coin: amount,
+    at: Date.now(),
+  };
+  commit({
+    ...state,
+    inventory: { ...state.inventory, coin: freeBuild ? state.inventory.coin : Math.max(0, state.inventory.coin - amount) },
+    parcelRentEvents: [event, ...state.parcelRentEvents].slice(0, MAX_PARCEL_RENT_EVENTS),
+  });
+  return { ok: true, event };
+}
+
+export function collectParcelRentIncome(events: ParcelRentEvent[]): { collected: number; count: number } {
+  const owner = wallet?.toLowerCase();
+  if (!owner) return { collected: 0, count: 0 };
+  const already = new Set(state.parcelRentCollected);
+  const payable = events.filter((event) => event.owner === owner && event.payer !== owner && !already.has(event.id));
+  if (payable.length === 0) return { collected: 0, count: 0 };
+  const collected = payable.reduce((sum, event) => sum + Math.max(0, Math.round(event.coin)), 0);
+  commit({
+    ...state,
+    inventory: { ...state.inventory, coin: state.inventory.coin + collected },
+    parcelRentCollected: [...payable.map((event) => event.id), ...state.parcelRentCollected].slice(0, MAX_PARCEL_RENT_EVENTS),
+  });
+  return { collected, count: payable.length };
 }
 
 export function raidDamageForWeapon(weaponLevel = 0): number {

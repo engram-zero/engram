@@ -1,16 +1,20 @@
 'use client';
 
 import { useSyncExternalStore } from 'react';
-import { Contract, JsonRpcProvider, type EventLog } from 'ethers';
+import { Contract, JsonRpcProvider, decodeBytes32String, type EventLog } from 'ethers';
 import type { NetworkType } from '@/app/providers';
 import { downloadByRootHashAPI } from '@/lib/0g/downloader';
 import { getNetworkConfig } from '@/lib/0g/network';
 import { ENGRAM_REGISTRY_ABI } from '@/lib/registry/abi';
 import { getRegistryAddress } from '@/lib/registry/registry';
-import { normalizeWorldState, type Building, type RaidEvent, type RepairEvent } from '@/lib/world';
+import { PARCEL_REGISTRY_ABI } from '@/lib/registry/parcel-abi';
+import { getParcelRegistryAddress } from '@/lib/registry/parcels';
+import { normalizeWorldState, PARCEL_SIZE, parcelClaimCost, parcelTerrainForGrid, type Building, type ParcelClaim, type ParcelRentEvent, type RaidEvent, type RepairEvent } from '@/lib/world';
 
 export type PublicRaidEvent = RaidEvent & { author: string };
 export type PublicRepairEvent = RepairEvent & { author: string };
+export type PublicParcelClaim = ParcelClaim & { author: string };
+export type PublicParcelRentEvent = ParcelRentEvent & { author: string };
 export type PublicBuilding = Building & {
   owner: string;
   raidDamage?: number;
@@ -21,17 +25,20 @@ export type PublicBuilding = Building & {
 export interface PublicWorldOwner {
   owner: string;
   buildingCount: number;
+  parcelCount: number;
 }
 
 interface PublicWorldState {
   buildings: PublicBuilding[];
   raidEvents: PublicRaidEvent[];
   repairEvents: PublicRepairEvent[];
+  parcels: PublicParcelClaim[];
+  parcelRentEvents: PublicParcelRentEvent[];
   owners: PublicWorldOwner[];
   loading: boolean;
 }
 
-const EMPTY_PUBLIC_WORLD: PublicWorldState = { buildings: [], raidEvents: [], repairEvents: [], owners: [], loading: false };
+const EMPTY_PUBLIC_WORLD: PublicWorldState = { buildings: [], raidEvents: [], repairEvents: [], parcels: [], parcelRentEvents: [], owners: [], loading: false };
 const listeners = new Set<() => void>();
 let state = EMPTY_PUBLIC_WORLD;
 let lastKey = '';
@@ -66,13 +73,42 @@ function scanLookback(): number {
   return Number.isFinite(value) && value > 0 ? value : 300_000;
 }
 
+function parcelFromRegistryEvent(log: EventLog): PublicParcelClaim | null {
+  try {
+    const id = decodeBytes32String(String(log.args?.parcelId ?? ''));
+    const owner = String(log.args?.owner ?? '').toLowerCase();
+    const match = id.match(/^p:([-0-9]+):([-0-9]+)$/);
+    if (!match || !/^0x[a-f0-9]{40}$/.test(owner)) return null;
+    const gx = Number(match[1]);
+    const gz = Number(match[2]);
+    if (!Number.isInteger(gx) || !Number.isInteger(gz)) return null;
+    const claim: PublicParcelClaim = {
+      id,
+      owner,
+      author: owner,
+      gx,
+      gz,
+      x: gx * PARCEL_SIZE,
+      z: gz * PARCEL_SIZE,
+      size: PARCEL_SIZE,
+      claimCost: parcelClaimCost(gx, gz),
+      commissionBps: Number(log.args?.commissionBps ?? 0),
+      terrain: parcelTerrainForGrid(gx, gz),
+      at: Number(log.args?.at ?? 0) * 1000,
+    };
+    return claim;
+  } catch {
+    return null;
+  }
+}
+
 async function downloadWorldData(
   owner: string,
   root: string,
   storageRpc: string
-): Promise<{ buildings: PublicBuilding[]; raidEvents: PublicRaidEvent[]; repairEvents: PublicRepairEvent[] }> {
+): Promise<{ buildings: PublicBuilding[]; raidEvents: PublicRaidEvent[]; repairEvents: PublicRepairEvent[]; parcels: PublicParcelClaim[]; parcelRentEvents: PublicParcelRentEvent[] }> {
   const [data, err] = await downloadByRootHashAPI(root, storageRpc);
-  if (err || !data) return { buildings: [], raidEvents: [], repairEvents: [] };
+  if (err || !data) return { buildings: [], raidEvents: [], repairEvents: [], parcels: [], parcelRentEvents: [] };
 
   try {
     const raw = JSON.parse(new TextDecoder('utf-8').decode(data));
@@ -85,9 +121,15 @@ async function downloadWorldData(
       repairEvents: world.repairEvents
         .filter((event) => event.repairer === owner)
         .map((event) => ({ ...event, author: owner })),
+      parcels: world.parcelClaims
+        .filter((claim) => claim.owner === owner)
+        .map((claim) => ({ ...claim, author: owner })),
+      parcelRentEvents: world.parcelRentEvents
+        .filter((event) => event.payer === owner)
+        .map((event) => ({ ...event, author: owner })),
     };
   } catch {
-    return { buildings: [], raidEvents: [], repairEvents: [] };
+    return { buildings: [], raidEvents: [], repairEvents: [], parcels: [], parcelRentEvents: [] };
   }
 }
 
@@ -113,6 +155,8 @@ export async function initPublicWorld(
     buildings: options.quiet ? state.buildings : [],
     raidEvents: options.quiet ? state.raidEvents : [],
     repairEvents: options.quiet ? state.repairEvents : [],
+    parcels: options.quiet ? state.parcels : [],
+    parcelRentEvents: options.quiet ? state.parcelRentEvents : [],
     owners: options.quiet ? state.owners : [],
     loading: true,
   });
@@ -126,9 +170,14 @@ export async function initPublicWorld(
     const { l1Rpc, storageRpc } = getNetworkConfig(PUBLIC_WORLD_NETWORK);
     const provider = new JsonRpcProvider(l1Rpc);
     const contract = new Contract(registry, ENGRAM_REGISTRY_ABI, provider);
+    const parcelRegistry = getParcelRegistryAddress();
+    const parcelContract = parcelRegistry ? new Contract(parcelRegistry, PARCEL_REGISTRY_ABI, provider) : null;
     const latestBlock = await provider.getBlockNumber();
     const fromBlock = Math.max(0, latestBlock - scanLookback());
-    const events = await contract.queryFilter(contract.filters.RootUpdated(), fromBlock, 'latest');
+    const [events, parcelEvents] = await Promise.all([
+      contract.queryFilter(contract.filters.RootUpdated(), fromBlock, 'latest'),
+      parcelContract ? parcelContract.queryFilter(parcelContract.filters.ParcelClaimed(), fromBlock, 'latest') : Promise.resolve([]),
+    ]);
     const latestRoots = new Map<string, string>();
     const excluded = currentWallet?.toLowerCase();
 
@@ -144,14 +193,37 @@ export async function initPublicWorld(
     const worlds = await Promise.all(entries.map(([owner, root]) => downloadWorldData(owner, root, storageRpc)));
     const raidEvents = worlds.flatMap((world) => world.raidEvents);
     const repairEvents = worlds.flatMap((world) => world.repairEvents);
+    const parcelRentEvents = worlds.flatMap((world) => world.parcelRentEvents);
+    const claimed = new Set<string>();
+    const registryParcels = parcelEvents
+      .map((event) => parcelFromRegistryEvent(event as EventLog))
+      .filter((parcel): parcel is PublicParcelClaim => !!parcel);
+    const parcels = [
+      ...worlds.flatMap((world) => world.parcels),
+      ...registryParcels,
+    ]
+      .sort((a, b) => a.at - b.at)
+      .filter((parcel) => {
+        if (claimed.has(parcel.id)) return false;
+        claimed.add(parcel.id);
+        return true;
+      });
     const onchainBuildings = worlds.flatMap((world) => world.buildings).filter((building) => building.owner !== excluded);
     const byOwnerAndPosition = new Set<string>();
-    const counts = new Map<string, number>();
+    const counts = new Map<string, { buildingCount: number; parcelCount: number }>();
+    for (const parcel of parcels) {
+      if (parcel.owner === excluded) continue;
+      const count = counts.get(parcel.owner) ?? { buildingCount: 0, parcelCount: 0 };
+      count.parcelCount += 1;
+      counts.set(parcel.owner, count);
+    }
     const buildings = onchainBuildings.filter((building) => {
       const id = `${building.owner}:${building.type}:${building.x}:${building.z}:${building.rot}`;
       if (byOwnerAndPosition.has(id)) return false;
       byOwnerAndPosition.add(id);
-      counts.set(building.owner, (counts.get(building.owner) ?? 0) + 1);
+      const count = counts.get(building.owner) ?? { buildingCount: 0, parcelCount: 0 };
+      count.buildingCount += 1;
+      counts.set(building.owner, count);
       return true;
     }).map((building) => {
       const eventsForBuilding = raidEvents
@@ -175,19 +247,22 @@ export async function initPublicWorld(
       };
     });
     const owners = Array.from(counts.entries())
-      .map(([owner, buildingCount]) => ({ owner, buildingCount }))
-      .sort((a, b) => b.buildingCount - a.buildingCount);
+      .map(([owner, count]) => ({ owner, buildingCount: count.buildingCount, parcelCount: count.parcelCount }))
+      .sort((a, b) => (b.buildingCount + b.parcelCount) - (a.buildingCount + a.parcelCount));
 
     console.info('[engram] public world refresh done', {
       wallets: entries.length,
       buildings: buildings.length,
       raidEvents: raidEvents.length,
       repairEvents: repairEvents.length,
+      parcels: parcels.length,
+      registryParcels: registryParcels.length,
+      parcelRentEvents: parcelRentEvents.length,
     });
-    setPublicWorld({ buildings, raidEvents, repairEvents, owners, loading: false });
+    setPublicWorld({ buildings, raidEvents, repairEvents, parcels, parcelRentEvents, owners, loading: false });
   } catch (error) {
     console.warn('[engram] public world load failed:', error);
-    setPublicWorld({ buildings: state.buildings, raidEvents: state.raidEvents, repairEvents: state.repairEvents, owners: state.owners, loading: false });
+    setPublicWorld({ buildings: state.buildings, raidEvents: state.raidEvents, repairEvents: state.repairEvents, parcels: state.parcels, parcelRentEvents: state.parcelRentEvents, owners: state.owners, loading: false });
   }
 }
 
