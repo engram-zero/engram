@@ -991,3 +991,27 @@ Verifica con `npx tsc --noEmit`.
 descarga builds + raid events de los bundles 0G y calcula HP público efectivo; herramienta aérea
 **Raid** crea eventos locales, muestra daño inmediato y exige **Save World** para publicarlos/on-chain
 via root registry. `npx tsc --noEmit` limpio. **Commit:** _(este commit)_
+
+### 27 jun 2026 · R32: descripción del submit + docs + pulido (stone en HUD)
+**Pedido (humano):** Clasificamos al Round of 32. Preparar la descripción del submit, actualizar
+la documentación, y hacer un pulido de bajo riesgo.
+**Prompt sintetizado:** (1) En `STATUS.md`, reemplaza la "Paste-ready dashboard Description" por una
+versión R32 que mantiene la copy honesta (sin "your wallet pays", declara el sponsor) y **añade el
+mundo vivo nuevo** (regateo, minería de stone, precios dinámicos, raids); marca R32 CLASIFICADO y el
+ítem de reenvío como 🔴 con deadline JUN 28. (2) Refleja R32 + descripción lista en la línea ADMIN de
+`ENGRAM_PROMPTS.md`. (3) Pulido: el HUD de inventario mostraba Wood/Coin pero **no Stone** (recurso
+nuevo invisible al jugar) → añade `StoneIcon` y el contador `stone/MAX_STONE` entre Wood y Coin en
+`Scene3D.tsx`. tsc debe pasar.
+**Qué se hizo:** descripción R32 + progreso del torneo en `STATUS.md`; ADMIN actualizado en
+`ENGRAM_PROMPTS.md`; `StoneIcon` + contador de stone en el HUD de `Scene3D.tsx`. `npx tsc --noEmit`
+limpio. **Commit:** _(este commit)_
+
+### 27 jun 2026 · Guion de demo R32 (voiceover)
+**Pedido (humano):** Dame el guion del video y documéntalo; lo paso por ElevenLabs.
+**Prompt sintetizado:** Extiende `docs/DEMO_SCRIPT.md` (sin pisar el guion base de la tesis de
+memoria) con una sección "R32 cut": shot list + voiceover continuo (~90s) que entreteje las
+features nuevas (regateo, minar stone, mercado dinámico, build con IA, raids) alrededor del beat
+headline reload→recuerda. Reglas anti-DQ: no decir "your wallet pays", **no** mostrar/afirmar
+minería en 0G Compute (gateada/sin verificar), y mostrar raids solo porque el build los hace.
+**Qué se hizo:** sección "R32 cut" en `DEMO_SCRIPT.md` (shot list + VO continuo + notas de
+honestidad + pasos de subida del video). **Commit:** _(este commit)_

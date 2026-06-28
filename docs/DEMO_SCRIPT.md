@@ -138,3 +138,63 @@ Keep the em-dashes and periods — ElevenLabs uses them for the pauses.
 > half with the matching rising/falling intonation so they join naturally. To make
 > that easier you can instead generate 7+8 (and 10+11) as ONE clip and place it at
 > the first timecode; only split if you need the exact start on the second half.
+
+---
+
+# R32 cut — extend the script with the living world (27 jun 2026)
+
+The base script above is the **memory thesis** (still the headline — keep the
+**reload → it remembers** beat as the emotional peak). For Round of 32 we shipped a
+lot more, so this cut weaves the new gameplay around that core. Same voice/settings
+as above. Target **~90s**.
+
+**Honesty rule (anti-DQ), unchanged + one addition:**
+- Do **NOT** say "your wallet pays" — storage is sponsored; the player signs only the
+  on-chain *pointer*.
+- Do **NOT** show or claim **"mining on 0G Compute"** — Prompt 20 is **gated OFF /
+  unverified**. Mining stone is a normal local gather here; don't imply compute work.
+- Show **raids** only because the build does them (record events + visible damage,
+  discoverable on-chain). Match the demo to the code.
+
+## R32 shot list
+
+| # | Time | Shot | Voiceover |
+|---|------|------|-----------|
+| 1 | 0:00 | Title over the village at dusk | "In most games, the world forgets you the moment you log off. In Aldenmoor, it remembers." |
+| 2 | 0:08 | Connect wallet → an NPC greets you; **reload the page**, it still recalls you | "Connect your wallet, and three villagers start keeping their own memory of you — your trust, your debts, every choice. It lives on zero-G Storage. Reload, come back, and Sable still greets you by name." |
+| 3 | 0:22 | Open 📜 Memory panel (trust + history + root hash) | "This isn't a save file on our server — it's yours, auditable by its root hash, and not even we can edit or erase it." |
+| 4 | 0:32 | Haggle with Aldric: propose a price, he counters/accepts; trust ticks up | "Bargain with Aldric the merchant. Deal fair and he warms to you; try to gouge him, and he remembers that too." |
+| 5 | 0:42 | Chop a tree, then **mine a rock** (stone); inventory shows wood/stone/coin | "Chop wood. Mine stone. Everything you gather is part of a world that's truly yours." |
+| 6 | 0:50 | Market: sell wood at a higher price as the forest thins; buy a sapling/axe | "Trade in a market with living prices — the more the forest thins, the more your timber is worth." |
+| 7 | 0:58 | Build a house, then 🤖 AI build raising a structure | "Build by hand… or just describe what you want, and the AI raises it for you." |
+| 8 | 1:06 | Mark a public-world wallet hostile, raid a rival structure, damage shows | "Mark a rival hostile, and raid what they've built — every blow recorded on-chain for anyone to verify." |
+| 9 | 1:16 | Leave & Save → `✓ Saved to 0G · root… · tx…`; cut to chainscan-galileo tx | "When you leave, your whole world is written to zero-G with a single signature — a real on-chain upload you can trace on the explorer." |
+| 10 | 1:26 | Logo / tagline | "Engram. Your story, on zero-G — where no one can make them forget." |
+
+## R32 continuous voiceover (paste into ElevenLabs; write "zero-G" for 0G)
+
+In most games, the world forgets you the moment you log off. In Aldenmoor, it remembers.
+
+Connect your wallet, and three villagers start keeping their own memory of you — your trust, your debts, every choice. It lives on zero-G Storage. Reload, come back, and Sable still greets you by name.
+
+This isn't a save file on our server — it's yours, auditable by its root hash, and not even we can edit or erase it.
+
+Bargain with Aldric the merchant. Deal fair and he warms to you; try to gouge him, and he remembers that too.
+
+Chop wood. Mine stone. Everything you gather is part of a world that's truly yours.
+
+Trade in a market with living prices — the more the forest thins, the more your timber is worth.
+
+Build by hand… or just describe what you want, and the AI raises it for you.
+
+Mark a rival hostile, and raid what they've built — every blow recorded on-chain for anyone to verify.
+
+When you leave, your whole world is written to zero-G with a single signature — a real on-chain upload you can trace on the explorer.
+
+Engram. Your story, on zero-G — where no one can make them forget.
+
+## After recording
+- Upload (YouTube/Vimeo, same visibility as before) → you get a **new URL** (hosts don't
+  swap the file on an existing link).
+- Update the link in **both** the 0g.ai dashboard submission **and** the repo `README`.
+- Confirm the dashboard **Description** matches the paste-ready R32 copy in `STATUS.md`.

@@ -652,6 +652,7 @@ function Game() {
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
                   <span className="text-[#d6b84a]" title="Price rises as the forest thins and as coin piles up">Aldric pays {quote.sell} coin / wood ↻</span>
                   <span>Your wood: <strong>{world.inventory.wood}</strong></span>
+                  <span>Your stone: <strong>{world.inventory.stone}</strong></span>
                   <span>Your coin: <strong>{world.inventory.coin}</strong></span>
                   <span>
                     Reputation: <strong style={{ color: trustColor(memories?.aldric.trust_level ?? 50) }}>{memories?.aldric.trust_level ?? 50}/100</strong>

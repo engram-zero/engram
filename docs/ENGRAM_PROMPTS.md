@@ -34,9 +34,10 @@
 20. [Minar = trabajo real en 0G Compute (proof-of-useful-work)](#prompt-20--minar--trabajo-real-en-0g-compute) — 🟡 construido, **gateado OFF + sin verificar en vivo** (falta fondear el ledger y probar)
 
 > **Tareas no-código (ADMIN):** ✅ deploy a Vercel + env vars · ✅ save a 0G end-to-end ·
-> ✅ **Group Stage ENVIADO y ACEPTADO** (pasa a Round of 32) · ✅ video demo (voz IA, ElevenLabs) ·
-> ✅ logo + thumbnail + license (MIT) · ⏳ actualizar la Description del dashboard 0g.ai (versión honesta) ·
-> ⏳ post en X (`#TheZeroCup`, `@0G_labs`).
+> ✅ **Group Stage ENVIADO y ACEPTADO** · ✅ **Round of 32 CLASIFICADO (top 32)** · ✅ video demo
+> (voz IA, ElevenLabs) · ✅ logo + thumbnail + license (MIT) · 🔴 **REENVIAR para R32 (deadline
+> JUN 28): repo en último `main` + pegar la Description nueva** (lista en `STATUS.md`) ·
+> ⏳ post en X (`#TheZeroCup`, `@0G_labs`) — solo cuenta desde cuartos.
 
 ---
 

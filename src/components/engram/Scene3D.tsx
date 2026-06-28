@@ -461,6 +461,17 @@ function CoinIcon() {
   );
 }
 
+function StoneIcon() {
+  return (
+    <span className="engram-resource-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none">
+        <path d="M5 14l4-6 6-1 4 5-3 6H7z" fill="#8a8f96" stroke="#cdd4dc" strokeWidth="1.3" strokeLinejoin="round" />
+        <path d="M9 8l2 5 4 4M15 7l-1 6 4 1" stroke="#cdd4dc" strokeWidth="1" strokeLinecap="round" opacity="0.7" />
+      </svg>
+    </span>
+  );
+}
+
 // ─── Camera rig ───────────────────────────────────────────────────────────────
 // Smoothly eases the camera toward whichever NPC is active; returns to an
 // overview shot when none is selected.
@@ -4203,6 +4214,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
         <>
           <div className="pointer-events-none absolute top-20 left-4 z-10 flex flex-col items-start gap-1.5 text-sm text-[#f4e8d0]">
             <span className="inline-flex items-center rounded-md bg-black/45 px-2.5 py-1" title="Wood"><WoodIcon />{world.inventory.wood}/{MAX_WOOD}</span>
+            <span className="inline-flex items-center rounded-md bg-black/45 px-2.5 py-1" title="Stone"><StoneIcon />{world.inventory.stone}/{MAX_STONE}</span>
             <span className="inline-flex items-center rounded-md bg-black/45 px-2.5 py-1" title="Coin"><CoinIcon />{world.inventory.coin}</span>
             <span className="inline-flex items-center rounded-md bg-black/45 px-2.5 py-1" title="Repair kits">Repair {world.repairKits}</span>
           </div>
