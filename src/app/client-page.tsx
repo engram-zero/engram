@@ -27,6 +27,8 @@ import {
   woodQuote,
   MARKET,
   MAX_STONE,
+  ORE_MAX,
+  type OreType,
   AXE_UPGRADE_COST,
   REPAIR_KIT_COST,
   SAPLING_COST,
@@ -399,43 +401,45 @@ function Game() {
   }
 
   // Stone trade (static price, house edge: buy > sell). Mirrors the wood flow.
-  async function sellStoneToAldric() {
+  // Generic ore trade (stone / silver / gold), all with the house-edge spread.
+  async function sellOreToAldric(ore: OreType) {
     if (!memories || active !== 'aldric' || scene.loading) return;
-    const avail = Math.max(0, world.inventory.stone);
+    const avail = Math.max(0, world.inventory[ore]);
     if (avail <= 0) {
-      setMerchantMsg('You have no stone to sell.');
+      setMerchantMsg(`You have no ${ore} to sell.`);
       return;
     }
-    const price = MARKET.stone?.sell ?? 4;
+    const price = MARKET[ore]?.sell ?? 0;
     const qty = clampInt(merchantStoneQty, 1, avail);
     const total = qty * price;
-    await addResource('stone', -qty);
+    await addResource(ore, -qty);
     await addResource('coin', total);
-    const next = applyAldricSpend(memories.aldric, `Sold ${qty} stone for ${total} coin.`, `Bought ${qty} stone from the traveller at ${price} coin each.`);
+    const next = applyAldricSpend(memories.aldric, `Sold ${qty} ${ore} for ${total} coin.`, `Bought ${qty} ${ore} from the traveller at ${price} coin each.`);
     setMemories((prev) => (prev ? { ...prev, aldric: next } : prev));
     setDirty((d) => ({ ...d, aldric: true }));
     setMerchantStoneQty((prev) => clampInt(prev, 1, Math.max(1, avail - qty)));
-    setMerchantMsg(`Sold ${qty} stone for ${total} coin (${price}/unit).`);
+    setMerchantMsg(`Sold ${qty} ${ore} for ${total} coin (${price}/unit).`);
   }
 
-  async function buyStoneFromAldric() {
+  async function buyOreFromAldric(ore: OreType) {
     if (!memories || active !== 'aldric' || scene.loading) return;
-    const price = MARKET.stone?.buy ?? 9;
+    const price = MARKET[ore]?.buy ?? 0;
+    if (price <= 0) return;
     const want = clampInt(merchantStoneQty, 1, 999);
     const affordable = Math.floor(world.inventory.coin / price);
-    const room = Math.max(0, MAX_STONE - world.inventory.stone);
+    const room = Math.max(0, ORE_MAX[ore] - world.inventory[ore]);
     const qty = Math.min(want, affordable, room);
     if (qty <= 0) {
-      setMerchantMsg(room <= 0 ? 'Your pack is full of stone.' : `Not enough coin — stone is ${price} coin/unit.`);
+      setMerchantMsg(room <= 0 ? `Your pack is full of ${ore}.` : `Not enough coin — ${ore} is ${price} coin/unit.`);
       return;
     }
     const cost = qty * price;
     await addResource('coin', -cost);
-    await addResource('stone', qty);
-    const next = applyAldricSpend(memories.aldric, `Bought ${qty} stone for ${cost} coin.`, `Sold ${qty} stone to the traveller at ${price} coin each.`);
+    await addResource(ore, qty);
+    const next = applyAldricSpend(memories.aldric, `Bought ${qty} ${ore} for ${cost} coin.`, `Sold ${qty} ${ore} to the traveller at ${price} coin each.`);
     setMemories((prev) => (prev ? { ...prev, aldric: next } : prev));
     setDirty((d) => ({ ...d, aldric: true }));
-    setMerchantMsg(`Bought ${qty} stone for ${cost} coin (${price}/unit).`);
+    setMerchantMsg(`Bought ${qty} ${ore} for ${cost} coin (${price}/unit).`);
   }
 
   async function buyRepairKitFromAldric() {
@@ -757,12 +761,13 @@ function Game() {
                   </div>
                 </div>
 
-                {/* Stone — gathered by mining rock outcrops; static price, house edge. */}
-                <div className="mt-3 border-t border-[#6a5832]/60 pt-2.5">
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                    <span className="text-[#bcd0e0]">Stone · sell <strong>{MARKET.stone?.sell}</strong> / buy <strong>{MARKET.stone?.buy}</strong> coin</span>
-                    <span>Your stone: <strong>{world.inventory.stone}</strong></span>
+                {/* Ores — gathered by mining rock veins; static price, house edge.
+                    Silver/gold rows appear once you've mined some (less clutter). */}
+                <div className="mt-3 border-t border-[#6a5832]/60 pt-2.5 space-y-1.5">
+                  <div className="flex items-center gap-2 text-xs text-[#f4e8d0]/70">
+                    <label htmlFor="aldric-ore-qty">Ore qty</label>
                     <input
+                      id="aldric-ore-qty"
                       type="number"
                       min={1}
                       max={999}
@@ -770,23 +775,33 @@ function Game() {
                       value={merchantStoneQty}
                       disabled={scene.loading}
                       onChange={(e) => setMerchantStoneQty(clampInt(Number(e.target.value || 1), 1, 999))}
-                      className="w-20 bg-black/40 border border-[#5a4a28] focus:border-[#d6b84a] outline-none rounded-md px-3 py-2 text-sm"
+                      className="w-20 bg-black/40 border border-[#5a4a28] focus:border-[#d6b84a] outline-none rounded-md px-2 py-1 text-sm"
                     />
-                    <button
-                      onClick={sellStoneToAldric}
-                      disabled={scene.loading || world.inventory.stone <= 0}
-                      className="bg-black/40 border border-[#8a6a32] hover:border-[#d6b84a] rounded-md px-3 py-2 text-sm disabled:opacity-40"
-                    >
-                      Sell stone
-                    </button>
-                    <button
-                      onClick={buyStoneFromAldric}
-                      disabled={scene.loading || world.inventory.coin < (MARKET.stone?.buy ?? 9) || world.inventory.stone >= MAX_STONE}
-                      className="bg-black/40 border border-[#8a6a32] hover:border-[#d6b84a] rounded-md px-3 py-2 text-sm disabled:opacity-40"
-                    >
-                      Buy stone
-                    </button>
                   </div>
+                  {(['stone', 'silver', 'gold'] as OreType[])
+                    .filter((ore) => ore === 'stone' || world.inventory[ore] > 0 || world.inventory.coin >= (MARKET[ore]?.buy ?? 0))
+                    .map((ore) => (
+                      <div key={ore} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                        <span className="capitalize" style={{ color: ore === 'gold' ? '#e0c25a' : ore === 'silver' ? '#cdd2de' : '#bcd0e0' }}>
+                          {ore} · sell <strong>{MARKET[ore]?.sell}</strong> / buy <strong>{MARKET[ore]?.buy}</strong>
+                        </span>
+                        <span>You: <strong>{world.inventory[ore]}</strong></span>
+                        <button
+                          onClick={() => sellOreToAldric(ore)}
+                          disabled={scene.loading || world.inventory[ore] <= 0}
+                          className="bg-black/40 border border-[#8a6a32] hover:border-[#d6b84a] rounded-md px-3 py-1.5 text-sm disabled:opacity-40"
+                        >
+                          Sell
+                        </button>
+                        <button
+                          onClick={() => buyOreFromAldric(ore)}
+                          disabled={scene.loading || world.inventory.coin < (MARKET[ore]?.buy ?? 0) || world.inventory[ore] >= ORE_MAX[ore]}
+                          className="bg-black/40 border border-[#8a6a32] hover:border-[#d6b84a] rounded-md px-3 py-1.5 text-sm disabled:opacity-40"
+                        >
+                          Buy
+                        </button>
+                      </div>
+                    ))}
                 </div>
 
                 <div className="mt-2 text-xs text-[#f4e8d0]/65">

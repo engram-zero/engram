@@ -123,11 +123,15 @@ export const TREES: TreeDef[] = (() => {
   return out;
 })();
 
+export type OreKind = 'stone' | 'silver' | 'gold';
+
 export interface RockDef {
   x: number;
   z: number;
   scale: number;
   rot: number;
+  /** Which ore this outcrop yields. Most are stone; silver is rare, gold rarer. */
+  ore: OreKind;
 }
 
 // Mineable stone outcrops — sparser than the forest, scattered through the hills
@@ -137,7 +141,7 @@ export const ROCKS: RockDef[] = (() => {
   const rng = mulberry32(7331);
   const out: RockDef[] = [];
   let tries = 0;
-  while (out.length < 16 && tries < 2000) {
+  while (out.length < 22 && tries < 3000) {
     tries++;
     const ang = rng() * Math.PI * 2;
     const rad = 16 + rng() * 40; // 16..56, out in the hills
@@ -146,7 +150,9 @@ export const ROCKS: RockDef[] = (() => {
     if (COTTAGES.some((c) => Math.hypot(x - c.x, z - c.z) < c.scale * 2.6)) continue;
     if (Math.abs(z - riverCenterZ(x)) < RIVER_CLEAR) continue; // keep the creek clear
     if (TREES.some((t) => Math.hypot(x - t.x, z - t.z) < 1.6)) continue; // not inside a tree
-    out.push({ x, z, scale: 0.9 + rng() * 0.7, rot: rng() * Math.PI * 2 });
+    const o = rng();
+    const ore: OreKind = o < 0.68 ? 'stone' : o < 0.9 ? 'silver' : 'gold'; // ~68% / 22% / 10%
+    out.push({ x, z, scale: 0.9 + rng() * 0.7, rot: rng() * Math.PI * 2, ore });
   }
   return out;
 })();

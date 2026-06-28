@@ -4,7 +4,9 @@
 // be used from both server and browser code.
 
 export type NPCName = 'aldric' | 'maren' | 'sable';
-export type ResourceType = 'wood' | 'stone' | 'coin';
+export type ResourceType = 'wood' | 'stone' | 'coin' | 'silver' | 'gold';
+/** Minerals you can mine out of rock outcrops (a subset of ResourceType). */
+export type OreType = 'stone' | 'silver' | 'gold';
 export type WalletRelation = 'neutral' | 'allied' | 'hostile';
 export const BLOCK_UNIT = 0.2;
 export const BLOCK_SCALE_MIN = BLOCK_UNIT;

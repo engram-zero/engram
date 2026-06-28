@@ -15,9 +15,9 @@
 //     NOT cross-device, NOT on-chain).
 
 import { useSyncExternalStore } from 'react';
-import { BLOCK_SCALE_MAX, BLOCK_SCALE_MIN, BLOCK_UNIT, type RaidEvent, type ResourceType, type WalletRelation, type WorldState, type Building, type BuildingType } from '@/lib/types';
+import { BLOCK_SCALE_MAX, BLOCK_SCALE_MIN, BLOCK_UNIT, type OreType, type RaidEvent, type ResourceType, type WalletRelation, type WorldState, type Building, type BuildingType } from '@/lib/types';
 
-export type { RaidEvent, ResourceType, WalletRelation, WorldState, Building, BuildingType } from '@/lib/types';
+export type { OreType, RaidEvent, ResourceType, WalletRelation, WorldState, Building, BuildingType } from '@/lib/types';
 
 /** How much wood the player can carry before they must use/drop some. Raised to
  * support AI-built structures and the pricier builds near the village centre. */
@@ -35,7 +35,7 @@ const MAX_RAID_EVENTS = 120;
 const RAID_EVENT_TTL_MS = 1000 * 60 * 60 * 24 * 7;
 
 export const EMPTY_WORLD: WorldState = {
-  inventory: { wood: 0, stone: 0, coin: 0 },
+  inventory: { wood: 0, stone: 0, coin: 0, silver: 0, gold: 0 },
   choppedTrees: [],
   minedRocks: [],
   buildings: [],
@@ -65,6 +65,8 @@ export const MARKET: Partial<Record<ResourceType, ResourcePrice>> = {
   // dynamic model later. Stone is rarer than wood, so it's worth more.
   wood: { sell: 2, buy: 6 },
   stone: { sell: 4, buy: 9 },
+  silver: { sell: 12, buy: 26 },
+  gold: { sell: 30, buy: 66 },
 };
 
 /** Cost in coin of the one-time "sharper axe" upgrade (2× wood per chop). */
@@ -253,6 +255,8 @@ export function normalizeWorldState(raw: unknown): WorldState {
       wood: Math.max(0, Number(p?.inventory?.wood ?? 0)),
       stone: Math.max(0, Number(p?.inventory?.stone ?? 0)),
       coin: Math.max(0, Number(p?.inventory?.coin ?? 0)),
+      silver: Math.max(0, Number(p?.inventory?.silver ?? 0)),
+      gold: Math.max(0, Number(p?.inventory?.gold ?? 0)),
     },
     choppedTrees,
     minedRocks,
@@ -389,12 +393,17 @@ export function woodIsFull(): boolean {
   return state.inventory.wood >= MAX_WOOD;
 }
 
-// ── Mining (stone) ── parallels tree chopping, against map.ts ROCKS. ───────────
+// ── Mining (ores) ── parallels tree chopping, against map.ts ROCKS. Each rock is
+// a vein of stone, silver, or gold; mining yields that ore. ────────────────────
 export const MAX_STONE = 60;
-/** Holds-to-mine before a rock is exhausted; yields ONE stone per fill. */
+export const MAX_SILVER = 40;
+export const MAX_GOLD = 24;
+/** Carry cap per ore (rarer metals carry less). */
+export const ORE_MAX: Record<OreType, number> = { stone: MAX_STONE, silver: MAX_SILVER, gold: MAX_GOLD };
+/** Holds-to-mine before a rock is exhausted; yields ONE unit of its ore per fill. */
 export const ROCK_MINES = 18;
 export const STONE_PER_MINE = 1;
-export const ROCK_STONE = ROCK_MINES * STONE_PER_MINE; // total stone per rock
+export const ROCK_STONE = ROCK_MINES * STONE_PER_MINE; // total units per rock
 
 const mined: Record<number, number> = {};
 
@@ -402,20 +411,27 @@ export function isMined(index: number): boolean {
   return state.minedRocks.includes(index);
 }
 
-export function stoneIsFull(): boolean {
-  return state.inventory.stone >= MAX_STONE;
+/** True when the player can't carry any more of this ore. */
+export function oreIsFull(ore: OreType): boolean {
+  return state.inventory[ore] >= ORE_MAX[ore];
 }
 
-/** Extract one unit of stone from a rock (mirrors harvestTree). After ROCK_STONE
- * units the rock is exhausted and vanishes. No-op if already mined or full. */
-export function harvestRock(index: number): { depleted: boolean; gained: boolean } {
+/** Back-compat: stone-specific full check. */
+export function stoneIsFull(): boolean {
+  return oreIsFull('stone');
+}
+
+/** Extract one unit of `ore` from a rock (mirrors harvestTree). After ROCK_MINES
+ * fills the rock is exhausted and vanishes. No-op if already mined or that ore is
+ * full. The caller passes the rock's ore (from map.ts ROCKS[index].ore). */
+export function harvestRock(index: number, ore: OreType = 'stone'): { depleted: boolean; gained: boolean } {
   if (state.minedRocks.includes(index)) return { depleted: true, gained: false };
-  if (state.inventory.stone >= MAX_STONE) return { depleted: false, gained: false };
+  if (state.inventory[ore] >= ORE_MAX[ore]) return { depleted: false, gained: false };
   const units = (mined[index] = (mined[index] ?? 0) + 1);
   const depleted = units >= ROCK_MINES;
   commit({
     ...state,
-    inventory: { ...state.inventory, stone: Math.min(MAX_STONE, state.inventory.stone + STONE_PER_MINE) },
+    inventory: { ...state.inventory, [ore]: Math.min(ORE_MAX[ore], state.inventory[ore] + STONE_PER_MINE) },
     minedRocks: depleted ? [...state.minedRocks, index] : state.minedRocks,
   });
   return { depleted, gained: true };

@@ -1052,3 +1052,16 @@ contrahoja (poll) y filo brillante. tsc debe pasar.
 **Qué se hizo:** cue `mine_hit` en el manifest + wiring; lanza reposicionada; hacha con grip/pomo/
 poll/filo en `Scene3D.tsx`. `npx tsc --noEmit` limpio. **Falta asset:** `public/audio/foley/mine-hit.mp3`
 (hasta entonces minar es silencioso). **Commit:** _(este commit)_
+
+### 28 jun 2026 · Minería de oro y plata (vetas por roca)
+**Pedido (humano):** Meter oro y plata a la minería (vetas más raras), comerciables con Aldric.
+**Prompt sintetizado:** Añade `silver`/`gold` como `ResourceType` + `OreType` (types.ts). En map.ts,
+`RockDef.ore` con distribución ~68% piedra / 22% plata / 10% oro (22 rocas). En world.ts: inventario
++ `ORE_MAX` (stone 60/silver 40/gold 24), `MARKET` (silver 12/26, gold 30/66 con spread),
+`oreIsFull(ore)` y `harvestRock(index, ore)` genéricos. En Scene3D: `Rocks` tinta cada veta por
+mineral (color por instancia + metalness), minar otorga el mineral de la roca, HUD muestra
+plata/oro (al tener >0) y los hints dicen el mineral. En client-page: `sellOreToAldric`/
+`buyOreFromAldric` genéricos + filas de mercado por mineral (plata/oro aparecen al tener o poder
+comprar). tsc debe pasar.
+**Qué se hizo:** recursos+ore en types/world/map; render tintado + minado por mineral + HUD en
+Scene3D; mercado genérico de minerales en client-page. `npx tsc --noEmit` limpio. **Commit:** _(este commit)_

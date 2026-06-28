@@ -39,9 +39,12 @@ import {
   woodIsFull,
   harvestRock,
   isMined,
-  stoneIsFull,
+  oreIsFull,
+  ORE_MAX,
   MAX_WOOD,
   MAX_STONE,
+  MAX_SILVER,
+  MAX_GOLD,
   placeBuilding,
   removeBuilding,
   repairBuilding,
@@ -128,6 +131,7 @@ const WALK_SPEED = 4.6;
 const TALK_RANGE = 3.2; // how close you must stand before "Press E" appears
 const CHOP_RANGE = 2.8; // how close to a tree before "Press F to chop"
 const MINE_RANGE = 2.8; // how close to a rock before "Hold F to mine"
+const ORE_LABEL: Record<'stone' | 'silver' | 'gold', string> = { stone: 'Stone', silver: 'Silver', gold: 'Gold' };
 // Prompt 20: when a rock is exhausted, back the batch with a verifiable 0G
 // Compute inference (proof-of-useful-work). OFF unless the env flag is set AND
 // the compute ledger is funded server-side; mining always works either way.
@@ -472,6 +476,20 @@ function StoneIcon() {
     </span>
   );
 }
+
+// A faceted nugget, tinted per metal.
+function NuggetIcon({ fill, stroke }: { fill: string; stroke: string }) {
+  return (
+    <span className="engram-resource-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none">
+        <path d="M6 13l3-4 5-1 4 4-2 5-6 1z" fill={fill} stroke={stroke} strokeWidth="1.3" strokeLinejoin="round" />
+        <path d="M10 9l1 4 4 3" stroke={stroke} strokeWidth="1" strokeLinecap="round" opacity="0.7" />
+      </svg>
+    </span>
+  );
+}
+const SilverIcon = () => <NuggetIcon fill="#c4cad8" stroke="#eef1f8" />;
+const GoldIcon = () => <NuggetIcon fill="#d8a93a" stroke="#ffe39a" />;
 
 // ─── Camera rig ───────────────────────────────────────────────────────────────
 // Smoothly eases the camera toward whichever NPC is active; returns to an
@@ -1271,14 +1289,24 @@ function Rocks() {
   const world = useWorld();
   const mined = useMemo(() => new Set(world.minedRocks), [world.minedRocks]);
   const geo = useMemo(() => new THREE.DodecahedronGeometry(0.6, 0), []);
+  // Per-instance colour tints each vein by its ore; a little metalness gives the
+  // silver/gold a sheen while stone stays matte.
   const mat = useMemo(
     () =>
       new THREE.MeshStandardMaterial({
-        color: '#6f6a63',
         map: getTextureVariant('stone', 0, { repeat: 1 }),
         flatShading: !hasTexture('stone'),
-        roughness: 1,
+        roughness: 0.7,
+        metalness: 0.28,
       }),
+    []
+  );
+  const oreColor = useMemo(
+    () => ({
+      stone: new THREE.Color('#6f6a63'),
+      silver: new THREE.Color('#cdd2de'),
+      gold: new THREE.Color('#e0b53e'),
+    }),
     []
   );
   const ref = useRef<THREE.InstancedMesh>(null);
@@ -1298,10 +1326,12 @@ function Rocks() {
       dummy.rotation.set(0, r.rot, r.rot * 0.5);
       dummy.updateMatrix();
       mesh.setMatrixAt(i, dummy.matrix);
+      mesh.setColorAt(i, oreColor[r.ore]);
     });
     mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     mesh.computeBoundingSphere();
-  }, [mined]);
+  }, [mined, oreColor]);
   if (ROCKS.length === 0) return null;
   return <instancedMesh ref={ref} args={[geo, mat, ROCKS.length]} castShadow receiveShadow />;
 }
@@ -3961,7 +3991,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
       const tree = nearbyTreeRef.current;
       const rock = nearbyRockRef.current;
       const canChop = fHeldRef.current && tree !== null && !isChopped(tree) && !woodIsFull();
-      const canMine = fHeldRef.current && tree === null && rock !== null && !isMined(rock) && !stoneIsFull();
+      const canMine = fHeldRef.current && tree === null && rock !== null && !isMined(rock) && !oreIsFull(ROCKS[rock].ore);
       if (canChop || canMine) {
         // Audible swings throughout the action, not just when a unit completes.
         sinceSwing += TICK;
@@ -3989,7 +4019,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
               woodChipQueue.push({ x: td.x, y: getHeightAt(td.x, td.z) + 0.8, z: td.z, big: true });
             }
           } else {
-            const { depleted } = harvestRock(rock!); // grant 1 stone; deplete after ROCK_STONE
+            const { depleted } = harvestRock(rock!, ROCKS[rock!].ore); // grant 1 of the rock's ore
             if (depleted) {
               setNearbyRock(null); // rock gone; Player repicks next frame
               if (COMPUTE_ENABLED) void runMineReceipt(); // back the batch with 0G Compute
@@ -4372,6 +4402,12 @@ export default function Scene3D({ memories = null, active = null, talking = fals
           <div className="pointer-events-none absolute top-20 left-4 z-10 flex flex-col items-start gap-1.5 text-sm text-[#f4e8d0]">
             <span className="inline-flex items-center rounded-md bg-black/45 px-2.5 py-1" title="Wood"><WoodIcon />{world.inventory.wood}/{MAX_WOOD}</span>
             <span className="inline-flex items-center rounded-md bg-black/45 px-2.5 py-1" title="Stone"><StoneIcon />{world.inventory.stone}/{MAX_STONE}</span>
+            {world.inventory.silver > 0 && (
+              <span className="inline-flex items-center rounded-md bg-black/45 px-2.5 py-1" title="Silver"><SilverIcon />{world.inventory.silver}/{MAX_SILVER}</span>
+            )}
+            {world.inventory.gold > 0 && (
+              <span className="inline-flex items-center rounded-md bg-black/45 px-2.5 py-1" title="Gold"><GoldIcon />{world.inventory.gold}/{MAX_GOLD}</span>
+            )}
             <span className="inline-flex items-center rounded-md bg-black/45 px-2.5 py-1" title="Coin"><CoinIcon />{world.inventory.coin}</span>
             <span className="inline-flex items-center rounded-md bg-black/45 px-2.5 py-1" title="Repair kits">Repair {world.repairKits}</span>
           </div>
@@ -4733,22 +4769,26 @@ Left-click to look around · right-click to act · WASD to walk · V for aerial
             </div>
           )}
 
-          {controlsArmed && !isTouchDevice && nearbyRock !== null && nearbyTree === null && !nearbyNpc && (
-            <div className="pointer-events-none absolute bottom-28 left-1/2 z-10 -translate-x-1/2">
-              {world.inventory.stone >= MAX_STONE ? (
-                <div className="rounded-full border border-[#8a8a8a] px-5 py-2 text-sm font-semibold text-[#f4e8d0] shadow-lg" style={{ background: 'rgba(20,16,10,0.9)' }}>
-                  Stone full ({MAX_STONE}) - can&apos;t carry more
-                </div>
-              ) : (
-                <div className="rounded-2xl border border-[#7a8a9a] px-5 py-2.5 text-center text-sm font-semibold text-[#f4e8d0] shadow-lg" style={{ background: 'rgba(14,16,20,0.9)' }}>
-                  Hold <span className="text-[#bcd0e0]">F</span> to mine
-                  <div className="mt-1.5 h-2 w-40 overflow-hidden rounded-full bg-black/55">
-                    <div className="h-full rounded-full bg-[#bcd0e0] transition-[width] duration-75" style={{ width: `${chopPct}%` }} />
+          {controlsArmed && !isTouchDevice && nearbyRock !== null && nearbyTree === null && !nearbyNpc && (() => {
+            const ore = ROCKS[nearbyRock].ore;
+            const full = world.inventory[ore] >= ORE_MAX[ore];
+            return (
+              <div className="pointer-events-none absolute bottom-28 left-1/2 z-10 -translate-x-1/2">
+                {full ? (
+                  <div className="rounded-full border border-[#8a8a8a] px-5 py-2 text-sm font-semibold text-[#f4e8d0] shadow-lg" style={{ background: 'rgba(20,16,10,0.9)' }}>
+                    {ORE_LABEL[ore]} full ({ORE_MAX[ore]}) - can&apos;t carry more
                   </div>
-                </div>
-              )}
-            </div>
-          )}
+                ) : (
+                  <div className="rounded-2xl border border-[#7a8a9a] px-5 py-2.5 text-center text-sm font-semibold text-[#f4e8d0] shadow-lg" style={{ background: 'rgba(14,16,20,0.9)' }}>
+                    Hold <span className="text-[#bcd0e0]">F</span> to mine {ore !== 'stone' ? <span className="text-[#e0c25a]">{ORE_LABEL[ore]}</span> : null}
+                    <div className="mt-1.5 h-2 w-40 overflow-hidden rounded-full bg-black/55">
+                      <div className="h-full rounded-full bg-[#bcd0e0] transition-[width] duration-75" style={{ width: `${chopPct}%` }} />
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {controlsArmed && nearbyEnemy && !nearbyNpc && !nearbyTree && (
             <div className="pointer-events-none absolute bottom-28 left-1/2 z-10 -translate-x-1/2">
@@ -4817,10 +4857,11 @@ Left-click to look around · right-click to act · WASD to walk · V for aerial
                 </button>
               )
             )}
-            {nearbyRock !== null && nearbyTree === null && !nearbyNpc && (
-              world.inventory.stone >= MAX_STONE ? (
+            {nearbyRock !== null && nearbyTree === null && !nearbyNpc && (() => {
+              const ore = ROCKS[nearbyRock].ore;
+              return world.inventory[ore] >= ORE_MAX[ore] ? (
                 <div className="rounded-2xl border border-[#8a8a8a] bg-[rgba(20,16,10,0.92)] px-4 py-3 text-sm font-semibold text-[#f4e8d0]">
-                  Stone full ({MAX_STONE})
+                  {ORE_LABEL[ore]} full ({ORE_MAX[ore]})
                 </div>
               ) : (
                 <button
@@ -4838,13 +4879,13 @@ Left-click to look around · right-click to act · WASD to walk · V for aerial
                   }}
                   className="rounded-2xl border border-[#7a8a9a] bg-[rgba(14,16,20,0.92)] px-4 py-3 text-center text-sm font-semibold text-[#f4e8d0]"
                 >
-                  Hold to mine
+                  Hold to mine {ore !== 'stone' ? ORE_LABEL[ore] : ''}
                   <div className="mt-1.5 h-2 w-32 overflow-hidden rounded-full bg-black/55">
                     <div className="h-full rounded-full bg-[#bcd0e0] transition-[width] duration-75" style={{ width: `${chopPct}%` }} />
                   </div>
                 </button>
-              )
-            )}
+              );
+            })()}
             {nearbyEnemy && !nearbyNpc && nearbyTree === null && (
               <button
                 onClick={attackNearbyEnemy}
