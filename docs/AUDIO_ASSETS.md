@@ -20,11 +20,30 @@ fallbacks: if a file is missing, the game keeps working and that cue stays silen
 - `public/audio/foley/jump-takeoff.mp3`
 - `public/audio/foley/land-dirt.mp3`
 - `public/audio/foley/axe-chop-hit.mp3`
+- `public/audio/foley/mine-hit.mp3` — distinct stony "tink/crack" for mining rocks (Prompt 16).
+- `public/audio/foley/footstep-water.mp3` — splash when walking through the creek.
+- `public/audio/ambient/day-ambience-loop.mp3` — relaxing daytime bed (birds/air); kept very
+  low (`volume: 0.11` in the manifest) so it stays in the background.
 - `public/audio/sfx/attack-swing.mp3`
 - `public/audio/ui/dialogue-open.mp3`
 - `public/audio/ui/dialogue-close.mp3`
 - `public/audio/ui/save-success.mp3`
 - `public/audio/ui/save-error.mp3`
+
+## Credits / Licenses
+
+We are not legally required to credit Pixabay assets (the **Pixabay Content License** is
+royalty-free, allows commercial use, and does **not** require attribution), and editing a clip
+in Audacity does not change that. We still list sources here for transparency and so future
+maintainers know each file's provenance. Verify the license on each asset's own page — almost
+all uploads use the Pixabay Content License, but confirm before shipping.
+
+| File | Source | License |
+| --- | --- | --- |
+| `ambient/day-ambience-loop.mp3` | https://pixabay.com/sound-effects/nature-birds-chirping-calm-173695/ | Pixabay Content License |
+
+> Other foley/SFX were adapted (trimmed/processed) from Pixabay sources. Attribution is not
+> required; if you have the original links handy, add them above for completeness.
 
 ## Notes
 

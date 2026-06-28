@@ -32,7 +32,9 @@ export const AUDIO_CUES: Record<AudioCueId, AudioCue> = {
     label: 'Ambient daytime loop (birds/breeze)',
     src: '/audio/ambient/day-ambience-loop.mp3',
     loop: true,
-    volume: 0.22,
+    // Kept low on purpose: a relaxing bed (birds/air) that never competes with
+    // foley/dialogue. Halved from 0.22 so it stays background.
+    volume: 0.11,
   },
   campfire_crackle: {
     label: 'Campfire crackle loop',

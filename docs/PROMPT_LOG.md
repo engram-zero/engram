@@ -1143,3 +1143,14 @@ rico de parcela y el contrato como propiedad/anti-double-claim.
 local; `public-world` escanea `ParcelClaimed`; `parcelRentCollected` + botón Collect rent; comisión
 de gathering; overlays con recursos por `meadow/grove/quarry`; env/docs/status actualizados.
 `npx tsc --noEmit` limpio. **Commit:** _(este commit)_
+
+### 28 jun 2026 · Assets de audio (mine-hit, footstep-water, day-ambience) + créditos
+**Pedido (humano):** Agregar los mp3 de mine-hit y footstep-water; bajar el day-ambience "a la
+mitad" (bed relajante de fondo); documentar créditos Pixabay.
+**Prompt sintetizado:** Colocar `public/audio/foley/mine-hit.mp3` y `footstep-water.mp3` (rutas que
+ya apunta el manifest) y `public/audio/ambient/day-ambience-loop.mp3`. Reducir el volumen del cue
+`day_ambience` a la mitad (0.22→0.11) en `src/lib/audio/manifest.ts`, sin reencodear. Añadir sección
+Credits/Licenses en `docs/AUDIO_ASSETS.md` con la nota de Pixabay Content License (atribución no
+obligatoria) y la URL de origen del day-ambience.
+**Qué se hizo:** 3 mp3 añadidos; `day_ambience.volume` 0.22→0.11; doc de assets actualizado (cues
+nuevos + tabla de créditos). `npx tsc --noEmit` limpio. **Commit:** _(este commit)_
