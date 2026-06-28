@@ -7,13 +7,16 @@ import { downloadByRootHashAPI } from '@/lib/0g/downloader';
 import { getNetworkConfig } from '@/lib/0g/network';
 import { ENGRAM_REGISTRY_ABI } from '@/lib/registry/abi';
 import { getRegistryAddress } from '@/lib/registry/registry';
-import { normalizeWorldState, type Building, type RaidEvent } from '@/lib/world';
+import { normalizeWorldState, type Building, type RaidEvent, type RepairEvent } from '@/lib/world';
 
 export type PublicRaidEvent = RaidEvent & { author: string };
+export type PublicRepairEvent = RepairEvent & { author: string };
 export type PublicBuilding = Building & {
   owner: string;
   raidDamage?: number;
+  repairHealing?: number;
   raidEvents?: PublicRaidEvent[];
+  repairEvents?: PublicRepairEvent[];
 };
 export interface PublicWorldOwner {
   owner: string;
@@ -23,11 +26,12 @@ export interface PublicWorldOwner {
 interface PublicWorldState {
   buildings: PublicBuilding[];
   raidEvents: PublicRaidEvent[];
+  repairEvents: PublicRepairEvent[];
   owners: PublicWorldOwner[];
   loading: boolean;
 }
 
-const EMPTY_PUBLIC_WORLD: PublicWorldState = { buildings: [], raidEvents: [], owners: [], loading: false };
+const EMPTY_PUBLIC_WORLD: PublicWorldState = { buildings: [], raidEvents: [], repairEvents: [], owners: [], loading: false };
 const listeners = new Set<() => void>();
 let state = EMPTY_PUBLIC_WORLD;
 let lastKey = '';
@@ -66,9 +70,9 @@ async function downloadWorldData(
   owner: string,
   root: string,
   storageRpc: string
-): Promise<{ buildings: PublicBuilding[]; raidEvents: PublicRaidEvent[] }> {
+): Promise<{ buildings: PublicBuilding[]; raidEvents: PublicRaidEvent[]; repairEvents: PublicRepairEvent[] }> {
   const [data, err] = await downloadByRootHashAPI(root, storageRpc);
-  if (err || !data) return { buildings: [], raidEvents: [] };
+  if (err || !data) return { buildings: [], raidEvents: [], repairEvents: [] };
 
   try {
     const raw = JSON.parse(new TextDecoder('utf-8').decode(data));
@@ -78,9 +82,12 @@ async function downloadWorldData(
       raidEvents: world.raidEvents
         .filter((event) => event.attacker === owner)
         .map((event) => ({ ...event, author: owner })),
+      repairEvents: world.repairEvents
+        .filter((event) => event.repairer === owner)
+        .map((event) => ({ ...event, author: owner })),
     };
   } catch {
-    return { buildings: [], raidEvents: [] };
+    return { buildings: [], raidEvents: [], repairEvents: [] };
   }
 }
 
@@ -105,6 +112,7 @@ export async function initPublicWorld(
   setPublicWorld({
     buildings: options.quiet ? state.buildings : [],
     raidEvents: options.quiet ? state.raidEvents : [],
+    repairEvents: options.quiet ? state.repairEvents : [],
     owners: options.quiet ? state.owners : [],
     loading: true,
   });
@@ -135,6 +143,7 @@ export async function initPublicWorld(
     const entries = Array.from(latestRoots.entries()).slice(-32);
     const worlds = await Promise.all(entries.map(([owner, root]) => downloadWorldData(owner, root, storageRpc)));
     const raidEvents = worlds.flatMap((world) => world.raidEvents);
+    const repairEvents = worlds.flatMap((world) => world.repairEvents);
     const onchainBuildings = worlds.flatMap((world) => world.buildings).filter((building) => building.owner !== excluded);
     const byOwnerAndPosition = new Set<string>();
     const counts = new Map<string, number>();
@@ -148,15 +157,21 @@ export async function initPublicWorld(
       const eventsForBuilding = raidEvents
         .filter((event) => event.defender === building.owner && event.buildingId === building.id)
         .sort((a, b) => b.at - a.at);
+      const repairsForBuilding = repairEvents
+        .filter((event) => event.owner === building.owner && event.buildingId === building.id)
+        .sort((a, b) => b.at - a.at);
       const raidDamage = eventsForBuilding.reduce((sum, event) => sum + event.damage, 0);
+      const repairHealing = repairsForBuilding.reduce((sum, event) => sum + event.heal, 0);
       const maxHp = Math.max(1, building.maxHp ?? building.hp ?? 1);
-      const hp = Math.max(0, Math.min(maxHp, (building.hp ?? maxHp) - raidDamage));
+      const hp = Math.max(0, Math.min(maxHp, (building.hp ?? maxHp) - raidDamage + repairHealing));
       return {
         ...building,
         hp,
         maxHp,
         raidDamage,
+        repairHealing,
         raidEvents: eventsForBuilding,
+        repairEvents: repairsForBuilding,
       };
     });
     const owners = Array.from(counts.entries())
@@ -167,11 +182,12 @@ export async function initPublicWorld(
       wallets: entries.length,
       buildings: buildings.length,
       raidEvents: raidEvents.length,
+      repairEvents: repairEvents.length,
     });
-    setPublicWorld({ buildings, raidEvents, owners, loading: false });
+    setPublicWorld({ buildings, raidEvents, repairEvents, owners, loading: false });
   } catch (error) {
     console.warn('[engram] public world load failed:', error);
-    setPublicWorld({ buildings: state.buildings, raidEvents: state.raidEvents, owners: state.owners, loading: false });
+    setPublicWorld({ buildings: state.buildings, raidEvents: state.raidEvents, repairEvents: state.repairEvents, owners: state.owners, loading: false });
   }
 }
 

@@ -30,7 +30,7 @@
 15. [Asedios y demonios con fairness offline](#prompt-15--asedios-y-demonios-con-fairness-offline) — ⏳ pendiente
 16. [Animaciones de gathering y feedback físico](#prompt-16--animaciones-de-gathering-y-feedback-físico) — ⏳ pendiente
 17. [Terreno editable, ríos y mapa más grande](#prompt-17--terreno-editable-ríos-y-mapa-más-grande) — 🟡 partial: **riachuelo** (cinta de agua drapeada, no tala terreno) hecho; terreno editable / mapa más grande siguen pendientes
-18. [Reparación, durabilidad y mantenimiento del mundo](#prompt-18--reparación-durabilidad-y-mantenimiento-del-mundo) — 🟡 MVP done: hp/maxHp + daño visual + barras HP WebGL + reparación con madera (kits = boost); mantenimiento avanzado pendiente
+18. [Reparación, durabilidad y mantenimiento del mundo](#prompt-18--reparación-durabilidad-y-mantenimiento-del-mundo) — 🟢 done: hp/maxHp + daño visual + barras HP WebGL + reparación con madera/kits + eventos públicos de mantenimiento/raid en 0G + reparación de aliados
 20. [Minar = trabajo real en 0G Compute (proof-of-useful-work)](#prompt-20--minar--trabajo-real-en-0g-compute) — 🟡 construido, **gateado OFF + sin verificar en vivo** (falta fondear el ledger y probar)
 
 > **Tareas no-código (ADMIN):** ✅ deploy a Vercel + env vars · ✅ save a 0G end-to-end ·
@@ -913,11 +913,13 @@ encima de una base que luego haya que rehacer.
 
 ## Prompt 18 — Reparación, durabilidad y mantenimiento del mundo
 
-> **🟡 MVP — 26 jun 2026.** Los edificios ya tienen `hp/maxHp`, el daño se ve con
-> material más oscuro + anillo de estado, y el jugador puede comprar **repair kits**
-> a Aldric para restaurar edificios propios desde la vista aérea. El estado se guarda
-> con el `WorldState` en 0G. Faltan logs de daño, permisos de aliados y reglas de
-> mantenimiento/sabotaje más finas.
+> **🟢 Implementado — 28 jun 2026.** Los edificios tienen `hp/maxHp`, daño visual,
+> barras HP WebGL, reparación con madera y repair kits, y un log público de
+> mantenimiento. Los raids y reparaciones se guardan como eventos en el
+> `WorldState` de quien actúa; al publicar, el bundle sube a 0G y el registry
+> on-chain hace descubrible el nuevo root. Aliados pueden reparar edificios
+> públicos, enemigos pueden dañarlos, y cualquier cliente calcula HP efectivo como
+> `baseHP - raidEvents + repairEvents`.
 
 > Si habrá demonios, sabotaje entre enemigos o simplemente desgaste, hace falta una
 > mecánica de mantenimiento del mundo. También abre espacio para coin sinks y trabajo cooperativo.
@@ -942,6 +944,8 @@ juego un simulador de chores.
 1. Un edificio puede dañarse y luego repararse.
 2. El costo de reparación es menor que reconstruir desde cero, pero no gratis.
 3. El estado dañado/reparado persiste correctamente.
+4. El daño/repair público deja historial auditable (`RaidEvent`/`RepairEvent`) en el bundle 0G.
+5. Un aliado puede reparar edificios públicos sin mutar directamente el bundle del dueño.
 
 ---
 

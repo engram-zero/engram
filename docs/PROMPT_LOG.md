@@ -1065,3 +1065,16 @@ plata/oro (al tener >0) y los hints dicen el mineral. En client-page: `sellOreTo
 comprar). tsc debe pasar.
 **Qué se hizo:** recursos+ore en types/world/map; render tintado + minado por mineral + HUD en
 Scene3D; mercado genérico de minerales en client-page. `npx tsc --noEmit` limpio. **Commit:** _(este commit)_
+
+### 28 jun 2026 · Prompt 18 completo: mantenimiento público, aliados y logs
+**Pedido (humano):** Hacer más profundo y completar Prompt 18, no dejarlo solo en HP local.
+**Prompt sintetizado:** Convertir reparación/durabilidad en un loop público auditable: añadir
+`RepairEvent` al `WorldState`, normalizarlo/persistirlo en el bundle 0G, aplicar HP efectivo como
+`baseHP - RaidEvent + RepairEvent`, permitir que aliados reparen edificios públicos gastando madera
+y repair kits, y mostrar un log compacto de raids/repairs en la vista aérea. Mantener el patrón
+actual: quien actúa escribe en su bundle, lo sube a 0G y el registry on-chain hace descubrible el
+root; no mutar directamente el bundle de otra wallet.
+**Qué se hizo:** `RepairEvent` añadido a tipos/world; `recordRepairEvent` gasta madera/kit y cola
+evento; `public-world` agrega raids+repairs desde bundles y calcula HP efectivo; la herramienta
+Repair ahora repara edificios propios con daño entrante y edificios públicos aliados; el panel de
+wallets muestra un maintenance log. `npx tsc --noEmit` limpio. **Commit:** _(este commit)_
