@@ -128,6 +128,7 @@ const WALK_SPEED = 4.6;
 const TALK_RANGE = 3.2; // how close you must stand before "Press E" appears
 const CHOP_RANGE = 2.8; // how close to a tree before "Press F to chop"
 const MINE_RANGE = 2.8; // how close to a rock before "Hold F to mine"
+const MARREN_PLAYER_AGGRO_RADIUS = 8.5; // Maren only pursues the player within this leash radius
 // Prompt 20: when a rock is exhausted, back the batch with a verifiable 0G
 // Compute inference (proof-of-useful-work). OFF unless the env flag is set AND
 // the compute ledger is funded server-side; mining always works either way.
@@ -2960,33 +2961,29 @@ function Character({
         memory.trust_level < 40 ||
         ['furious', 'angry', 'hostile', 'upset', 'cold'].includes(memory.emotional_state?.toLowerCase())
       );
-      if (isBadRelation && !dynamicPlayerState.dead) {
+      const pDist = Math.hypot(dynamicPlayerState.x - dyn.x, dynamicPlayerState.z - dyn.z);
+      const shouldAttack = playerAttackedMaren || dynamicPlayerState.hp > 50;
+      if (isBadRelation && !dynamicPlayerState.dead && pDist <= MARREN_PLAYER_AGGRO_RADIUS && shouldAttack) {
         combatEngaged = true;
-        const pDist = Math.hypot(dynamicPlayerState.x - dyn.x, dynamicPlayerState.z - dyn.z);
         dyn.targetX = dynamicPlayerState.x;
         dyn.targetZ = dynamicPlayerState.z;
         const dx = dyn.targetX - dyn.x;
         const dz = dyn.targetZ - dyn.z;
 
-        // Attacks player until player is at 50% health, unless player attacked back
-        const shouldAttack = playerAttackedMaren || dynamicPlayerState.hp > 50;
-
         if (pDist < 1.4) {
           isMoving = false;
           targetRotY = Math.atan2(dx, dz);
-          if (shouldAttack) {
-            dyn.attackTimer -= dt;
-            if (dyn.attackTimer <= 0) {
-              const newHp = Math.max(playerAttackedMaren ? 0 : 50, dynamicPlayerState.hp - 15);
-              dynamicPlayerState.hp = newHp;
-              dyn.attackTimer = 1.0;
-              void play('attack_swing');
-              if (dynamicPlayerState.hp <= 0) {
-                dynamicPlayerState.dead = true;
-              }
+          dyn.attackTimer -= dt;
+          if (dyn.attackTimer <= 0) {
+            const newHp = Math.max(playerAttackedMaren ? 0 : 50, dynamicPlayerState.hp - 15);
+            dynamicPlayerState.hp = newHp;
+            dyn.attackTimer = 1.0;
+            void play('attack_swing');
+            if (dynamicPlayerState.hp <= 0) {
+              dynamicPlayerState.dead = true;
             }
           }
-        } else if (shouldAttack) {
+        } else {
           isMoving = true;
           const step = dyn.speed * 1.5 * dt; // run faster when in combat
           const moveRatio = Math.min(1.0, step / pDist);
