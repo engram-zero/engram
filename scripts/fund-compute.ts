@@ -11,8 +11,23 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { JsonRpcProvider, Wallet } from 'ethers';
+import { JsonRpcProvider, Wallet, formatEther } from 'ethers';
 import { createZGComputeNetworkBroker } from '@0gfoundation/0g-compute-ts-sdk';
+
+// 0G Chain has no EIP-1559 — letting ethers build a fee-market tx makes the RPC
+// reject it (eth_maxPriorityFeePerGas → -32601). Fetch a legacy gasPrice and pass
+// it explicitly to every on-chain SDK call. Returns undefined if it can't be read
+// (then the SDK falls back to its own logic).
+async function legacyGasPrice(provider: JsonRpcProvider): Promise<number | undefined> {
+  try {
+    const hex: string = await provider.send('eth_gasPrice', []);
+    const bumped = (BigInt(hex) * BigInt(12)) / BigInt(10); // +20% headroom; testnet gas is tiny
+    const n = Number(bumped);
+    return Number.isFinite(n) && n > 0 ? n : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 function loadEnvFile(path: string) {
   if (!existsSync(path)) return;
@@ -42,16 +57,27 @@ async function main() {
   const wallet = new Wallet(key, provider);
   console.log('[fund-compute] sponsor:', wallet.address, '· rpc:', rpc);
 
+  // Confirm the wallet you funded at the faucet is THIS one, with enough OG.
+  const balance = await provider.getBalance(wallet.address);
+  const needed = LEDGER_OG + PROVIDER_OG;
+  console.log(`[fund-compute] wallet balance: ${formatEther(balance)} OG (need ≳ ${needed})`);
+  if (balance < BigInt(needed) * BigInt(10) ** BigInt(18)) {
+    console.warn(`[fund-compute] ⚠ balance looks low — top up at faucet.0g.ai (≥ ${needed} OG) or the txs may fail.`);
+  }
+
+  const gasPrice = await legacyGasPrice(provider);
+  console.log('[fund-compute] legacy gasPrice:', gasPrice ?? '(SDK default)');
+
   const broker = await createZGComputeNetworkBroker(wallet);
 
   // Ensure a ledger exists and holds enough balance.
   try {
     const ledger = await broker.ledger.getLedger();
     console.log('[fund-compute] existing ledger:', ledger?.toString?.() ?? ledger);
-    await broker.ledger.depositFund(LEDGER_OG);
+    await broker.ledger.depositFund(LEDGER_OG, gasPrice);
     console.log(`[fund-compute] deposited ${LEDGER_OG} OG into the ledger.`);
   } catch {
-    await broker.ledger.addLedger(LEDGER_OG);
+    await broker.ledger.addLedger(LEDGER_OG, gasPrice);
     console.log(`[fund-compute] created ledger with ${LEDGER_OG} OG.`);
   }
 
@@ -62,10 +88,10 @@ async function main() {
   const providerAddress: string = svc.provider;
   console.log('[fund-compute] provider:', providerAddress, '· model:', svc.model);
 
-  await broker.ledger.transferFund(providerAddress, 'inference', BigInt(PROVIDER_OG) * BigInt(10) ** BigInt(18));
+  await broker.ledger.transferFund(providerAddress, 'inference', BigInt(PROVIDER_OG) * BigInt(10) ** BigInt(18), gasPrice);
   console.log(`[fund-compute] transferred ${PROVIDER_OG} OG to provider inference sub-account.`);
 
-  console.log('[fund-compute] done. Set ENGRAM_COMPUTE=1 to enable mining receipts.');
+  console.log('[fund-compute] done. Now set ENGRAM_COMPUTE=1 and NEXT_PUBLIC_ENGRAM_COMPUTE=1, then test.');
 }
 
 main().catch((e) => {

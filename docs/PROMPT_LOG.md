@@ -1015,3 +1015,14 @@ headline reload→recuerda. Reglas anti-DQ: no decir "your wallet pays", **no** 
 minería en 0G Compute (gateada/sin verificar), y mostrar raids solo porque el build los hace.
 **Qué se hizo:** sección "R32 cut" en `DEMO_SCRIPT.md` (shot list + VO continuo + notas de
 honestidad + pasos de subida del video). **Commit:** _(este commit)_
+
+### 27 jun 2026 · Hardening de 0G Compute (gas legacy + chequeo de saldo)
+**Pedido (humano):** Subir las probabilidades de que la minería en 0G Compute funcione al primer
+intento cuando se fondee (aunque no se encienda para R32).
+**Prompt sintetizado:** 0G Chain no tiene EIP-1559 → pasar `gasPrice` legacy explícito a las tx
+on-chain del SDK. En `scripts/fund-compute.ts`: helper `legacyGasPrice` (eth_gasPrice +20%),
+pasarlo a `addLedger`/`depositFund`/`transferFund`, e imprimir el saldo de la wallet con aviso si
+es bajo. En `/api/mine`: mismo helper, pasarlo a `acknowledgeProviderSigner` (la tx on-chain del
+flujo). Evitar literales BigInt (`10n`) por el target del tsconfig. tsc debe pasar.
+**Qué se hizo:** `legacyGasPrice` + chequeo de saldo en `fund-compute.ts`; gas legacy en
+`acknowledgeProviderSigner` en `/api/mine`. `npx tsc --noEmit` limpio. **Commit:** _(este commit)_

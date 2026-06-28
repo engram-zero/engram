@@ -28,6 +28,20 @@ const SPONSOR_KEY = process.env.ENGRAM_SPONSOR_KEY || process.env.PRIVATE_KEY;
 const isAddress = (w: unknown): w is string =>
   typeof w === 'string' && /^0x[a-fA-F0-9]{40}$/.test(w);
 
+// 0G Chain has no EIP-1559: pass an explicit legacy gasPrice to on-chain SDK calls
+// so ethers doesn't build a fee-market tx the RPC rejects (-32601). Undefined → SDK default.
+async function legacyGasPrice(): Promise<number | undefined> {
+  try {
+    const provider = new ethers.JsonRpcProvider(RPC);
+    const hex: string = await provider.send('eth_gasPrice', []);
+    const bumped = (BigInt(hex) * BigInt(12)) / BigInt(10);
+    const n = Number(bumped);
+    return Number.isFinite(n) && n > 0 ? n : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function clientIp(req: Request): string {
   const fwd = req.headers.get('x-forwarded-for');
   if (fwd) return fwd.split(',')[0].trim();
@@ -82,8 +96,10 @@ export async function POST(req: Request) {
     const providerAddress: string = svc.provider;
 
     // Acknowledge the provider's signer once (no-op if already acknowledged).
+    // This is the on-chain tx in this flow, so pass a legacy gasPrice.
     try {
-      await broker.inference.acknowledgeProviderSigner(providerAddress);
+      const gasPrice = await legacyGasPrice();
+      await broker.inference.acknowledgeProviderSigner(providerAddress, gasPrice);
     } catch {
       // already acknowledged or non-fatal — proceed
     }
