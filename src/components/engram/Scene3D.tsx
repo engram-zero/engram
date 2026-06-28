@@ -125,7 +125,9 @@ export const dynamicPlayerState = { x: 0, z: 0, hp: 100, maxHp: 100, dead: false
 const enemyHitFlash: Record<string, number> = {};          // 0..1 flash intensity per enemy
 const enemyKnockback: Record<string, { vx: number; vz: number }> = {};
 const treeShake: Record<number, { amp: number }> = {};     // amp decays from 0.15 → 0 after each hit
+const rockShake: Record<number, { amp: number }> = {};     // per-rock jitter on each pickaxe hit
 const woodChipQueue: Array<{ x: number; y: number; z: number; big: boolean }> = [];
+const mineDebrisQueue: Array<{ x: number; y: number; z: number; ore: 'stone' | 'silver' | 'gold' }> = [];
 const hitDustQueue: Array<{ x: number; y: number; z: number }> = [];
 const chopArmSwing = { phase: 0, type: 'chop' as 'chop' | 'attack' }; // 1 = just triggered, decays to 0 at ~3/s
 let playerAttackedMaren = false; // tracks if the player retaliated against Maren when she is hostile
@@ -1346,6 +1348,34 @@ function Rocks() {
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     mesh.computeBoundingSphere();
   }, [mined, oreColor]);
+  // Per-hit shake: jitter the struck boulder, decaying its amplitude to rest.
+  const dummy = useMemo(() => new THREE.Object3D(), []);
+  useFrame((_, dtRaw) => {
+    const mesh = ref.current;
+    if (!mesh) return;
+    const dt = Math.min(dtRaw, 0.05);
+    let any = false;
+    for (const idxStr of Object.keys(rockShake)) {
+      const i = Number(idxStr);
+      const s = rockShake[i];
+      if (!s) continue;
+      if (mined.has(i)) { delete rockShake[i]; continue; }
+      s.amp = Math.max(0, s.amp - dt * 3.2);
+      const r = ROCKS[i];
+      dummy.position.set(
+        r.x + (Math.random() - 0.5) * s.amp,
+        getHeightAt(r.x, r.z) + 0.25 * r.scale,
+        r.z + (Math.random() - 0.5) * s.amp
+      );
+      dummy.scale.set(r.scale, r.scale * 0.8, r.scale);
+      dummy.rotation.set(0, r.rot, r.rot * 0.5);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(i, dummy.matrix);
+      if (s.amp <= 0) delete rockShake[i];
+      any = true;
+    }
+    if (any) mesh.instanceMatrix.needsUpdate = true;
+  });
   if (ROCKS.length === 0) return null;
   return <instancedMesh ref={ref} args={[geo, mat, ROCKS.length]} castShadow receiveShadow />;
 }
@@ -1559,6 +1589,78 @@ function HitDust() {
         <bufferAttribute attach="attributes-color" args={[colors, 3]} />
       </bufferGeometry>
       <pointsMaterial size={0.22} sizeAttenuation vertexColors transparent opacity={0.8} depthWrite={false} />
+    </points>
+  );
+}
+
+// ─── Prompt 16: MineDebris ────────────────────────────────────────────────────
+// Stone shards / metal sparks flung on each pickaxe hit, tinted by the rock's ore
+// (matte grey for stone, bright sheen for silver/gold). Reads mineDebrisQueue.
+const MAX_DEBRIS = 40;
+const ORE_DEBRIS_RGB: Record<'stone' | 'silver' | 'gold', [number, number, number]> = {
+  stone: [0.46, 0.43, 0.39],
+  silver: [0.86, 0.9, 0.98],
+  gold: [0.92, 0.74, 0.26],
+};
+type DebrisParticle = { x: number; y: number; z: number; vx: number; vy: number; vz: number; life: number; maxLife: number; r: number; g: number; b: number; active: boolean };
+
+function MineDebris() {
+  const pointsRef = useRef<THREE.Points>(null);
+  const particles = useMemo<DebrisParticle[]>(
+    () => Array.from({ length: MAX_DEBRIS }, () => ({ x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, life: 0, maxLife: 0.5, r: 0, g: 0, b: 0, active: false })),
+    []
+  );
+  const positions = useMemo(() => new Float32Array(MAX_DEBRIS * 3), []);
+  const colors    = useMemo(() => new Float32Array(MAX_DEBRIS * 3), []);
+
+  useFrame((_, dtRaw) => {
+    const dt = Math.min(dtRaw, 0.05);
+    while (mineDebrisQueue.length > 0) {
+      const emit = mineDebrisQueue.shift()!;
+      const [er, eg, eb] = ORE_DEBRIS_RGB[emit.ore];
+      let spawned = 0;
+      for (let i = 0; i < MAX_DEBRIS && spawned < 6; i++) {
+        const p = particles[i];
+        if (p.active) continue;
+        p.x = emit.x + (Math.random() - 0.5) * 0.25;
+        p.y = emit.y;
+        p.z = emit.z + (Math.random() - 0.5) * 0.25;
+        const speed = 1.1 + Math.random() * 1.6;
+        const angle = Math.random() * Math.PI * 2;
+        p.vx = Math.cos(angle) * speed * 0.65;
+        p.vy = 1.4 + Math.random() * 2.0;
+        p.vz = Math.sin(angle) * speed * 0.65;
+        p.life = 0.45 + Math.random() * 0.2;
+        p.maxLife = p.life;
+        p.r = er; p.g = eg; p.b = eb;
+        p.active = true;
+        spawned++;
+      }
+    }
+    for (let i = 0; i < MAX_DEBRIS; i++) {
+      const p = particles[i];
+      if (!p.active) { positions[i * 3 + 1] = -1000; continue; }
+      p.vy -= 7.5 * dt; // gravity
+      p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
+      p.life -= dt;
+      if (p.life <= 0 || p.y < -1) { p.active = false; positions[i * 3 + 1] = -1000; continue; }
+      positions[i * 3] = p.x; positions[i * 3 + 1] = p.y; positions[i * 3 + 2] = p.z;
+      const fade = p.life / p.maxLife;
+      colors[i * 3] = p.r * fade; colors[i * 3 + 1] = p.g * fade; colors[i * 3 + 2] = p.b * fade;
+    }
+    if (pointsRef.current) {
+      pointsRef.current.geometry.attributes.position.needsUpdate = true;
+      pointsRef.current.geometry.attributes.color.needsUpdate = true;
+    }
+  });
+
+  return (
+    <points ref={pointsRef}>
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-position" args={[positions, 3]} />
+        <bufferAttribute attach="attributes-color" args={[colors, 3]} />
+      </bufferGeometry>
+      <pointsMaterial size={0.12} sizeAttenuation vertexColors transparent depthWrite={false} />
     </points>
   );
 }
@@ -3707,6 +3809,14 @@ export default function Scene3D({ memories = null, active = null, talking = fals
   const fHeldRef = useRef(false); // is the chop key (F) held down
   const chopRef = useRef(0); // chop progress 0..100
   const [chopPct, setChopPct] = useState(0);
+  // Prompt 16: short-lived floating "+1 <resource>" pops, one per gathered unit.
+  const [pickups, setPickups] = useState<Array<{ id: number; label: string; color: string }>>([]);
+  const pickupIdRef = useRef(0);
+  const showPickup = useCallback((label: string, color: string) => {
+    const id = ++pickupIdRef.current;
+    setPickups((p) => [...p.slice(-3), { id, label, color }]);
+    window.setTimeout(() => setPickups((p) => p.filter((x) => x.id !== id)), 900);
+  }, []);
 
   // Shared player position (first-person camera ↔ aerial avatar).
   const posRef = useRef<PlayerPos>({ x: SPAWN_XZ[0], z: SPAWN_XZ[1], heading: 0 });
@@ -4101,12 +4211,17 @@ export default function Scene3D({ memories = null, active = null, talking = fals
             treeShake[tree] = { amp: 0.15 };
             const td = TREES[tree];
             woodChipQueue.push({ x: td.x, y: getHeightAt(td.x, td.z) + 1.0, z: td.z, big: false });
+          } else if (rock !== null) {
+            rockShake[rock] = { amp: 0.12 };
+            const rd = ROCKS[rock];
+            mineDebrisQueue.push({ x: rd.x, y: getHeightAt(rd.x, rd.z) + 0.55 * rd.scale, z: rd.z, ore: rd.ore });
           }
         }
         chopRef.current = Math.min(100, chopRef.current + (TICK / PER_UNIT_MS) * 100);
         if (chopRef.current >= 100) {
           if (canChop) {
             const { depleted } = harvestTree(tree!); // grant 1 wood; deplete after TREE_WOOD
+            showPickup('Wood', '#8fd06a'); // Prompt 16: floating "+1" feedback
             if (depleted) {
               setNearbyTree(null); // tree gone; Player repicks next frame
               // Prompt 16: big chip burst when the tree finally falls
@@ -4114,7 +4229,9 @@ export default function Scene3D({ memories = null, active = null, talking = fals
               woodChipQueue.push({ x: td.x, y: getHeightAt(td.x, td.z) + 0.8, z: td.z, big: true });
             }
           } else {
-            const { depleted } = harvestRock(rock!, ROCKS[rock!].ore); // grant 1 of the rock's ore
+            const ore = ROCKS[rock!].ore;
+            const { depleted } = harvestRock(rock!, ore); // grant 1 of the rock's ore
+            showPickup(ORE_LABEL[ore], ore === 'gold' ? '#e0c25a' : ore === 'silver' ? '#cdd2de' : '#9aa0a8');
             if (depleted) {
               setNearbyRock(null); // rock gone; Player repicks next frame
               if (COMPUTE_ENABLED) void runMineReceipt(); // back the batch with 0G Compute
@@ -4129,7 +4246,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
       setChopPct(chopRef.current); // React skips re-render when unchanged
     }, TICK);
     return () => window.clearInterval(id);
-  }, [fpExploring, play, runMineReceipt]);
+  }, [fpExploring, play, runMineReceipt, showPickup]);
 
   // Player combat / action listener. Left-click while locked attacks (combat).
   // Right-click is a context "action" button in first person: attack a nearby
@@ -4463,6 +4580,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
           {explorable && <EnemySpawner />}
           {/* Prompt 16: particle FX & view-space arm — always alive while exploring */}
           {explorable && <WoodChips />}
+          {explorable && <MineDebris />}
           {explorable && <HitDust />}
           {fpExploring && <ChopArm />}
           {/* The title text is HTML in client-page now: a 3D drei <Text> here
@@ -4844,6 +4962,20 @@ Left-click to look around · right-click to act · WASD to walk · V for aerial
                 )}
                 {mineReceipt.status === 'local' && '⛏ mined locally · 0G Compute unavailable'}
               </div>
+            </div>
+          )}
+
+          {pickups.length > 0 && (
+            <div className="pointer-events-none absolute bottom-44 left-1/2 z-20 -translate-x-1/2 flex flex-col-reverse items-center gap-0.5">
+              {pickups.map((p) => (
+                <div
+                  key={p.id}
+                  className="engram-pickup rounded-full px-3 py-1 text-sm font-bold drop-shadow"
+                  style={{ color: p.color, textShadow: '0 1px 3px rgba(0,0,0,0.85)' }}
+                >
+                  +1 {p.label}
+                </div>
+              ))}
             </div>
           )}
 

@@ -1089,3 +1089,18 @@ elige `footstep_water` vs `footstep_grass` por la posición del jugador. (2) Doc
 redeploy), renta/comisión; dueño martelaxe.
 **Qué se hizo:** cue + `isOverWater` + wiring en Scene3D; Prompt 21 (índice + sección). `npx tsc
 --noEmit` limpio. **Falta asset:** `public/audio/foley/footstep-water.mp3`. **Commit:** _(este commit)_
+
+### 28 jun 2026 · Prompt 16 — feedback físico de minería + pickup flotante "+N"
+**Pedido (humano):** Hagamos el Prompt 16 (animaciones de gathering/feedback). Tala y combate ya
+tenían FX; faltaba la minería y un feedback claro de recolección.
+**Prompt sintetizado:** En `Scene3D.tsx`, cerrar los huecos del Prompt 16. (1) Minería: añadir
+`rockShake` (jitter por roca que decae en `Rocks` vía useFrame) y `mineDebrisQueue` consumido por
+un nuevo emisor `MineDebris` (chispas/escombro tintados por mena: gris stone, brillo silver/gold).
+Disparar ambos en cada golpe de pico dentro del loop de hold-F (rama `else if (rock !== null)`).
+(2) Recolección: pop flotante "+1 <recurso>" en el HUD por cada unidad obtenida (madera/stone/
+silver/gold), con color por recurso y animación CSS `engram-pickup` (rise+fade) en `globals.css`.
+Sin deps nuevas, `npx tsc --noEmit` limpio, sin tocar combate/persistencia.
+**Qué se hizo:** `rockShake`/`mineDebrisQueue` module-level; useFrame de shake en `Rocks`;
+componente `MineDebris` montado junto a WoodChips/HitDust; FX de pico cableado en el loop; estado
+`pickups`+`showPickup` y overlay HUD; keyframes `engram-pickup`. Prompt 16 pasa a 🟢. `npx tsc
+--noEmit` limpio. **Commit:** _(este commit)_

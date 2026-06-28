@@ -28,7 +28,7 @@
 13. [Relaciones entre players: aliados, enemigos y sabotaje](#prompt-13--relaciones-entre-players-aliados-enemigos-y-sabotaje) — 🟡 MVP+ done: ally/hostile por wallet + raid events sobre edificios públicos, persistidos en 0G y anclados por registry; fairness/weapon upgrades pendiente
 14. [Mercado v2: bienes comprables, sinks y reparación](#prompt-14--mercado-v2-bienes-comprables-sinks-y-reparación) — 🟡 mayormente done (Aldric **vende** bienes con coin; **spread de casa** + **precio dinámico** madera; **stone** minable/comerciable; repair kits como boost de reparación). Más bienes/stock depth pendiente
 15. [Asedios y demonios con fairness offline](#prompt-15--asedios-y-demonios-con-fairness-offline) — ⏳ pendiente
-16. [Animaciones de gathering y feedback físico](#prompt-16--animaciones-de-gathering-y-feedback-físico) — ⏳ pendiente
+16. [Animaciones de gathering y feedback físico](#prompt-16--animaciones-de-gathering-y-feedback-físico) — 🟢 done: arma solo al golpear (axe/spear), tala (chips + shake), **minería (shake de roca + chispas por mena)**, combate (hit-flash + knockback + dust) y **pickup flotante "+1" por unidad**
 17. [Terreno editable, ríos y mapa más grande](#prompt-17--terreno-editable-ríos-y-mapa-más-grande) — 🟡 partial: **riachuelo** (cinta de agua drapeada, no tala terreno) hecho; terreno editable / mapa más grande siguen pendientes
 18. [Reparación, durabilidad y mantenimiento del mundo](#prompt-18--reparación-durabilidad-y-mantenimiento-del-mundo) — 🟢 done: hp/maxHp + daño visual + barras HP WebGL + reparación con madera/kits + eventos públicos de mantenimiento/raid en 0G + reparación de aliados
 20. [Minar = trabajo real en 0G Compute (proof-of-useful-work)](#prompt-20--minar--trabajo-real-en-0g-compute) — 🟡 construido, **gateado OFF + sin verificar en vivo** (falta fondear el ledger y probar)
@@ -863,6 +863,14 @@ en el mundo persistente.
 ---
 
 ## Prompt 16 — Animaciones de gathering y feedback físico
+
+> **🟢 DONE — 28 jun 2026.** El arma solo aparece al golpear (hacha al talar, lanza al
+> atacar). **Tala:** wood chips + shake del árbol + ráfaga grande al caer. **Minería:**
+> shake de la roca golpeada + chispas/escombro tintados por mena (gris stone, brillo
+> silver/gold), todo en `Scene3D.tsx` (`rockShake`, `MineDebris`). **Combate:** hit-flash
+> rojo, knockback corto y polvo de impacto. **Recolección:** pop flotante "+1 <recurso>"
+> por cada unidad obtenida (madera/stone/silver/gold), color por recurso. `npx tsc
+> --noEmit` limpio. Pendiente opcional: feedback de construcción/demolición.
 
 > Falta dar más cuerpo a las acciones del jugador. La más evidente ahora mismo es la
 > tala: existe la mecánica, pero no la animación/impacto visual suficiente.
