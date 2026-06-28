@@ -6,6 +6,7 @@ export type AudioCueId =
   | 'jump'
   | 'land'
   | 'axe_chop'
+  | 'mine_hit'
   | 'attack_swing'
   | 'dialogue_open'
   | 'dialogue_close'
@@ -60,6 +61,13 @@ export const AUDIO_CUES: Record<AudioCueId, AudioCue> = {
     src: '/audio/foley/axe-chop-hit.mp3',
     volume: 0.34,
   },
+  mine_hit: {
+    label: 'Pickaxe hit on rock',
+    // Distinct from axe_chop — a stony "tink/crack". Falls back to silence until
+    // the asset is added (see AUDIO_ASSET_TODO).
+    src: '/audio/foley/mine-hit.mp3',
+    volume: 0.36,
+  },
   attack_swing: {
     label: 'Player attack swing',
     src: '/audio/sfx/attack-swing.mp3',
@@ -98,6 +106,7 @@ export const AUDIO_ASSET_TODO = [
   '/audio/foley/jump-takeoff.mp3',
   '/audio/foley/land-dirt.mp3',
   '/audio/foley/axe-chop-hit.mp3',
+  '/audio/foley/mine-hit.mp3',
   '/audio/sfx/attack-swing.mp3',
   '/audio/ui/dialogue-open.mp3',
   '/audio/ui/dialogue-close.mp3',

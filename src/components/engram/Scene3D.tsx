@@ -1568,34 +1568,53 @@ function ChopArm() {
       _swingQ.setFromAxisAngle(_right, -swing * 0.9);
       grp.quaternion.premultiply(_swingQ);
     } else {
-      // Spear: thrust straight forward (punches out on the swing, retracts back).
+      // Spear: thrust forward (a shorter punch so it stays clearly in frame the
+      // whole time), sitting in the lower-centre of the view.
       grp.position
         .copy(camera.position)
-        .addScaledVector(_fwd,   0.40 + swing * 0.55)
-        .addScaledVector(_right, 0.16)
-        .addScaledVector(_up,   -0.20 + swing * 0.04);
+        .addScaledVector(_fwd,   0.42 + swing * 0.26)
+        .addScaledVector(_right, 0.14)
+        .addScaledVector(_up,   -0.14 + swing * 0.05);
       grp.quaternion.copy(camera.quaternion);
       // Slight downward dip as it lands.
-      _swingQ.setFromAxisAngle(_right, -swing * 0.18);
+      _swingQ.setFromAxisAngle(_right, -swing * 0.16);
       grp.quaternion.premultiply(_swingQ);
     }
   });
 
   return (
     <group ref={groupRef} visible={false}>
-      {/* Axe — chopping */}
+      {/* Axe — chopping (wood haft with leather grip + a forged steel head) */}
       <group ref={axeRef}>
+        {/* Haft */}
         <mesh rotation={[Math.PI / 2, 0, 0]}>
-          <cylinderGeometry args={[0.018, 0.013, 0.4, 6]} />
-          <meshStandardMaterial color="#7a5a32" roughness={0.95} />
+          <cylinderGeometry args={[0.016, 0.012, 0.44, 8]} />
+          <meshStandardMaterial color="#6f4a28" roughness={0.92} />
         </mesh>
-        <mesh position={[0.012, 0, -0.22]} rotation={[0, 0.12, Math.PI / 4]}>
-          <boxGeometry args={[0.13, 0.17, 0.032]} />
-          <meshStandardMaterial color="#9a9ab0" roughness={0.3} metalness={0.72} />
+        {/* Leather grip near the base */}
+        <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0, 0.15]}>
+          <cylinderGeometry args={[0.0205, 0.0205, 0.12, 8]} />
+          <meshStandardMaterial color="#3a2718" roughness={1} />
         </mesh>
-        <mesh position={[0.008, 0.065, -0.233]}>
-          <boxGeometry args={[0.018, 0.11, 0.008]} />
-          <meshStandardMaterial color="#d8d8f0" roughness={0.15} metalness={0.92} />
+        {/* Pommel */}
+        <mesh position={[0, 0, 0.225]}>
+          <sphereGeometry args={[0.021, 8, 8]} />
+          <meshStandardMaterial color="#4a4a52" roughness={0.5} metalness={0.6} />
+        </mesh>
+        {/* Head — main steel cheek (diamond-set like the original) */}
+        <mesh position={[0.012, 0, -0.225]} rotation={[0, 0.12, Math.PI / 4]}>
+          <boxGeometry args={[0.15, 0.2, 0.03]} />
+          <meshStandardMaterial color="#9a9db2" roughness={0.32} metalness={0.74} />
+        </mesh>
+        {/* Poll — thicker nub behind the eye */}
+        <mesh position={[-0.034, -0.034, -0.215]} rotation={[0, 0.12, Math.PI / 4]}>
+          <boxGeometry args={[0.06, 0.075, 0.05]} />
+          <meshStandardMaterial color="#7e818e" roughness={0.42} metalness={0.7} />
+        </mesh>
+        {/* Bright honed cutting edge */}
+        <mesh position={[0.062, 0.062, -0.236]} rotation={[0, 0.12, Math.PI / 4]}>
+          <boxGeometry args={[0.013, 0.165, 0.01]} />
+          <meshStandardMaterial color="#eceefb" roughness={0.08} metalness={0.96} />
         </mesh>
       </group>
       {/* Spear — combat (hidden until an attack) */}
@@ -3947,7 +3966,8 @@ export default function Scene3D({ memories = null, active = null, talking = fals
         // Audible swings throughout the action, not just when a unit completes.
         sinceSwing += TICK;
         if (sinceSwing >= SWING_MS) {
-          void play('axe_chop');
+          // Mining a rock gets its own stony hit; chopping keeps the axe sound.
+          void play(canChop ? 'axe_chop' : 'mine_hit');
           sinceSwing = 0;
           // Prompt 16 gathering FX: arm swing + tree shake + wood chip burst
           chopArmSwing.type = 'chop';

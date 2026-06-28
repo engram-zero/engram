@@ -1039,3 +1039,16 @@ El disparo del swing ya ocurre en cada golpe del hold (tala) y por ataque (comba
 **Qué se hizo:** `ChopArm` reescrito con gating de visibilidad + escalado suave + geometría de lanza
 para combate; hacha para gather. `npx tsc --noEmit` limpio. (FX view-space; verificación visual en
 navegador pendiente del usuario.) **Commit:** _(este commit)_
+
+### 28 jun 2026 · Sonido de minar propio + lanza más visible + hacha mejorada
+**Pedido (humano):** Que minar tenga un sonido distinto al hacha; revisar que la lanza no se
+pierda de vista en el thrust; mejorar el diseño del hacha. (Audio de grillos/fuego: por diseño —
+grillos night-only, fuego posicional cerca de la fogata; falta el asset day-ambience.)
+**Prompt sintetizado:** (1) Manifest: nuevo cue `mine_hit` (`/audio/foley/mine-hit.mp3`, fallback
+silencioso). En el chop loop, al minar (`!canChop`) reproducir `mine_hit` en vez de `axe_chop`.
+(2) `ChopArm`: acortar el thrust de la lanza y subirla un poco para que quede en el centro-bajo
+visible todo el golpe. (3) Rediseñar el hacha: haft con grip de cuero + pomo, cabeza de acero con
+contrahoja (poll) y filo brillante. tsc debe pasar.
+**Qué se hizo:** cue `mine_hit` en el manifest + wiring; lanza reposicionada; hacha con grip/pomo/
+poll/filo en `Scene3D.tsx`. `npx tsc --noEmit` limpio. **Falta asset:** `public/audio/foley/mine-hit.mp3`
+(hasta entonces minar es silencioso). **Commit:** _(este commit)_
