@@ -168,12 +168,33 @@ function Game() {
   // "Explore as guest" — roam Aldenmoor without a wallet (no dialogue/saving).
   // The best mobile fallback when there's no injected wallet / WalletConnect.
   const [guest, setGuest] = useState(false);
+  // One-time onboarding card: explains the 0G-backed memory thesis the first time
+  // a player enters the village (judges/newcomers grok it in ~15s). Set from
+  // localStorage in an effect to avoid an SSR hydration mismatch.
+  const [showIntro, setShowIntro] = useState(false);
   // Photo mode (?shot): hide the page chrome too (header/banners) so the scene
   // can be captured clean for the showcase thumbnail. Scene3D reads the same param.
   const photoMode = useMemo(
     () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('shot'),
     []
   );
+
+  useEffect(() => {
+    if (photoMode) return;
+    try {
+      if (!window.localStorage.getItem('engram:onboarded:v1')) setShowIntro(true);
+    } catch {
+      /* private mode / no storage — just skip the card */
+    }
+  }, [photoMode]);
+  const dismissIntro = useCallback(() => {
+    setShowIntro(false);
+    try {
+      window.localStorage.setItem('engram:onboarded:v1', '1');
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -531,6 +552,44 @@ function Game() {
         uiOpen={panelOpen}
       />
 
+      {/* One-time onboarding card: names the 0G-backed memory thesis so a first-time
+          player (or a judge) understands what's special in ~15s, then dismisses. */}
+      {showIntro && !photoMode && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/55 px-6">
+          <div
+            className="max-w-lg rounded-2xl border px-7 py-6 text-[#f4e8d0] shadow-2xl"
+            style={{ background: 'rgba(18,14,9,0.96)', borderColor: '#6a5832' }}
+          >
+            <div className="text-xs font-bold uppercase tracking-[0.2em] text-[#d6b84a]">How Aldenmoor remembers</div>
+            <p className="mt-3 text-[15px] leading-relaxed">
+              Every villager keeps their own memory of you — trust, debts, and past
+              conversations.
+            </p>
+            <p className="mt-3 text-[15px] leading-relaxed">
+              That memory does <span className="text-[#e7c14e]">not</span> live on our server.
+              It’s a JSON bundle on <span className="font-semibold text-[#8fd0a0]">0G Storage</span>,
+              pointed to by <span className="font-semibold">your wallet</span> through an on-chain
+              registry. No one — not even us — can edit or erase it.
+            </p>
+            <p className="mt-3 text-[15px] leading-relaxed">
+              Talk to Aldric, leave, then reconnect from any device: he reloads his
+              memory of you straight from 0G.
+            </p>
+            <div className="mt-5 flex items-center justify-between">
+              <span className="text-xs text-[#f4e8d0]/55">
+                {address ? 'Memory anchored to your wallet' : 'Demo mode · connect a wallet to own your memory'}
+              </span>
+              <button
+                onClick={dismissIntro}
+                className="rounded-md border border-[#6a5832] bg-[#322a1a]/80 px-4 py-2 text-sm font-semibold hover:border-[#d6b84a]"
+              >
+                Enter Aldenmoor →
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Top bar (hidden in photo mode for clean thumbnail captures). */}
       {!photoMode && (
       <header className="absolute top-0 inset-x-0 z-20 flex justify-between items-center px-4 py-3 bg-gradient-to-b from-black/55 to-transparent">
@@ -606,6 +665,21 @@ function Game() {
             >
               {activeNpc.name}
             </div>
+
+            {/* Recall banner: makes the "memory loaded from 0G" moment visible instead
+                of leaving it implicit. Only when this NPC has prior history on-chain. */}
+            {(() => {
+              const n = active && memories ? memories[active].interaction_history?.length ?? 0 : 0;
+              const root = address ? getBundleRoot(address) : null;
+              if (n <= 0 || !root) return null;
+              return (
+                <div className="mb-3 -mt-1 text-xs text-[#8fd0a0]">
+                  📜 {activeNpc.name} recalls {n} past {n === 1 ? 'conversation' : 'conversations'} with you · loaded from{' '}
+                  <span className="font-semibold">0G</span>
+                  <span className="font-mono text-[#d6b84a]"> · {root.slice(0, 8)}…</span>
+                </div>
+              );
+            })()}
 
             <div className="text-lg leading-relaxed min-h-[58px] mb-4 mt-1">
               {scene.loading && !scene.dialogue ? <span className="engram-thinking">…</span> : scene.dialogue}

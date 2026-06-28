@@ -1104,3 +1104,16 @@ Sin deps nuevas, `npx tsc --noEmit` limpio, sin tocar combate/persistencia.
 componente `MineDebris` montado junto a WoodChips/HitDust; FX de pico cableado en el loop; estado
 `pickups`+`showPickup` y overlay HUD; keyframes `engram-pickup`. Prompt 16 pasa a 🟢. `npx tsc
 --noEmit` limpio. **Commit:** _(este commit)_
+
+### 28 jun 2026 · Onboarding de la tesis (cartel de entrada + banner "recalls from 0G")
+**Pedido (humano):** Hacer legible en los primeros ~15-30s la tesis (memoria propiedad del jugador
+en 0G), tono ~65% técnico / 35% inmersivo.
+**Prompt sintetizado:** En `client-page.tsx`, sin tocar el core: (1) Cartel de entrada de una sola
+vez (gate `localStorage engram:onboarded:v1`, set en effect para evitar hydration mismatch) que
+explica que la memoria de cada aldeano vive como bundle JSON en **0G Storage**, apuntado por la
+wallet vía registry on-chain, inmutable; botón "Enter Aldenmoor". (2) Banner contextual en la caja
+de diálogo: "📜 {NPC} recalls N past conversations · loaded from 0G · <root>…", solo cuando ese NPC
+tiene `interaction_history.length > 0` y existe `getBundleRoot(wallet)` (honesto: no aparece en
+wallets nuevas/invitados). `npx tsc --noEmit` limpio.
+**Qué se hizo:** estado `showIntro`/`dismissIntro` + overlay del cartel; banner de recall inline en
+el diálogo; keyframes no requeridos. Tono 65/35 técnico/inmersivo. **Commit:** _(este commit)_
