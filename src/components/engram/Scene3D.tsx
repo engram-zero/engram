@@ -119,6 +119,7 @@ const treeShake: Record<number, { amp: number }> = {};     // amp decays from 0.
 const woodChipQueue: Array<{ x: number; y: number; z: number; big: boolean }> = [];
 const hitDustQueue: Array<{ x: number; y: number; z: number }> = [];
 const chopArmSwing = { phase: 0, type: 'chop' as 'chop' | 'attack' }; // 1 = just triggered, decays to 0 at ~3/s
+let playerAttackedMaren = false; // tracks if the player retaliated against Maren when she is hostile
 
 // ─── First-person walking constants ───────────────────────────────────────────
 const EYE_HEIGHT = 1.7;
@@ -520,6 +521,7 @@ function Player({
   onFootstep,
   onJump,
   onLand,
+  memories = null,
 }: {
   enabled: boolean;
   posRef: PlayerPosRef;
@@ -532,6 +534,7 @@ function Player({
   onFootstep?: () => void;
   onJump?: () => void;
   onLand?: () => void;
+  memories?: Record<NPCName, NPCMemory> | null;
 }) {
   const { camera } = useThree();
   const [, getKeys] = useKeyboardControls();
@@ -715,6 +718,22 @@ function Player({
     // Nearest enemy within attack range.
     let bestEnemy: string | null = null;
     let bestEd = Infinity;
+
+    // Trigger Maren as target if she has a bad relation and is not knocked out
+    const marenMem = memories?.maren;
+    const isMarenUpset = marenMem && (
+      marenMem.trust_level < 40 ||
+      ['furious', 'angry', 'hostile', 'upset', 'cold'].includes(marenMem.emotional_state?.toLowerCase())
+    );
+    if (isMarenUpset && !dynamicNpcState['maren']?.knockedOut) {
+      const maren = dynamicNpcState['maren'];
+      const dd = Math.hypot(camera.position.x - maren.x, camera.position.z - maren.z);
+      if (dd < 4.0 && dd < bestEd) {
+        bestEd = dd;
+        bestEnemy = 'maren';
+      }
+    }
+
     for (const [id, enemy] of Object.entries(dynamicEnemyState)) {
       if (enemy.dead) continue;
       const dd = Math.hypot(camera.position.x - enemy.x, camera.position.z - enemy.z);
@@ -2854,6 +2873,7 @@ function Character({
   const htmlRef = useRef<HTMLDivElement>(null);
   const [hovered, setHovered] = useState(false);
   const tmpScale = useMemo(() => new THREE.Vector3(), []);
+  const { play } = useEngramAudio();
 
   useFrame((state, dtRaw) => {
     if (!group.current) return;
@@ -2890,44 +2910,86 @@ function Character({
     
     // Maren Guard AI
     if (npc === 'maren' && !active) {
-      let closestEnemyId: string | null = null;
-      let closestDist = Infinity;
-      for (const [id, enemy] of Object.entries(dynamicEnemyState)) {
-        if (enemy.dead) continue;
-        const d = Math.hypot(enemy.x - dyn.x, enemy.z - dyn.z);
-        if (d < closestDist) {
-          closestDist = d;
-          closestEnemyId = id;
-        }
-      }
-
-      if (closestEnemyId && closestDist < 15) {
+      const isBadRelation = memory && (
+        memory.trust_level < 40 ||
+        ['furious', 'angry', 'hostile', 'upset', 'cold'].includes(memory.emotional_state?.toLowerCase())
+      );
+      if (isBadRelation && !dynamicPlayerState.dead) {
         combatEngaged = true;
-        const enemy = dynamicEnemyState[closestEnemyId];
-        dyn.targetX = enemy.x;
-        dyn.targetZ = enemy.z;
-        
+        const pDist = Math.hypot(dynamicPlayerState.x - dyn.x, dynamicPlayerState.z - dyn.z);
+        dyn.targetX = dynamicPlayerState.x;
+        dyn.targetZ = dynamicPlayerState.z;
         const dx = dyn.targetX - dyn.x;
         const dz = dyn.targetZ - dyn.z;
 
-        if (closestDist < 1.4) {
-          // Attack
+        // Attacks player until player is at 50% health, unless player attacked back
+        const shouldAttack = playerAttackedMaren || dynamicPlayerState.hp > 50;
+
+        if (pDist < 1.4) {
           isMoving = false;
           targetRotY = Math.atan2(dx, dz);
-          dyn.attackTimer -= dt;
-          if (dyn.attackTimer <= 0) {
-            enemy.hp -= 25; // Guard DPS
-            dyn.attackTimer = 1.0;
-            if (enemy.hp <= 0) enemy.dead = true;
+          if (shouldAttack) {
+            dyn.attackTimer -= dt;
+            if (dyn.attackTimer <= 0) {
+              const newHp = Math.max(playerAttackedMaren ? 0 : 50, dynamicPlayerState.hp - 15);
+              dynamicPlayerState.hp = newHp;
+              dyn.attackTimer = 1.0;
+              void play('attack_swing');
+              if (dynamicPlayerState.hp <= 0) {
+                dynamicPlayerState.dead = true;
+              }
+            }
           }
-        } else {
+        } else if (shouldAttack) {
           isMoving = true;
           const step = dyn.speed * 1.5 * dt; // run faster when in combat
-          const moveRatio = step / closestDist;
+          const moveRatio = Math.min(1.0, step / pDist);
           dyn.x += dx * moveRatio;
           dyn.z += dz * moveRatio;
           [dyn.x, dyn.z] = resolveBuildings(dyn.x, dyn.z, 0.5);
           targetRotY = Math.atan2(dx, dz);
+        }
+      } else {
+        // Normal guard AI
+        let closestEnemyId: string | null = null;
+        let closestDist = Infinity;
+        for (const [id, enemy] of Object.entries(dynamicEnemyState)) {
+          if (enemy.dead) continue;
+          const d = Math.hypot(enemy.x - dyn.x, enemy.z - dyn.z);
+          if (d < closestDist) {
+            closestDist = d;
+            closestEnemyId = id;
+          }
+        }
+
+        if (closestEnemyId && closestDist < 15) {
+          combatEngaged = true;
+          const enemy = dynamicEnemyState[closestEnemyId];
+          dyn.targetX = enemy.x;
+          dyn.targetZ = enemy.z;
+          
+          const dx = dyn.targetX - dyn.x;
+          const dz = dyn.targetZ - dyn.z;
+
+          if (closestDist < 1.4) {
+            // Attack
+            isMoving = false;
+            targetRotY = Math.atan2(dx, dz);
+            dyn.attackTimer -= dt;
+            if (dyn.attackTimer <= 0) {
+              enemy.hp -= 25; // Guard DPS
+              dyn.attackTimer = 1.0;
+              if (enemy.hp <= 0) enemy.dead = true;
+            }
+          } else {
+            isMoving = true;
+            const step = dyn.speed * 1.5 * dt; // run faster when in combat
+            const moveRatio = step / closestDist;
+            dyn.x += dx * moveRatio;
+            dyn.z += dz * moveRatio;
+            [dyn.x, dyn.z] = resolveBuildings(dyn.x, dyn.z, 0.5);
+            targetRotY = Math.atan2(dx, dz);
+          }
         }
       }
     }
@@ -3743,6 +3805,29 @@ export default function Scene3D({ memories = null, active = null, talking = fals
   const attackNearbyEnemy = () => {
     const id = nearbyEnemyRef.current;
     if (!id) return;
+
+    if (id === 'maren') {
+      const maren = dynamicNpcState['maren'];
+      if (!maren || maren.knockedOut) return;
+      playerAttackedMaren = true;
+      maren.hp -= 25;
+      enemyHitFlash['maren'] = 1;
+      const kbDx = maren.x - dynamicPlayerState.x;
+      const kbDz = maren.z - dynamicPlayerState.z;
+      const kbLen = Math.hypot(kbDx, kbDz) || 1;
+      enemyKnockback['maren'] = { vx: (kbDx / kbLen) * 4.2, vz: (kbDz / kbLen) * 4.2 };
+      hitDustQueue.push({ x: maren.x, y: getHeightAt(maren.x, maren.z) + 1.0, z: maren.z });
+      void play('attack_swing');
+      if (maren.hp <= 0) {
+        maren.hp = 0;
+        maren.knockedOut = true;
+        maren.reviveTimer = 15.0;
+      }
+      setFlash(true);
+      window.setTimeout(() => setFlash(false), 80);
+      return;
+    }
+
     const enemy = dynamicEnemyState[id];
     if (!enemy || enemy.dead) return;
     chopArmSwing.type = 'attack';
@@ -3887,6 +3972,29 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     const attack = () => {
       const id = nearbyEnemyRef.current;
       if (!id) return false;
+
+      if (id === 'maren') {
+        const maren = dynamicNpcState['maren'];
+        if (!maren || maren.knockedOut) return false;
+        playerAttackedMaren = true;
+        maren.hp -= 25;
+        enemyHitFlash['maren'] = 1;
+        const kbDx = maren.x - dynamicPlayerState.x;
+        const kbDz = maren.z - dynamicPlayerState.z;
+        const kbLen = Math.hypot(kbDx, kbDz) || 1;
+        enemyKnockback['maren'] = { vx: (kbDx / kbLen) * 4.2, vz: (kbDz / kbLen) * 4.2 };
+        hitDustQueue.push({ x: maren.x, y: getHeightAt(maren.x, maren.z) + 1.0, z: maren.z });
+        void play('attack_swing');
+        if (maren.hp <= 0) {
+          maren.hp = 0;
+          maren.knockedOut = true;
+          maren.reviveTimer = 15.0;
+        }
+        setFlash(true);
+        setTimeout(() => setFlash(false), 80);
+        return true;
+      }
+
       const enemy = dynamicEnemyState[id];
       if (!enemy || enemy.dead) return false;
       chopArmSwing.type = 'attack';
@@ -3976,6 +4084,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
           posRef.current = { x: SPAWN_XZ[0], z: SPAWN_XZ[1], heading: 0 };
           setPlayerHp(dynamicPlayerState.maxHp);
           setPlayerDead(false);
+          playerAttackedMaren = false; // Reset Maren aggression on player death
           return 5;
         }
         return c - 1;
@@ -4122,6 +4231,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
               onFootstep={() => void play('footstep_grass')}
               onJump={() => void play('jump')}
               onLand={() => void play('land')}
+              memories={memories}
             />
           )}
           {fpExploring && !isTouchDevice && (
