@@ -549,7 +549,7 @@ function Game() {
         talking={scene.loading}
         onSelect={address ? openDialogue : () => {}}
         interactive={address ? !!memories : true}
-        uiOpen={panelOpen}
+        uiOpen={panelOpen || showIntro}
       />
 
       {/* One-time onboarding card: names the 0G-backed memory thesis so a first-time

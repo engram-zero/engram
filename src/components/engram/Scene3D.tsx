@@ -138,7 +138,7 @@ const rockShake: Record<number, { amp: number }> = {};     // per-rock jitter on
 const woodChipQueue: Array<{ x: number; y: number; z: number; big: boolean }> = [];
 const mineDebrisQueue: Array<{ x: number; y: number; z: number; ore: 'stone' | 'silver' | 'gold' }> = [];
 const hitDustQueue: Array<{ x: number; y: number; z: number }> = [];
-const chopArmSwing = { phase: 0, type: 'chop' as 'chop' | 'attack' }; // 1 = just triggered, decays to 0 at ~3/s
+const chopArmSwing = { phase: 0, type: 'chop' as 'chop' | 'mine' | 'attack' }; // 1 = just triggered, decays toward 0
 let playerAttackedMaren = false; // tracks if the player retaliated against Maren when she is hostile
 
 // ─── First-person walking constants ───────────────────────────────────────────
@@ -1676,11 +1676,13 @@ function MineDebris() {
 
 // ─── Prompt 16: ChopArm ───────────────────────────────────────────────────────
 // A view-space weapon that appears ONLY while the player is actually striking,
-// then vanishes — no tool is held at idle. An AXE swings down for chopping; a
-// SPEAR thrusts forward for combat. Mounted while fpExploring; hidden until a swing.
+// then vanishes — no tool is held at idle. An AXE swings down for chopping wood, a
+// PICKAXE for mining rock/ore, and a SPEAR thrusts forward for combat. Mounted while
+// fpExploring; hidden until a swing.
 function ChopArm() {
   const groupRef = useRef<THREE.Group>(null);
   const axeRef = useRef<THREE.Group>(null);
+  const pickaxeRef = useRef<THREE.Group>(null);
   const spearRef = useRef<THREE.Group>(null);
   const { camera } = useThree();
   const _fwd   = useMemo(() => new THREE.Vector3(), []);
@@ -1692,19 +1694,22 @@ function ChopArm() {
     const grp = groupRef.current;
     if (!grp) return;
     const dt = Math.min(dtRaw, 0.05);
-    // Decay swing phase (1 → 0 over ~0.33s)
-    chopArmSwing.phase = Math.max(0, chopArmSwing.phase - dt * 3.0);
+    // Decay swing phase (1 → 0 over ~0.55s) so a full swing reads as one weighty
+    // strike that lines up with the hit sound (~0.6s cadence), not a fast flick.
+    chopArmSwing.phase = Math.max(0, chopArmSwing.phase - dt * 1.85);
     const phase = chopArmSwing.phase;
 
     // The weapon only exists while striking; hide it (and skip posing) at idle.
     const active = phase > 0.02;
     grp.visible = active;
-    const isChop = chopArmSwing.type === 'chop';
-    if (axeRef.current) axeRef.current.visible = isChop;
-    if (spearRef.current) spearRef.current.visible = !isChop;
+    const kind = chopArmSwing.type;
+    const isSwing = kind !== 'attack'; // chop + mine both swing down; attack thrusts
+    if (axeRef.current) axeRef.current.visible = kind === 'chop';
+    if (pickaxeRef.current) pickaxeRef.current.visible = kind === 'mine';
+    if (spearRef.current) spearRef.current.visible = kind === 'attack';
     if (!active) return;
 
-    // Grow in / shrink out quickly so it reads as a strike, not a hard pop-in.
+    // Grow in / shrink out so it reads as a strike, not a hard pop-in.
     grp.scale.setScalar(Math.min(1, Math.sin(phase * Math.PI) * 2.4));
     // Bell-shaped swing: fast out, then back.
     const swing = Math.sin(phase * Math.PI) * 0.65;
@@ -1712,7 +1717,7 @@ function ChopArm() {
     camera.getWorldDirection(_fwd);
     _right.crossVectors(_fwd, _up).normalize();
 
-    if (isChop) {
+    if (isSwing) {
       // Axe: vertical chop in front-right-below the camera.
       grp.position
         .copy(camera.position)
@@ -1770,6 +1775,43 @@ function ChopArm() {
         <mesh position={[0.062, 0.062, -0.236]} rotation={[0, 0.12, Math.PI / 4]}>
           <boxGeometry args={[0.013, 0.165, 0.01]} />
           <meshStandardMaterial color="#eceefb" roughness={0.08} metalness={0.96} />
+        </mesh>
+      </group>
+      {/* Pickaxe — mining (hidden until a mine swing): a horizontal twin-pointed head */}
+      <group ref={pickaxeRef} visible={false}>
+        {/* Haft */}
+        <mesh rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[0.016, 0.012, 0.44, 8]} />
+          <meshStandardMaterial color="#5b3f24" roughness={0.92} />
+        </mesh>
+        {/* Leather grip near the base */}
+        <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0, 0.15]}>
+          <cylinderGeometry args={[0.0205, 0.0205, 0.12, 8]} />
+          <meshStandardMaterial color="#33240f" roughness={1} />
+        </mesh>
+        {/* Pommel */}
+        <mesh position={[0, 0, 0.225]}>
+          <sphereGeometry args={[0.021, 8, 8]} />
+          <meshStandardMaterial color="#4a4a52" roughness={0.5} metalness={0.6} />
+        </mesh>
+        {/* Eye/collar where the head meets the haft */}
+        <mesh position={[0, 0, -0.225]} rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[0.027, 0.027, 0.05, 8]} />
+          <meshStandardMaterial color="#6a6d78" roughness={0.5} metalness={0.62} />
+        </mesh>
+        {/* Head bar across the haft */}
+        <mesh position={[0, 0, -0.225]}>
+          <boxGeometry args={[0.3, 0.028, 0.028]} />
+          <meshStandardMaterial color="#8d909e" roughness={0.34} metalness={0.74} />
+        </mesh>
+        {/* Twin pointed tips */}
+        <mesh position={[0.19, 0, -0.225]} rotation={[0, 0, -Math.PI / 2]}>
+          <coneGeometry args={[0.022, 0.085, 6]} />
+          <meshStandardMaterial color="#dfe2f0" roughness={0.12} metalness={0.92} />
+        </mesh>
+        <mesh position={[-0.19, 0, -0.225]} rotation={[0, 0, Math.PI / 2]}>
+          <coneGeometry args={[0.022, 0.085, 6]} />
+          <meshStandardMaterial color="#dfe2f0" roughness={0.12} metalness={0.92} />
         </mesh>
       </group>
       {/* Spear — combat (hidden until an attack) */}
@@ -3754,6 +3796,9 @@ function PublicRelationsPanel({
   onRelationChange: () => void;
 }) {
   const publicWorld = usePublicWorld();
+  // Collapsible: a judge/player who doesn't want to label anyone yet can dismiss
+  // the panel to a small chip and reopen it later.
+  const [open, setOpen] = useState(true);
   if (publicWorld.owners.length === 0) return null;
   const currentWallet = getWorldWallet()?.toLowerCase();
   const uncollectedRent = currentWallet
@@ -3789,11 +3834,34 @@ function PublicRelationsPanel({
     if (result.collected > 0) onRelationChange();
   };
 
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="absolute left-4 bottom-16 z-20 rounded-md border border-[#5a4a28] bg-black/60 px-3 py-1.5 text-xs font-semibold text-[#d6b84a] shadow-xl backdrop-blur-sm hover:border-[#d6b84a]"
+      >
+        👥 {publicWorld.owners.length} nearby
+      </button>
+    );
+  }
+
   return (
-    <div className="absolute left-4 top-40 z-20 w-[18rem] max-w-[calc(100vw-2rem)] rounded-md border border-[#5a4a28] bg-black/60 p-3 text-xs text-[#f4e8d0] shadow-xl backdrop-blur-sm">
+    <div className="absolute left-4 bottom-16 z-20 max-h-[70vh] w-[18rem] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-md border border-[#5a4a28] bg-black/60 p-3 text-xs text-[#f4e8d0] shadow-xl backdrop-blur-sm">
       <div className="mb-2 flex items-center justify-between gap-3">
         <span className="font-semibold text-[#d6b84a]">Nearby wallets</span>
-        {publicWorld.loading && <span className="text-[#9fd0e6]">refreshing</span>}
+        <div className="flex items-center gap-2">
+          {publicWorld.loading && <span className="text-[#9fd0e6]">refreshing</span>}
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            aria-label="Hide nearby wallets"
+            title="Hide (you can decide relations later)"
+            className="rounded px-1.5 leading-none text-[#f4e8d0]/60 hover:text-[#f4e8d0]"
+          >
+            ✕
+          </button>
+        </div>
       </div>
       {uncollectedRent.length > 0 && (
         <button
@@ -4414,8 +4482,9 @@ export default function Scene3D({ memories = null, active = null, talking = fals
           // Mining a rock gets its own stony hit; chopping keeps the axe sound.
           void play(canChop ? 'axe_chop' : 'mine_hit');
           sinceSwing = 0;
-          // Prompt 16 gathering FX: arm swing + tree shake + wood chip burst
-          chopArmSwing.type = 'chop';
+          // Prompt 16 gathering FX: arm swing + tree shake + wood chip burst.
+          // Axe for wood, pickaxe for rock — distinct tool per resource.
+          chopArmSwing.type = tree !== null ? 'chop' : 'mine';
           chopArmSwing.phase = 1;
           if (tree !== null) {
             treeShake[tree] = { amp: 0.15 };
@@ -4844,7 +4913,9 @@ export default function Scene3D({ memories = null, active = null, talking = fals
               <span className="inline-flex items-center rounded-md bg-black/45 px-2.5 py-1" title="Gold"><GoldIcon />{world.inventory.gold}/{MAX_GOLD}</span>
             )}
             <span className="inline-flex items-center rounded-md bg-black/45 px-2.5 py-1" title="Coin"><CoinIcon />{world.inventory.coin}</span>
-            <span className="inline-flex items-center rounded-md bg-black/45 px-2.5 py-1" title="Repair kits">Repair {world.repairKits}</span>
+            {world.repairKits > 0 && (
+              <span className="inline-flex items-center rounded-md bg-black/45 px-2.5 py-1" title="Repair kits">🧰 {world.repairKits}</span>
+            )}
           </div>
           <button
             onClick={switchView}

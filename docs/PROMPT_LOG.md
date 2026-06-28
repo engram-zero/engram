@@ -1154,3 +1154,18 @@ Credits/Licenses en `docs/AUDIO_ASSETS.md` con la nota de Pixabay Content Licens
 obligatoria) y la URL de origen del day-ambience.
 **Qué se hizo:** 3 mp3 añadidos; `day_ambience.volume` 0.22→0.11; doc de assets actualizado (cues
 nuevos + tabla de créditos). `npx tsc --noEmit` limpio. **Commit:** _(este commit)_
+
+### 28 jun 2026 · Pulido de HUD/animación (pica, swing más lento, panel wallets, cartel modal)
+**Pedido (humano):** Varias correcciones de UI tras probar en local: el "Repair 0" ensucia el HUD;
+el cartel de inicio deja asomar los nombres flotantes de los NPCs; la animación de herramienta se
+volvió muy rápida y no concuerda con el sonido (y querer hacha para madera + pica para piedra/oro/
+plata); el panel "Nearby wallets" estorba arriba-izquierda y no se puede cerrar sin elegir relación.
+**Prompt sintetizado:** En `Scene3D.tsx`/`client-page.tsx`: (1) ocultar el contador de repair kits
+cuando es 0 (patrón de silver/gold). (2) `uiOpen = panelOpen || showIntro` para que el modal de
+onboarding congele el mundo y oculte los nametags drei `<Html>` (z-index altísimo). (3) `ChopArm`:
+nuevo tipo `mine` con modelo de pica (twin-pointed), hacha solo para `chop`; bajar el decay del
+swing (dt*3.0→dt*1.85, ~0.55s) para que cuadre con el sonido (~0.6s); el loop de hold-F elige
+`chop` vs `mine` según árbol/roca. (4) `PublicRelationsPanel`: mover a inferior-izquierda
+(`bottom-16`), colapsable con ✕ → chip "👥 N nearby" para reabrir, sin obligar a elegir relación.
+**Qué se hizo:** los 4 cambios + modelo de pica en el view-space arm. `npx tsc --noEmit` limpio.
+**Commit:** _(este commit)_
