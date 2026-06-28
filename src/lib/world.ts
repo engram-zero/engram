@@ -15,9 +15,9 @@
 //     NOT cross-device, NOT on-chain).
 
 import { useSyncExternalStore } from 'react';
-import { BLOCK_SCALE_MAX, BLOCK_SCALE_MIN, BLOCK_UNIT, type RaidEvent, type ResourceType, type WalletRelation, type WorldState, type Building, type BuildingType } from '@/lib/types';
+import { BLOCK_SCALE_MAX, BLOCK_SCALE_MIN, BLOCK_UNIT, type RaidEvent, type RepairEvent, type ResourceType, type WalletRelation, type WorldState, type Building, type BuildingType } from '@/lib/types';
 
-export type { RaidEvent, ResourceType, WalletRelation, WorldState, Building, BuildingType } from '@/lib/types';
+export type { RaidEvent, RepairEvent, ResourceType, WalletRelation, WorldState, Building, BuildingType } from '@/lib/types';
 
 /** How much wood the player can carry before they must use/drop some. Raised to
  * support AI-built structures and the pricier builds near the village centre. */
@@ -32,7 +32,9 @@ export const BUILD_RADIUS: Record<BuildingType, number> = { wall: 0.9, house: 1.
 const MAX_BUILD_COORD = 150;
 const MAX_BLOCK_Y = 12;
 const MAX_RAID_EVENTS = 120;
+const MAX_REPAIR_EVENTS = 160;
 const RAID_EVENT_TTL_MS = 1000 * 60 * 60 * 24 * 7;
+const REPAIR_EVENT_TTL_MS = 1000 * 60 * 60 * 24 * 14;
 
 export const EMPTY_WORLD: WorldState = {
   inventory: { wood: 0, stone: 0, coin: 0 },
@@ -43,6 +45,7 @@ export const EMPTY_WORLD: WorldState = {
   axeLevel: 0,
   repairKits: 0,
   raidEvents: [],
+  repairEvents: [],
   relations: {},
 };
 
@@ -239,6 +242,35 @@ function normalizeRaidEvents(raw: unknown): RaidEvent[] {
   return events.filter((event) => event.buildingId).sort((a, b) => b.at - a.at).slice(0, MAX_RAID_EVENTS);
 }
 
+function normalizeRepairEvents(raw: unknown): RepairEvent[] {
+  if (!Array.isArray(raw)) return [];
+  const now = Date.now();
+  const events: RepairEvent[] = [];
+  for (const value of raw) {
+    if (!value || typeof value !== 'object') continue;
+    const p = value as Record<string, unknown>;
+    const repairer = typeof p.repairer === 'string' ? p.repairer.toLowerCase() : '';
+    const owner = typeof p.owner === 'string' ? p.owner.toLowerCase() : '';
+    if (!/^0x[a-f0-9]{40}$/.test(repairer) || !/^0x[a-f0-9]{40}$/.test(owner)) continue;
+    const at = Math.round(Number(p.at ?? 0));
+    if (!Number.isFinite(at) || at <= 0 || at > now + 1000 * 60 * 10) continue;
+    if (now - at > REPAIR_EVENT_TTL_MS) continue;
+    const heal = Math.max(1, Math.min(120, Math.round(Number(p.heal ?? REPAIR_WOOD_HEAL))));
+    const woodCost = Math.max(0, Math.min(20, Math.round(Number(p.woodCost ?? REPAIR_WOOD_COST))));
+    events.push({
+      id: cleanId(p.id, createId('repair')),
+      repairer,
+      owner,
+      buildingId: cleanId(p.buildingId, ''),
+      heal,
+      woodCost,
+      kitUsed: Boolean(p.kitUsed),
+      at,
+    });
+  }
+  return events.filter((event) => event.buildingId).sort((a, b) => b.at - a.at).slice(0, MAX_REPAIR_EVENTS);
+}
+
 export function normalizeWorldState(raw: unknown): WorldState {
   const p = raw && typeof raw === 'object' ? (raw as any) : {};
   const intIndexSet = (raw: unknown): number[] =>
@@ -261,6 +293,7 @@ export function normalizeWorldState(raw: unknown): WorldState {
     axeLevel: Math.max(0, Math.round(Number(p?.axeLevel ?? 0))),
     repairKits: Math.max(0, Math.round(Number(p?.repairKits ?? 0))),
     raidEvents: normalizeRaidEvents(p?.raidEvents),
+    repairEvents: normalizeRepairEvents(p?.repairEvents),
     relations: normalizeRelations(p?.relations),
   };
 }
@@ -275,6 +308,7 @@ export function cloneWorldState(value: WorldState = EMPTY_WORLD): WorldState {
     axeLevel: value.axeLevel,
     repairKits: value.repairKits,
     raidEvents: value.raidEvents.map((event) => ({ ...event })),
+    repairEvents: value.repairEvents.map((event) => ({ ...event })),
     relations: { ...value.relations },
   };
 }
@@ -512,6 +546,10 @@ export function raidDamageForWeapon(weaponLevel = 0): number {
   return RAID_BASE_DAMAGE + Math.max(0, Math.min(5, Math.round(weaponLevel))) * 6;
 }
 
+export function repairHealForInventory(value: WorldState = state): number {
+  return value.repairKits > 0 ? REPAIR_KIT_HEAL : REPAIR_WOOD_HEAL;
+}
+
 export function latestRaidAgainst(defender: string, buildingId: string): RaidEvent | null {
   const target = defender.toLowerCase();
   return state.raidEvents
@@ -551,6 +589,44 @@ export function recordRaidEvent(defender: string, buildingId: string): { ok: boo
     ...state,
     inventory: { ...state.inventory, stone: freeBuild ? MAX_STONE : Math.max(0, state.inventory.stone - RAID_STONE_COST) },
     raidEvents,
+  });
+  return { ok: true, event };
+}
+
+export function recordRepairEvent(owner: string, buildingId: string, requestedHeal?: number): { ok: boolean; reason?: string; event?: RepairEvent } {
+  const repairer = wallet?.toLowerCase();
+  const target = owner.toLowerCase();
+  if (!repairer) return { ok: false, reason: 'Connect a wallet first.' };
+  if (!/^0x[a-f0-9]{40}$/.test(target)) return { ok: false, reason: 'Invalid building owner.' };
+  if (!buildingId) return { ok: false, reason: 'Missing building id.' };
+  if (repairer !== target && relationForWallet(target) !== 'allied') {
+    return { ok: false, reason: 'Mark this wallet Ally before repairing their buildings.' };
+  }
+
+  const freeBuild = isLocalhostFreeBuildWallet();
+  if (!freeBuild && state.inventory.wood < REPAIR_WOOD_COST) return { ok: false, reason: `Need ${REPAIR_WOOD_COST} wood to repair.` };
+
+  const kitUsed = state.repairKits > 0;
+  const maxHeal = kitUsed ? REPAIR_KIT_HEAL : REPAIR_WOOD_HEAL;
+  const heal = Math.max(0, Math.min(maxHeal, Math.round(Number(requestedHeal ?? maxHeal))));
+  if (heal <= 0) return { ok: false, reason: 'This building is already fully maintained.' };
+
+  const event: RepairEvent = {
+    id: createId('repair'),
+    repairer,
+    owner: target,
+    buildingId,
+    heal,
+    woodCost: REPAIR_WOOD_COST,
+    kitUsed,
+    at: Date.now(),
+  };
+  const repairEvents = [event, ...state.repairEvents].slice(0, MAX_REPAIR_EVENTS);
+  commit({
+    ...state,
+    inventory: { ...state.inventory, wood: freeBuild ? MAX_WOOD : Math.max(0, state.inventory.wood - REPAIR_WOOD_COST) },
+    repairKits: kitUsed ? Math.max(0, state.repairKits - 1) : state.repairKits,
+    repairEvents,
   });
   return { ok: true, event };
 }
@@ -614,7 +690,7 @@ export function repairBuilding(index: number): boolean {
   const freeBuild = isLocalhostFreeBuildWallet();
   if (!freeBuild && state.inventory.wood < REPAIR_WOOD_COST) return false;
   const useKit = state.repairKits > 0;
-  const heal = useKit ? REPAIR_KIT_HEAL : REPAIR_WOOD_HEAL;
+  const heal = repairHealForInventory(state);
 
   const newBuildings = [...state.buildings];
   newBuildings[index] = {

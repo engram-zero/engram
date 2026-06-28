@@ -45,6 +45,8 @@ import {
   placeBuilding,
   removeBuilding,
   repairBuilding,
+  recordRepairEvent,
+  repairHealForInventory,
   damageBuilding,
   recordRaidEvent,
   recordEnemyKill,
@@ -83,14 +85,18 @@ const TREE_BUCKETS = 4;
 const IDLE_MOVEMENT: MovementInput = { forward: false, backward: false, left: false, right: false };
 const RELATION_STYLES: Record<WalletRelation, { label: string; color: string; border: string; title: string }> = {
   neutral: { label: 'Neutral', color: '#d8c8a8', border: '#5a4a28', title: 'No special permissions or hostility' },
-  allied: { label: 'Ally', color: '#8fd06a', border: '#4f9d56', title: 'Trusted wallet; future co-op permissions can key off this' },
-  hostile: { label: 'Hostile', color: '#e06a5f', border: '#a8463d', title: 'Marked as an enemy; future raids/sabotage can key off this' },
+  allied: { label: 'Ally', color: '#8fd06a', border: '#4f9d56', title: 'Trusted wallet; can repair public buildings' },
+  hostile: { label: 'Hostile', color: '#e06a5f', border: '#a8463d', title: 'Enemy wallet; can be raided from public buildings' },
 };
 
 function hpOf(b: Building): { hp: number; maxHp: number; ratio: number } {
   const maxHp = Math.max(1, b.maxHp ?? b.hp ?? 1);
   const hp = Math.max(0, Math.min(maxHp, b.hp ?? maxHp));
   return { hp, maxHp, ratio: hp / maxHp };
+}
+
+function effectiveHp(baseHp: number, maxHp: number, damage: number, healing: number): number {
+  return Math.max(0, Math.min(maxHp, baseHp - damage + healing));
 }
 
 // Where each villager stands (XZ). They live in the flat clearing, so ground
@@ -2326,10 +2332,29 @@ function Buildings({
 }) {
   const world = useWorld();
   const publicWorld = usePublicWorld();
-  const handlePublicBuildingClick = (b: (Building & { owner?: string; raidEvents?: { id: string }[] }), relation: WalletRelation) => {
-    if (tool !== 'raid') return;
+  const handlePublicBuildingClick = (b: (Building & { owner?: string; raidEvents?: { id: string }[]; repairEvents?: { id: string }[] }), relation: WalletRelation) => {
+    if (tool !== 'raid' && tool !== 'repair') return;
     if (!b.owner || !b.id) {
-      onToolFeedback({ text: 'This building is missing raid metadata.', tone: 'bad' });
+      onToolFeedback({ text: 'This building is missing maintenance metadata.', tone: 'bad' });
+      return;
+    }
+    if (tool === 'repair') {
+      if (relation !== 'allied') {
+        onToolFeedback({ text: 'Mark that wallet Ally before repairing their buildings.', tone: 'info' });
+        return;
+      }
+      const before = hpOf(b);
+      if (before.hp >= before.maxHp) {
+        onToolFeedback({ text: `Already healthy (${before.hp}/${before.maxHp} HP).`, tone: 'info' });
+        return;
+      }
+      const result = recordRepairEvent(b.owner, b.id, Math.min(before.maxHp - before.hp, repairHealForInventory()));
+      if (!result.ok) {
+        onToolFeedback({ text: result.reason ?? 'Repair failed.', tone: 'bad' });
+        return;
+      }
+      onDraftChange();
+      onToolFeedback({ text: `Repair event queued: +${result.event?.heal ?? 0} HP (-${REPAIR_WOOD_COST} wood). Save World to publish.`, tone: 'good' });
       return;
     }
     if (relation !== 'hostile') {
@@ -2345,7 +2370,7 @@ function Buildings({
     onToolFeedback({ text: `Raid event queued: -${result.event?.damage ?? 0} HP (-${RAID_STONE_COST} stone). Save World to publish.`, tone: 'bad' });
   };
 
-  const handleOwnBuildingClick = (index: number) => {
+  const handleOwnBuildingClick = (index: number, displayBuilding?: Building) => {
     if (tool === 'demolish') {
       removeBuilding(index);
       onDraftChange();
@@ -2354,20 +2379,33 @@ function Buildings({
     }
     if (tool === 'repair') {
       const beforeWorld = getWorld();
-      const before = hpOf(getWorld().buildings[index]);
-      if (before.hp >= before.maxHp) {
-        onToolFeedback({ text: `Already healthy (${before.hp}/${before.maxHp} HP).`, tone: 'info' });
+      const stored = hpOf(beforeWorld.buildings[index]);
+      const visible = hpOf(displayBuilding ?? beforeWorld.buildings[index]);
+      if (visible.hp >= visible.maxHp) {
+        onToolFeedback({ text: `Already healthy (${visible.hp}/${visible.maxHp} HP).`, tone: 'info' });
         return;
       }
       if (!isLocalhostFreeBuildWallet() && beforeWorld.inventory.wood < REPAIR_WOOD_COST) {
         onToolFeedback({ text: `Need ${REPAIR_WOOD_COST} wood to repair.`, tone: 'bad' });
         return;
       }
-      if (repairBuilding(index)) {
+      if (stored.hp < stored.maxHp && repairBuilding(index)) {
         const after = hpOf(getWorld().buildings[index]);
         const kitText = beforeWorld.repairKits > 0 ? ', -1 kit' : '';
         onDraftChange();
-        onToolFeedback({ text: `Repaired +${after.hp - before.hp} HP (-${REPAIR_WOOD_COST} wood${kitText}) · ${after.hp}/${after.maxHp}.`, tone: 'good' });
+        onToolFeedback({ text: `Repaired +${after.hp - stored.hp} HP (-${REPAIR_WOOD_COST} wood${kitText}) · ${after.hp}/${after.maxHp}.`, tone: 'good' });
+        return;
+      }
+      const owner = getWorldWallet()?.toLowerCase();
+      const buildingId = beforeWorld.buildings[index]?.id;
+      if (owner && buildingId) {
+        const result = recordRepairEvent(owner, buildingId, Math.min(visible.maxHp - visible.hp, repairHealForInventory(beforeWorld)));
+        if (!result.ok) {
+          onToolFeedback({ text: result.reason ?? 'Repair failed.', tone: 'bad' });
+          return;
+        }
+        onDraftChange();
+        onToolFeedback({ text: `Repair event queued: +${result.event?.heal ?? 0} HP (-${REPAIR_WOOD_COST} wood). Save World to publish.`, tone: 'good' });
       }
       return;
     }
@@ -2388,14 +2426,23 @@ function Buildings({
         const localRaidDamage = world.raidEvents
           .filter((event) => event.defender === b.owner && event.buildingId === b.id && !publicEventIds.has(event.id))
           .reduce((sum, event) => sum + event.damage, 0);
-        const displayBuilding = localRaidDamage > 0
-          ? { ...b, hp: Math.max(0, (b.hp ?? b.maxHp ?? 1) - localRaidDamage), raidDamage: (b.raidDamage ?? 0) + localRaidDamage }
+        const publicRepairEventIds = new Set((b.repairEvents ?? []).map((event) => event.id));
+        const localRepairHealing = world.repairEvents
+          .filter((event) => event.owner === b.owner && event.buildingId === b.id && !publicRepairEventIds.has(event.id))
+          .reduce((sum, event) => sum + event.heal, 0);
+        const displayBuilding = localRaidDamage > 0 || localRepairHealing > 0
+          ? {
+            ...b,
+            hp: effectiveHp(b.hp ?? b.maxHp ?? 1, b.maxHp ?? b.hp ?? 1, localRaidDamage, localRepairHealing),
+            raidDamage: (b.raidDamage ?? 0) + localRaidDamage,
+            repairHealing: (b.repairHealing ?? 0) + localRepairHealing,
+          }
           : b;
         return (
           <group
             key={`public-${b.owner}-${b.id ?? i}`}
             onClick={(e) => {
-              if (tool !== 'raid') return;
+              if (tool !== 'raid' && tool !== 'repair') return;
               e.stopPropagation();
               handlePublicBuildingClick(displayBuilding, relation);
             }}
@@ -2411,8 +2458,26 @@ function Buildings({
             .filter((event) => event.defender === owner && event.buildingId === b.id)
             .reduce((sum, event) => sum + event.damage, 0)
           : 0;
-        const displayBuilding = incomingRaidDamage > 0
-          ? { ...b, hp: Math.max(0, (b.hp ?? b.maxHp ?? 1) - incomingRaidDamage) }
+        const publicRepairEventIds = new Set(
+          owner && b.id
+            ? publicWorld.repairEvents
+              .filter((event) => event.owner === owner && event.buildingId === b.id)
+              .map((event) => event.id)
+            : []
+        );
+        const incomingRepairHealing = owner && b.id
+          ? publicWorld.repairEvents
+            .filter((event) => event.owner === owner && event.buildingId === b.id)
+            .reduce((sum, event) => sum + event.heal, 0)
+          : 0;
+        const localRepairHealing = owner && b.id
+          ? world.repairEvents
+            .filter((event) => event.owner === owner && event.buildingId === b.id && !publicRepairEventIds.has(event.id))
+            .reduce((sum, event) => sum + event.heal, 0)
+          : 0;
+        const totalRepairHealing = incomingRepairHealing + localRepairHealing;
+        const displayBuilding = incomingRaidDamage > 0 || totalRepairHealing > 0
+          ? { ...b, hp: effectiveHp(b.hp ?? b.maxHp ?? 1, b.maxHp ?? b.hp ?? 1, incomingRaidDamage, totalRepairHealing) }
           : b;
         return (
           <group
@@ -2420,7 +2485,7 @@ function Buildings({
             onClick={(e) => {
               if (tool !== 'demolish' && tool !== 'repair' && tool !== 'damage') return;
               e.stopPropagation();
-              handleOwnBuildingClick(i);
+              handleOwnBuildingClick(i, displayBuilding);
             }}
           >
             <BuildingMesh b={displayBuilding} />
@@ -3385,6 +3450,20 @@ function PublicRelationsPanel({
 }) {
   const publicWorld = usePublicWorld();
   if (publicWorld.owners.length === 0) return null;
+  const maintenanceLog = [
+    ...publicWorld.raidEvents.map((event) => ({
+      id: event.id,
+      at: event.at,
+      text: `${shortWallet(event.attacker)} raided ${shortWallet(event.defender)} -${event.damage} HP`,
+      color: '#ffb3a8',
+    })),
+    ...publicWorld.repairEvents.map((event) => ({
+      id: event.id,
+      at: event.at,
+      text: `${shortWallet(event.repairer)} repaired ${shortWallet(event.owner)} +${event.heal} HP`,
+      color: '#aee5a6',
+    })),
+  ].sort((a, b) => b.at - a.at).slice(0, 5);
 
   const setRelation = (owner: string, relation: WalletRelation) => {
     if (setWalletRelation(owner, relation)) onRelationChange();
@@ -3431,6 +3510,18 @@ function PublicRelationsPanel({
           );
         })}
       </div>
+      {maintenanceLog.length > 0 && (
+        <div className="mt-3 border-t border-[#3b3220] pt-2">
+          <div className="mb-1 text-[11px] font-semibold text-[#d6b84a]">Maintenance log</div>
+          <div className="flex flex-col gap-1">
+            {maintenanceLog.map((event) => (
+              <div key={event.id} className="truncate text-[11px]" style={{ color: event.color }}>
+                {event.text}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

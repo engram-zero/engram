@@ -159,20 +159,23 @@ submit a revised version if you advance. Snapshot = `main` at the round deadline
       Hostile wallets can now be raided via outgoing `RaidEvent`s: the attacker spends stone,
       saves their world bundle to 0G, and the on-chain registry root makes the event discoverable.
       Defender bundles are not directly mutated.
-- [x] **Repair/durability MVP** — buildings have persisted HP, show damage visually with
-      WebGL HP bars, and repair costs wood; Aldric sells repair kits as a repair boost.
-      Wallet-loaded/public builds are clamped on hydrate so bad 0G data cannot cover the camera.
+- [x] **Repair/durability complete loop** — buildings have persisted HP, show damage visually with
+      WebGL HP bars, and repair costs wood; Aldric sells repair kits as a repair boost. Public
+      raids and repairs are event-sourced (`RaidEvent`/`RepairEvent`) in 0G bundles, discoverable
+      through the registry root, and shown in a maintenance log. Allied wallets can repair public
+      buildings without directly mutating the owner's bundle. Wallet-loaded/public builds are
+      clamped on hydrate so bad 0G data cannot cover the camera.
 
 **Still open (deferred):**
 1. Real-time multiplayer (biggest differentiator; new prompt #19, scoped) — **deferred to a
    later phase** by decision; coordinate with martelaxe when picked up.
 2. Further AV polish if wanted: avatar silhouettes (plain but recognisable).
-3. Repair/durability advanced rules (Prompt 18) — HP bars + wood repair are MVP; fair
-   offline damage logs/windows remain open.
+3. Repair/durability polish (Prompt 18) — core loop is implemented; future polish can add richer
+   building-specific history panels, defense upgrades, and demon schedule windows.
 4. 💡 **Mining = real 0G Compute work** (Prompt 20) — on-thesis future idea: gathering stone
    triggers a verifiable 0G compute job (proof-of-useful-work), not a placeholder.
 
 Full backlog (still open) in `docs/ENGRAM_PROMPTS.md`: raids/sabotage fairness from player
-relations (13: cooldowns/defense/weapon upgrades), more market goods/stock depth (14), fair demon sieges (15), gathering
-animation polish (16), editable terrain / bigger map (17), advanced repair/damage logs and
-fair offline maintenance rules (18), verified 0G-compute mining live test/funding (20).
+relations (13: defense/weapon upgrades), more market goods/stock depth (14), fair demon sieges (15), gathering
+animation polish (16), editable terrain / bigger map (17), repair/damage UI polish (18),
+verified 0G-compute mining live test/funding (20).

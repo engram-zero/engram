@@ -54,6 +54,25 @@ export interface RaidEvent {
   at: number;
 }
 
+export interface RepairEvent {
+  /** Stable event ID inside the repairer's world bundle. */
+  id: string;
+  /** Wallet that authored/spent resources for this event. */
+  repairer: string;
+  /** Wallet that owns the repaired building. */
+  owner: string;
+  /** Target `Building.id` in the owner's world bundle. */
+  buildingId: string;
+  /** HP restored to effective public-world health. */
+  heal: number;
+  /** Wood spent to publish this repair. */
+  woodCost: number;
+  /** Whether a repair kit boosted this repair. */
+  kitUsed: boolean;
+  /** Epoch ms when the repairer created the event. */
+  at: number;
+}
+
 export interface WorldState {
   inventory: Record<ResourceType, number>;
   /** Indices (into map.ts TREES) of trees the player has chopped. */
@@ -70,6 +89,8 @@ export interface WorldState {
   repairKits: number;
   /** Outgoing public-world raid/sabotage events authored by this wallet. */
   raidEvents: RaidEvent[];
+  /** Public-world maintenance events authored by this wallet. */
+  repairEvents: RepairEvent[];
   /**
    * Player-declared social graph for public-world wallets. Neutral can be
    * represented by absence; allied/hostile are persisted in the same 0G bundle
