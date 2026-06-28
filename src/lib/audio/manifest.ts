@@ -3,6 +3,7 @@ export type AudioCueId =
   | 'day_ambience'
   | 'campfire_crackle'
   | 'footstep_grass'
+  | 'footstep_water'
   | 'jump'
   | 'land'
   | 'axe_chop'
@@ -45,6 +46,11 @@ export const AUDIO_CUES: Record<AudioCueId, AudioCue> = {
     // playback. Add '-02'…'-04' here once those files are in public/audio/foley/.
     src: ['/audio/foley/footstep-grass-01.mp3'],
     volume: 0.34,
+  },
+  footstep_water: {
+    label: 'Footsteps splashing through the creek',
+    src: '/audio/foley/footstep-water.mp3',
+    volume: 0.36,
   },
   jump: {
     label: 'Jump takeoff',
@@ -105,6 +111,7 @@ export const AUDIO_ASSET_TODO = [
   '/audio/foley/footstep-grass-04.mp3',
   '/audio/foley/jump-takeoff.mp3',
   '/audio/foley/land-dirt.mp3',
+  '/audio/foley/footstep-water.mp3',
   '/audio/foley/axe-chop-hit.mp3',
   '/audio/foley/mine-hit.mp3',
   '/audio/sfx/attack-swing.mp3',

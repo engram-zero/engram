@@ -1078,3 +1078,14 @@ root; no mutar directamente el bundle de otra wallet.
 evento; `public-world` agrega raids+repairs desde bundles y calcula HP efectivo; la herramienta
 Repair ahora repara edificios propios con daño entrante y edificios públicos aliados; el panel de
 wallets muestra un maintenance log. `npx tsc --noEmit` limpio. **Commit:** _(este commit)_
+
+### 28 jun 2026 · Sonido de pasos en el agua + Prompt 21 (mapa por parcelas en 0G)
+**Pedido (humano):** Sonido al caminar por el agua; documentar la idea de "mapa que crece" pagando
+parcelas en 0G con renta tipo Monopoly.
+**Prompt sintetizado:** (1) Manifest: cue `footstep_water` (fallback silencioso, asset pendiente).
+En Scene3D, `isOverWater(x,z)` (medio-ancho del ribbon = `2.5+sin(x·0.17)·0.85`); `onFootstep`
+elige `footstep_water` vs `footstep_grass` por la posición del jugador. (2) Documenta Prompt 21 en
+`ENGRAM_PROMPTS.md`: parcelas de tierra propiedad del jugador en 0G, render data-driven (sin
+redeploy), renta/comisión; dueño martelaxe.
+**Qué se hizo:** cue + `isOverWater` + wiring en Scene3D; Prompt 21 (índice + sección). `npx tsc
+--noEmit` limpio. **Falta asset:** `public/audio/foley/footstep-water.mp3`. **Commit:** _(este commit)_

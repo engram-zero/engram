@@ -138,6 +138,13 @@ const TALK_RANGE = 3.2; // how close you must stand before "Press E" appears
 const CHOP_RANGE = 2.8; // how close to a tree before "Press F to chop"
 const MINE_RANGE = 2.8; // how close to a rock before "Hold F to mine"
 const ORE_LABEL: Record<'stone' | 'silver' | 'gold', string> = { stone: 'Stone', silver: 'Silver', gold: 'Gold' };
+
+// True when (x,z) sits over the creek's water ribbon (half-width matches the River
+// mesh in this file), so footsteps splash instead of crunching on grass.
+function isOverWater(x: number, z: number): boolean {
+  const halfW = 2.5 + Math.sin(x * 0.17) * 0.85;
+  return Math.abs(z - riverCenterZ(x)) < halfW;
+}
 const MARREN_PLAYER_AGGRO_RADIUS = 8.5; // Maren only pursues the player within this leash radius
 // Prompt 20: when a rock is exhausted, back the batch with a verifiable 0G
 // Compute inference (proof-of-useful-work). OFF unless the env flag is set AND
@@ -4393,7 +4400,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
               onNearbyTreeChange={setNearbyTree}
               onNearbyRockChange={setNearbyRock}
               onNearbyEnemyChange={setNearbyEnemy}
-              onFootstep={() => void play('footstep_grass')}
+              onFootstep={() => void play(isOverWater(posRef.current.x, posRef.current.z) ? 'footstep_water' : 'footstep_grass')}
               onJump={() => void play('jump')}
               onLand={() => void play('land')}
               memories={memories}
