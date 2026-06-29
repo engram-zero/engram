@@ -239,8 +239,22 @@ const HOUSE_WALL_THICKNESS = 0.16;
 const HOUSE_DOOR_WIDTH = 0.82;
 const HOUSE_DOOR_OFFSET_Z = HOUSE_DEPTH / 2 - HOUSE_WALL_THICKNESS / 2;
 const HOUSE_PORCH_DEPTH = 0.42;
-const HOUSE_ROOF_Y = 2.2;
+const HOUSE_ROOF_Y = 1.94;
+const HOUSE_RIDGE_Y = 2.38;
+const HOUSE_GABLE_HEIGHT = HOUSE_RIDGE_Y - HOUSE_WALL_HEIGHT;
+const HOUSE_CEILING_Y = HOUSE_WALL_HEIGHT - 0.04;
+const HOUSE_GABLE_X = HOUSE_WIDTH / 2 - HOUSE_WALL_THICKNESS * 0.18;
 const HOUSE_INTERIOR_CAMERA_BOOST = 0.18;
+const HOUSE_CHIMNEY_X = 0.72;
+const HOUSE_CHIMNEY_Z = -0.22;
+const HOUSE_GABLE_SHAPE = (() => {
+  const shape = new THREE.Shape();
+  shape.moveTo(-HOUSE_DEPTH / 2 - 0.05, 0);
+  shape.lineTo(0, HOUSE_GABLE_HEIGHT);
+  shape.lineTo(HOUSE_DEPTH / 2 + 0.05, 0);
+  shape.closePath();
+  return shape;
+})();
 
 type OrientedWallBox = { cx: number; cz: number; hx: number; hz: number };
 
@@ -1292,15 +1306,27 @@ function Cottage({ def, seed }: { def: CottageDef; seed: number }) {
         </mesh>
       ))}
       {/* gable roof — two slopes meeting at a ridge running along X */}
-      <mesh position={[0, 2.34, -0.78]} rotation={[-0.62, 0, 0]} castShadow>
+      <mesh position={[0, HOUSE_CEILING_Y, 0]} rotation={[Math.PI / 2, 0, 0]} receiveShadow>
+        <planeGeometry args={[HOUSE_WIDTH - 0.1, HOUSE_DEPTH - 0.08]} />
+        <meshStandardMaterial color="#35261a" flatShading side={THREE.DoubleSide} />
+      </mesh>
+      <mesh position={[HOUSE_GABLE_X, HOUSE_WALL_HEIGHT, 0]} rotation={[0, Math.PI / 2, 0]} castShadow receiveShadow>
+        <shapeGeometry args={[HOUSE_GABLE_SHAPE]} />
+        <meshStandardMaterial color={def.body} map={getTextureVariant('cottage_wood', seed)} flatShading side={THREE.DoubleSide} />
+      </mesh>
+      <mesh position={[-HOUSE_GABLE_X, HOUSE_WALL_HEIGHT, 0]} rotation={[0, -Math.PI / 2, 0]} castShadow receiveShadow>
+        <shapeGeometry args={[HOUSE_GABLE_SHAPE]} />
+        <meshStandardMaterial color={def.body} map={getTextureVariant('cottage_wood', seed)} flatShading side={THREE.DoubleSide} />
+      </mesh>
+      <mesh position={[0, HOUSE_ROOF_Y + 0.14, -0.78]} rotation={[-0.62, 0, 0]} castShadow>
         <boxGeometry args={[3.6, 0.16, 1.95]} />
         <meshStandardMaterial color={def.roof} map={getTextureVariant('cottage_roof', seed)} flatShading />
       </mesh>
-      <mesh position={[0, 2.34, 0.78]} rotation={[0.62, 0, 0]} castShadow>
+      <mesh position={[0, HOUSE_ROOF_Y + 0.14, 0.78]} rotation={[0.62, 0, 0]} castShadow>
         <boxGeometry args={[3.6, 0.16, 1.95]} />
         <meshStandardMaterial color={def.roof} map={getTextureVariant('cottage_roof', seed)} flatShading />
       </mesh>
-      <mesh position={[0, 2.86, 0]}>
+      <mesh position={[0, HOUSE_RIDGE_Y + 0.22, 0]}>
         <boxGeometry args={[3.64, 0.13, 0.13]} />
         <meshStandardMaterial color="#3a2a1a" flatShading />
       </mesh>
@@ -1331,11 +1357,15 @@ function Cottage({ def, seed }: { def: CottageDef; seed: number }) {
         </group>
       ))}
       {/* chimney + smoke */}
-      <mesh position={[1.0, 2.72, -0.34]} castShadow>
-        <boxGeometry args={[0.38, 1.26, 0.38]} />
+      <mesh position={[HOUSE_CHIMNEY_X, HOUSE_ROOF_Y - 0.02, HOUSE_CHIMNEY_Z]} castShadow receiveShadow>
+        <boxGeometry args={[0.56, 0.2, 0.56]} />
+        <meshStandardMaterial color="#65564d" map={getTextureVariant('stone', seed)} flatShading />
+      </mesh>
+      <mesh position={[HOUSE_CHIMNEY_X, HOUSE_RIDGE_Y - 0.02, HOUSE_CHIMNEY_Z]} castShadow>
+        <boxGeometry args={[0.38, 1.5, 0.38]} />
         <meshStandardMaterial color="#5a4a40" map={getTextureVariant('stone', seed)} flatShading />
       </mesh>
-      <ChimneySmoke origin={[1.0, 3.45, -0.34]} />
+      <ChimneySmoke origin={[HOUSE_CHIMNEY_X, HOUSE_RIDGE_Y + 0.79, HOUSE_CHIMNEY_Z]} />
     </group>
   );
 }
@@ -2532,6 +2562,18 @@ function BuildingMesh({ b }: { b: Building }) {
           <boxGeometry args={[HOUSE_DOOR_WIDTH, 0.18, 0.08]} />
           <meshStandardMaterial color="#55341f" flatShading transparent opacity={0.92} />
         </mesh>
+        <mesh position={[0, HOUSE_CEILING_Y, 0]} rotation={[Math.PI / 2, 0, 0]} receiveShadow>
+          <planeGeometry args={[HOUSE_WIDTH - 0.1, HOUSE_DEPTH - 0.08]} />
+          <meshStandardMaterial color="#35261a" flatShading side={THREE.DoubleSide} />
+        </mesh>
+        <mesh position={[HOUSE_GABLE_X, HOUSE_WALL_HEIGHT, 0]} rotation={[0, Math.PI / 2, 0]} castShadow receiveShadow>
+          <shapeGeometry args={[HOUSE_GABLE_SHAPE]} />
+          <meshStandardMaterial color={woodColor} map={getTextureVariant('cottage_wood', Math.round(b.x))} flatShading side={THREE.DoubleSide} />
+        </mesh>
+        <mesh position={[-HOUSE_GABLE_X, HOUSE_WALL_HEIGHT, 0]} rotation={[0, -Math.PI / 2, 0]} castShadow receiveShadow>
+          <shapeGeometry args={[HOUSE_GABLE_SHAPE]} />
+          <meshStandardMaterial color={woodColor} map={getTextureVariant('cottage_wood', Math.round(b.x))} flatShading side={THREE.DoubleSide} />
+        </mesh>
         <mesh position={[0, HOUSE_ROOF_Y, -0.66]} rotation={[-0.62, 0, 0]} castShadow>
           <boxGeometry args={[2.8, 0.14, 1.6]} />
           <meshStandardMaterial color={roofColor} map={getTextureVariant('cottage_roof', Math.round(b.z))} flatShading />
@@ -2539,6 +2581,10 @@ function BuildingMesh({ b }: { b: Building }) {
         <mesh position={[0, HOUSE_ROOF_Y, 0.66]} rotation={[0.62, 0, 0]} castShadow>
           <boxGeometry args={[2.8, 0.14, 1.6]} />
           <meshStandardMaterial color={roofColor} map={getTextureVariant('cottage_roof', Math.round(b.z))} flatShading />
+        </mesh>
+        <mesh position={[0, HOUSE_RIDGE_Y, 0]} castShadow>
+          <boxGeometry args={[2.84, 0.11, 0.11]} />
+          <meshStandardMaterial color="#3a2a1a" flatShading />
         </mesh>
       </group>
       {damaged && <DamageMarker b={b} ratio={damageRatio} />}

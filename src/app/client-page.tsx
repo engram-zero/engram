@@ -529,7 +529,9 @@ function Game() {
             </button>
           </div>
           <p className="text-sm text-[#f4e8d0]/70 max-w-md px-6">
-            Your wallet is your name. Three souls keep their own memory of you — stored on 0G, where no one can make them forget.
+            Your wallet is your name. Three souls keep their own memory{' '}
+            <span className="whitespace-nowrap">of you</span> — stored on 0G, where no
+            one can make them forget.
           </p>
         </div>
       </div>

@@ -1,89 +1,119 @@
 import React, { useState } from 'react';
 import { useNetwork } from '@/app/providers';
 
+const NETWORK_OPTIONS = [
+  { id: 'standard', icon: '🐢', label: 'Standard' },
+  { id: 'turbo', icon: '🐇', label: 'Turbo' },
+] as const;
+
 export default function NetworkToggle() {
   const { networkType, setNetworkType } = useNetwork();
   const [showTooltip, setShowTooltip] = useState(false);
 
-  const toggleNetwork = () => {
-    setNetworkType(prev => prev === 'standard' ? 'turbo' : 'standard');
-  };
-
   return (
-    <div className="relative inline-flex items-center">
-      <button
-        onClick={toggleNetwork}
-        className="relative inline-flex items-center w-[240px] h-[48px] rounded-full 
-                  shadow-sm hover:shadow focus:outline-none focus:ring-2 focus:ring-blue-300 
-                  transition-all duration-300"
-        style={{ 
-          backgroundColor: networkType === 'standard' ? '#FFDCD4' : '#CAF0FC',
+    <div className="relative inline-flex items-center gap-1.5">
+      <div
+        className="inline-flex items-center gap-1 rounded-full border p-1"
+        style={{
+          background: 'rgba(14,11,8,0.82)',
+          borderColor: 'rgba(122,86,42,0.88)',
+          boxShadow: '0 8px 18px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,229,179,0.08)',
         }}
-        aria-pressed={networkType === 'turbo'}
-        aria-labelledby="network-toggle"
       >
-        {/* Sliding indicator */}
-        <span 
-          className="absolute top-2 bottom-2 bg-white rounded-full shadow-sm transition-all duration-300"
-          style={{ 
-            left: networkType === 'standard' ? '4px' : '124px',
-            width: '112px',
-          }}
-        />
-        
-        {/* Standard Network Option */}
-        <div className={`flex items-center justify-center w-1/2 z-10 transition-colors duration-300 ${
-          networkType === 'standard' ? 'text-gray-800' : 'text-gray-500'
-        }`}>
-          <span className="text-lg mr-3" role="img" aria-label="tortoise">🐢</span>
-          <span className="text-sm font-medium">Standard</span>
-        </div>
-        
-        {/* Turbo Network Option */}
-        <div className={`flex items-center justify-center w-1/2 z-10 transition-colors duration-300 ${
-          networkType === 'turbo' ? 'text-gray-800' : 'text-gray-500'
-        }`}>
-          <span className="text-sm font-medium">Turbo</span>
-          <span className="text-lg ml-3" role="img" aria-label="rabbit">🐇</span>
-        </div>
-      </button>
+        {NETWORK_OPTIONS.map((option) => {
+          const active = networkType === option.id;
+          return (
+            <button
+              key={option.id}
+              onClick={() => setNetworkType(option.id)}
+              className="rounded-full px-3 py-1.5 transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-[#d6b84a]/70"
+              style={{
+                minWidth: option.id === 'standard' ? 96 : 82,
+                background: active ? '#f3e6c9' : 'transparent',
+                color: active ? '#2f261d' : '#d7c29b',
+                boxShadow: active ? '0 1px 6px rgba(0,0,0,0.2)' : 'none',
+              }}
+              aria-pressed={active}
+              aria-label={`${option.label} network`}
+            >
+              <span className="flex items-center justify-center gap-1.5">
+                {option.id === 'standard' && <span className="text-[0.9rem] leading-none">{option.icon}</span>}
+                <span
+                  className="leading-none"
+                  style={{
+                    fontFamily: 'Georgia, Cambria, "Times New Roman", Times, serif',
+                    fontSize: '0.82rem',
+                    fontWeight: 700,
+                  }}
+                >
+                  {option.label}
+                </span>
+                {option.id === 'turbo' && <span className="text-[0.9rem] leading-none">{option.icon}</span>}
+              </span>
+            </button>
+          );
+        })}
+      </div>
 
-      {/* Info icon with tooltip */}
-      <div 
-        className="ml-2 relative"
+      <div
+        className="relative"
         onMouseEnter={() => setShowTooltip(true)}
         onMouseLeave={() => setShowTooltip(false)}
         onFocus={() => setShowTooltip(true)}
         onBlur={() => setShowTooltip(false)}
       >
         <button
-          className="flex items-center justify-center w-6 h-6 text-gray-500 hover:text-gray-700 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
+          className="flex h-6 w-6 items-center justify-center rounded-full border transition-colors"
+          style={{
+            color: '#eadfcf',
+            background: 'rgba(20,16,10,0.78)',
+            borderColor: 'rgba(120,82,40,0.65)',
+          }}
           aria-label="Network mode information"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            strokeWidth={1.5}
+            stroke="currentColor"
+            className="h-3.5 w-3.5"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z"
+            />
           </svg>
         </button>
-        
-        {/* Tooltip */}
+
         {showTooltip && (
-          <div className="absolute z-20 right-0 translate-y-2 w-60 p-3 bg-white shadow-lg rounded-lg border border-gray-100 text-sm animate-fade-in">
-            <div className="absolute -top-2 right-2 w-4 h-4 bg-white border-t border-l border-gray-100 transform rotate-45"></div>
-            <div className="relative z-10">
-              <div className="mb-2 pb-2 border-b border-gray-100">
-                <div className="flex items-center mb-1">
-                  <span className="text-base mr-2" role="img" aria-label="tortoise">🐢</span>
-                  <span className="font-semibold text-gray-800">Standard</span>
-                </div>
-                <p className="text-gray-600 text-xs">Low cost, normal speed processing. Best for most uploads where time isn&apos;t critical.</p>
-              </div>
-              
+          <div
+            className="absolute right-0 z-20 mt-2 w-60 rounded-2xl border p-3 text-sm shadow-[0_20px_60px_rgba(0,0,0,0.4)]"
+            style={{
+              background: 'rgba(19,15,10,0.97)',
+              borderColor: 'rgba(120,82,40,0.65)',
+              color: '#eadfcf',
+            }}
+          >
+            <div className="space-y-2">
               <div>
-                <div className="flex items-center mb-1">
-                  <span className="text-base mr-2" role="img" aria-label="rabbit">🐇</span>
-                  <span className="font-semibold text-gray-800">Turbo</span>
+                <div className="flex items-center gap-2 font-semibold text-[#f3e6c9]">
+                  <span role="img" aria-label="tortoise">🐢</span>
+                  <span>Standard</span>
                 </div>
-                <p className="text-gray-600 text-xs">High speed but higher cost. Ideal for time-sensitive uploads that need priority processing.</p>
+                <p className="mt-1 text-xs leading-relaxed text-[#c9b792]">
+                  Older route. Slower and mostly here for comparison.
+                </p>
+              </div>
+              <div className="border-t border-[#5a4a28] pt-2">
+                <div className="flex items-center gap-2 font-semibold text-[#f3e6c9]">
+                  <span role="img" aria-label="rabbit">🐇</span>
+                  <span>Turbo</span>
+                </div>
+                <p className="mt-1 text-xs leading-relaxed text-[#c9b792]">
+                  Faster route. This is the network the game currently favors.
+                </p>
               </div>
             </div>
           </div>
@@ -91,4 +121,4 @@ export default function NetworkToggle() {
       </div>
     </div>
   );
-} 
+}
