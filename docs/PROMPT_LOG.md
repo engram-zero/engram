@@ -1212,3 +1212,17 @@ como opt-out) y se le añade un `<Sky>` con sol bajo fijo + luz direccional alin
 como local pero con sol. (5) Subir color/tamaño de `MineDebris`/`WoodChips` para que las chispas
 se lean en cualquier luz. (6) Sección Prompt 22 en `ENGRAM_PROMPTS.md`. `npx tsc --noEmit` limpio.
 **Commit:** _(este commit)_
+
+### 28 jun 2026 · Prompt 22 — frontera expandible casilla a casilla
+**Pedido (humano):** Continuar la tarea de Prompt 22: que el mapa crezca por parcelas adyacentes,
+no por un radio fijo.
+**Prompt sintetizado:** Implementar Fase 1-4 como hito seguro: modelo puro de frontera
+(`parcelIsClaimable`, `frontierClaimableCells`, `worldExtentForClaims`, `cellLabel`), claims solo
+adyacentes a la frontera base o a parcelas existentes, movimiento/building dentro de
+`WORLD_RADIUS ∪ claimedCells`, tiles de suelo data-driven para claims fuera del mapa base, props y
+colliders por terreno, y fantasmas azules de las casillas reclamables en modo Claim. Dejar
+`/api/parcel-save` + `ParcelRegistry.updateData(dataRoot)` como siguiente fase.
+**Qué se hizo:** `world.ts` reemplaza el tope radial de claim por adyacencia; `Scene3D` permite
+caminar/construir en celdas reclamadas públicas/propias, renderiza tiles exteriores con recursos y
+colliders, muestra etiquetas de celda y fantasmas clickables; `public-world` expone snapshot para
+colisión; docs/status actualizados. `npx tsc --noEmit` limpio. **Commit:** _(este commit)_

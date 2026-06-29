@@ -52,6 +52,9 @@ import {
   repairHealForInventory,
   commitParcelClaim,
   previewParcelClaimAt,
+  cellLabel,
+  frontierClaimableCells,
+  parcelGridCenter,
   parcelIdAt,
   recordParcelRentEvent,
   collectParcelRentIncome,
@@ -66,6 +69,9 @@ import {
   PARCEL_BUILD_RENT_COIN,
   PARCEL_GATHER_RENT_COIN,
   PARCEL_COMMISSION_BPS,
+  PARCEL_BASE_WORLD_RADIUS,
+  PARCEL_HARD_WORLD_RADIUS,
+  PARCEL_SIZE,
   isLocalhostFreeBuildWallet,
   type WalletRelation,
   type WorldState,
@@ -74,7 +80,7 @@ import {
 } from '@/lib/world';
 import { useEngramAudio } from '@/context/AudioContext';
 import type { AudioCueId } from '@/lib/audio/manifest';
-import { usePublicWorld } from '@/lib/public-world';
+import { getPublicWorldSnapshot, usePublicWorld } from '@/lib/public-world';
 import { claimParcelOnchain, getParcelRegistryAddress } from '@/lib/registry/parcels';
 
 // A tree carries its global index (into TREES) so chopping can target it.
@@ -372,17 +378,61 @@ function blocksOverlap(a: Building, b: Building) {
   );
 }
 
+function allClaimedParcels(): { id: string; x: number; z: number; size: number; owner: string; terrain: 'meadow' | 'grove' | 'quarry' }[] {
+  const wallet = getWorldWallet()?.toLowerCase();
+  const own = getWorld().parcelClaims;
+  const publicClaims = getPublicWorldSnapshot().parcels.filter((claim) => claim.owner !== wallet);
+  const seen = new Set<string>();
+  return [...own, ...publicClaims].filter((claim) => {
+    if (seen.has(claim.id)) return false;
+    seen.add(claim.id);
+    return true;
+  });
+}
+
+function pointInsideParcel(x: number, z: number, claim: { x: number; z: number; size: number }): boolean {
+  const half = claim.size / 2;
+  return x >= claim.x - half && x <= claim.x + half && z >= claim.z - half && z <= claim.z + half;
+}
+
+function parcelResourceNodes(claim: { id: string; x: number; z: number; terrain: 'meadow' | 'grove' | 'quarry' }) {
+  const seed = claim.id.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  const count = claim.terrain === 'quarry' ? 4 : claim.terrain === 'grove' ? 6 : 5;
+  return Array.from({ length: count }, (_, i) => {
+    const a = seed * 0.13 + i * 2.399;
+    const r = 2.4 + ((seed + i * 17) % 32) / 8;
+    const x = claim.x + Math.cos(a) * r;
+    const z = claim.z + Math.sin(a) * r;
+    return {
+      x,
+      z,
+      localX: x - claim.x,
+      localZ: z - claim.z,
+      localY: getHeightAt(x, z) - getHeightAt(claim.x, claim.z),
+      r: claim.terrain === 'meadow' ? 0.28 : claim.terrain === 'grove' ? 0.46 : 0.52,
+    };
+  });
+}
+
+function isFrontierWalkable(x: number, z: number): boolean {
+  if (Math.hypot(x, z) <= WORLD_RADIUS) return true;
+  return allClaimedParcels().some((claim) => pointInsideParcel(x, z, claim));
+}
+
+function clampToBaseWorld(x: number, z: number): [number, number] {
+  const d = Math.hypot(x, z);
+  if (d <= WORLD_RADIUS || d <= 1e-4) return [x, z];
+  return [(x / d) * WORLD_RADIUS, (z / d) * WORLD_RADIUS];
+}
+
 // Slide the player out of the boundary and any prop/NPC they overlap.
 function resolveCollision(x: number, z: number): [number, number] {
-  const d = Math.hypot(x, z);
-  if (d > WORLD_RADIUS) {
-    x = (x / d) * WORLD_RADIUS;
-    z = (z / d) * WORLD_RADIUS;
-  }
+  if (!isFrontierWalkable(x, z)) [x, z] = clampToBaseWorld(x, z);
   const obstacles = [
     { x: CAMPFIRE.x, z: CAMPFIRE.z, r: 1.0 },
     ...TREES.map((t, i) => ({ t, i })).filter(({ i }) => !isChopped(i)).map(({ t }) => ({ x: t.x, z: t.z, r: 0.45 * t.scale })),
     ...ROCKS.map((r, i) => ({ r, i })).filter(({ i }) => !isMined(i)).map(({ r }) => ({ x: r.x, z: r.z, r: 0.6 * r.scale })),
+    ...allClaimedParcels().flatMap((claim) => parcelResourceNodes(claim).map((node) => ({ x: node.x, z: node.z, r: node.r }))),
     ...(Object.values(dynamicNpcState)).map((state) => ({ x: state.x, z: state.z, r: 0.6 })),
     ...(Object.values(dynamicEnemyState)).filter((s) => !s.dead).map((s) => ({ x: s.x, z: s.z, r: 0.5 })),
   ];
@@ -2516,7 +2566,15 @@ function PublicBuildingMesh({ b, relation }: { b: Building; relation: WalletRela
   );
 }
 
-function ParcelOverlays() {
+function ParcelOverlays({
+  claimMode = false,
+  onDraftChange = () => {},
+  onToolFeedback = () => {},
+}: {
+  claimMode?: boolean;
+  onDraftChange?: () => void;
+  onToolFeedback?: (feedback: ToolFeedback) => void;
+}) {
   const world = useWorld();
   const publicWorld = usePublicWorld();
   const current = getWorldWallet()?.toLowerCase();
@@ -2531,9 +2589,38 @@ function ParcelOverlays() {
     seen.add(key);
     return true;
   });
+  const occupied = unique.map((claim) => claim.id);
+  const ghosts = claimMode ? frontierClaimableCells(occupied).slice(0, 96) : [];
 
   return (
     <group>
+      {ghosts.map(({ gx, gz }) => {
+        const { x, z } = parcelGridCenter(gx, gz);
+        const y = getHeightAt(x, z) + 0.07;
+        const label = cellLabel(gx, gz);
+        return (
+          <group
+            key={`frontier-ghost-${gx}-${gz}`}
+            position={[x, y, z]}
+            onClick={(e) => {
+              e.stopPropagation();
+              void claimParcelFlow(x, z, occupied, onDraftChange, onToolFeedback);
+            }}
+          >
+            <mesh rotation={[-Math.PI / 2, 0, 0]}>
+              <planeGeometry args={[PARCEL_SIZE - 0.4, PARCEL_SIZE - 0.4]} />
+              <meshBasicMaterial color="#70d6ff" transparent opacity={0.18} depthWrite={false} />
+            </mesh>
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.014, 0]}>
+              <ringGeometry args={[PARCEL_SIZE * 0.5 - 0.14, PARCEL_SIZE * 0.5, 4]} />
+              <meshBasicMaterial color="#70d6ff" transparent opacity={0.72} depthWrite={false} />
+            </mesh>
+            <Html position={[0, 1.0, 0]} center distanceFactor={16} pointerEvents="none">
+              <span className="rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-bold text-[#9fd0e6]">{label}</span>
+            </Html>
+          </group>
+        );
+      })}
       {unique.map((claim) => {
         const own = claim.owner === current;
         const color =
@@ -2544,6 +2631,7 @@ function ParcelOverlays() {
         const y = getHeightAt(claim.x, claim.z) + 0.045;
         return (
           <group key={`parcel-${claim.owner}-${claim.id}`} position={[claim.x, y, claim.z]}>
+            {Math.hypot(claim.x, claim.z) > PARCEL_BASE_WORLD_RADIUS && <ParcelGroundTile claim={claim} color={color} />}
             <mesh rotation={[-Math.PI / 2, 0, 0]}>
               <planeGeometry args={[claim.size, claim.size]} />
               <meshBasicMaterial color={color} transparent opacity={own ? 0.13 : 0.09} depthWrite={false} />
@@ -2552,6 +2640,9 @@ function ParcelOverlays() {
               <ringGeometry args={[claim.size * 0.5 - 0.08, claim.size * 0.5, 4]} />
               <meshBasicMaterial color={color} transparent opacity={own ? 0.72 : 0.45} depthWrite={false} />
             </mesh>
+            <Html position={[0, 1.15, 0]} center distanceFactor={18} pointerEvents="none">
+              <span className="rounded bg-black/65 px-1.5 py-0.5 text-[10px] font-bold text-[#f4e8d0]">{cellLabel(claim.gx, claim.gz)}</span>
+            </Html>
             <ParcelResourceCluster claim={claim} />
           </group>
         );
@@ -2560,22 +2651,36 @@ function ParcelOverlays() {
   );
 }
 
+function ParcelGroundTile({ claim, color }: { claim: { x: number; z: number; size: number }; color: string }) {
+  const geom = useMemo(() => {
+    const seg = 14;
+    const g = new THREE.PlaneGeometry(claim.size, claim.size, seg, seg);
+    g.rotateX(-Math.PI / 2);
+    const pos = g.attributes.position as THREE.BufferAttribute;
+    for (let i = 0; i < pos.count; i++) {
+      const wx = claim.x + pos.getX(i);
+      const wz = claim.z + pos.getZ(i);
+      pos.setY(i, getHeightAt(wx, wz) - getHeightAt(claim.x, claim.z) + 0.02);
+    }
+    g.computeVertexNormals();
+    return g;
+  }, [claim.size, claim.x, claim.z]);
+  return (
+    <mesh geometry={geom} receiveShadow>
+      <meshStandardMaterial color={color} map={getTextureVariant('terrain_grass', Math.round(claim.x + claim.z), { repeat: 4 })} roughness={1} />
+    </mesh>
+  );
+}
+
 function ParcelResourceCluster({ claim }: { claim: { id: string; x: number; z: number; terrain: 'meadow' | 'grove' | 'quarry' } }) {
   const seed = claim.id.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
-  const count = claim.terrain === 'quarry' ? 4 : claim.terrain === 'grove' ? 6 : 5;
-  const nodes = Array.from({ length: count }, (_, i) => {
-    const a = seed * 0.13 + i * 2.399;
-    const r = 2.4 + ((seed + i * 17) % 32) / 8;
-    const x = Math.cos(a) * r;
-    const z = Math.sin(a) * r;
-    return { x, z, y: getHeightAt(claim.x + x, claim.z + z) - getHeightAt(claim.x, claim.z) };
-  });
+  const nodes = parcelResourceNodes(claim);
 
   if (claim.terrain === 'quarry') {
     return (
       <group>
         {nodes.map((node, i) => (
-          <mesh key={i} position={[node.x, node.y + 0.22, node.z]} rotation={[0.2, seed + i, -0.15]} castShadow receiveShadow>
+          <mesh key={i} position={[node.localX, node.localY + 0.22, node.localZ]} rotation={[0.2, seed + i, -0.15]} castShadow receiveShadow>
             <dodecahedronGeometry args={[0.42 + (i % 2) * 0.12, 0]} />
             <meshStandardMaterial color={i % 3 === 0 ? '#c9b26b' : '#9aa4ad'} map={getTextureVariant('stone', seed + i)} flatShading />
           </mesh>
@@ -2588,7 +2693,7 @@ function ParcelResourceCluster({ claim }: { claim: { id: string; x: number; z: n
     return (
       <group>
         {nodes.map((node, i) => (
-          <group key={i} position={[node.x, node.y, node.z]} rotation={[0, seed + i, 0]}>
+          <group key={i} position={[node.localX, node.localY, node.localZ]} rotation={[0, seed + i, 0]}>
             <mesh position={[0, 0.5, 0]} castShadow>
               <cylinderGeometry args={[0.09, 0.14, 1.0, 5]} />
               <meshStandardMaterial color="#5a3423" map={getTextureVariant('bark', seed + i)} flatShading />
@@ -2606,7 +2711,7 @@ function ParcelResourceCluster({ claim }: { claim: { id: string; x: number; z: n
   return (
     <group>
       {nodes.map((node, i) => (
-        <mesh key={i} position={[node.x, node.y + 0.16, node.z]} castShadow>
+        <mesh key={i} position={[node.localX, node.localY + 0.16, node.localZ]} castShadow>
           <coneGeometry args={[0.22, 0.34, 5]} />
           <meshStandardMaterial color={i % 2 === 0 ? '#557a3a' : '#6f8d45'} flatShading />
         </mesh>
@@ -2649,7 +2754,7 @@ async function claimParcelFlow(
     }
     onDraftChange();
     const txText = tx?.txHash ? ` · ${tx.txHash.slice(0, 10)}…` : getParcelRegistryAddress() ? '' : ' · bundle-only';
-    onToolFeedback({ text: `Parcel claimed for ${preview.claim.claimCost} coin${txText}. Save World to publish.`, tone: 'good' });
+    onToolFeedback({ text: `${cellLabel(preview.claim.gx, preview.claim.gz)} claimed for ${preview.claim.claimCost} coin${txText}. Save World to publish.`, tone: 'good' });
   } catch (error) {
     onToolFeedback({ text: error instanceof Error ? error.message : 'On-chain parcel claim failed.', tone: 'bad' });
   }
@@ -2854,7 +2959,7 @@ function canPlaceBuilding(type: BuildingType, x: number, z: number, candidate?: 
   const w = getWorld();
   const d = Math.hypot(x, z);
   if (d < NO_BUILD_RADIUS) return false; // protected village core
-  if (d > WORLD_RADIUS) return false;
+  if (!isFrontierWalkable(x, z)) return false;
   if (!isLocalhostFreeBuildWallet() && w.inventory.wood < buildCostAt(type, x, z)) return false;
   if (type === 'block') {
     const block = normalizeBlockBuilding({ ...candidate, x, z });
@@ -2864,6 +2969,7 @@ function canPlaceBuilding(type: BuildingType, x: number, z: number, candidate?: 
       { x: CAMPFIRE.x, z: CAMPFIRE.z, r: 1.0 },
       ...TREES.map((t, i) => ({ t, i })).filter(({ i }) => !isChopped(i)).map(({ t }) => ({ x: t.x, z: t.z, r: 0.45 * t.scale })),
       ...ROCKS.map((r, i) => ({ r, i })).filter(({ i }) => !isMined(i)).map(({ r }) => ({ x: r.x, z: r.z, r: 0.6 * r.scale })),
+      ...allClaimedParcels().flatMap((claim) => parcelResourceNodes(claim).map((node) => ({ x: node.x, z: node.z, r: node.r }))),
       ...(Object.values(NPC_POS) as [number, number, number][]).map((p) => ({ x: p[0], z: p[2], r: 0.9 })),
     ];
     for (const c of staticObstacles) {
@@ -2881,6 +2987,7 @@ function canPlaceBuilding(type: BuildingType, x: number, z: number, candidate?: 
     { x: CAMPFIRE.x, z: CAMPFIRE.z, r: 1.0 },
     ...TREES.map((t, i) => ({ t, i })).filter(({ i }) => !isChopped(i)).map(({ t }) => ({ x: t.x, z: t.z, r: 0.45 * t.scale })),
     ...ROCKS.map((r, i) => ({ r, i })).filter(({ i }) => !isMined(i)).map(({ r }) => ({ x: r.x, z: r.z, r: 0.6 * r.scale })),
+    ...allClaimedParcels().flatMap((claim) => parcelResourceNodes(claim).map((node) => ({ x: node.x, z: node.z, r: node.r }))),
     ...w.buildings.filter((b) => b.type !== 'block').map((b) => ({ x: b.x, z: b.z, r: BUILD_RADIUS[b.type] })),
     ...extraBuildings.filter((b) => b.type !== 'block').map((b) => ({ x: b.x, z: b.z, r: BUILD_RADIUS[b.type] })),
     ...(Object.values(NPC_POS) as [number, number, number][]).map((p) => ({ x: p[0], z: p[2], r: 0.9 })),
@@ -3041,7 +3148,7 @@ function BuildController({
           place(e.point.x, e.point.z);
         }}
       >
-        <planeGeometry args={[GROUND_RADIUS * 2, GROUND_RADIUS * 2]} />
+        <planeGeometry args={[PARCEL_HARD_WORLD_RADIUS * 2, PARCEL_HARD_WORLD_RADIUS * 2]} />
         <meshBasicMaterial visible={false} />
       </mesh>
       {isBuild && ghost && (
@@ -4857,7 +4964,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
                     setAvatarSelected(false);
                   }}
                 >
-                  <planeGeometry args={[GROUND_RADIUS * 2, GROUND_RADIUS * 2]} />
+                  <planeGeometry args={[PARCEL_HARD_WORLD_RADIUS * 2, PARCEL_HARD_WORLD_RADIUS * 2]} />
                   <meshBasicMaterial transparent opacity={0} depthWrite={false} />
                 </mesh>
               )}
@@ -4870,7 +4977,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
           {explorable && active && view === 'fp' && <TalkFraming active={active} />}
 
           <Village torchesLit={dn.torchesLit} />
-          {explorable && <ParcelOverlays />}
+          {explorable && <ParcelOverlays claimMode={buildMode === 'claim'} onDraftChange={markBuildDraftDirty} onToolFeedback={showToolFeedback} />}
           <River />
           <Fireflies active={dn.torchesLit} />
           {explorable && <Buildings tool={buildMode} onDraftChange={markBuildDraftDirty} onToolFeedback={showToolFeedback} />}
@@ -5067,7 +5174,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
                         : buildMode === 'raid'
                           ? `Tap a hostile public building to raid · costs ${RAID_STONE_COST} stone`
                         : buildMode === 'claim'
-                          ? 'Tap land outside the village core to claim a parcel'
+                          ? 'Tap a blue frontier square to extend the map by one cell'
                         : buildMode === 'damage'
                           ? 'Localhost only · tap your building to damage it'
                         : 'Tap ground to place · tap tool to cancel'}
@@ -5512,7 +5619,7 @@ Left-click to look around · right-click to act · WASD to walk · V for aerial
                   : buildMode === 'raid'
                     ? `Tap a hostile public building · costs ${RAID_STONE_COST} stone`
                   : buildMode === 'claim'
-                    ? 'Drive to the parcel center · tap Claim land'
+                    ? 'Tap a blue frontier square · one cell at a time'
                   : buildMode === 'damage'
                     ? 'Localhost test · move next to a building · tap Damage'
                     : 'Drive to aim the ghost · tap Place'}

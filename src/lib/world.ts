@@ -98,7 +98,8 @@ export const PARCEL_MIN_RADIUS = 26;
 export const PARCEL_BUILD_RENT_COIN = 2;
 export const PARCEL_GATHER_RENT_COIN = 1;
 export const PARCEL_COMMISSION_BPS = 1200;
-const WORLD_LIMIT_FOR_PARCELS = 126;
+export const PARCEL_BASE_WORLD_RADIUS = 132;
+export const PARCEL_HARD_WORLD_RADIUS = 260;
 
 // ── Dynamic wood pricing (Phase 2) ────────────────────────────────────────────
 // A relative market: wood's coin value rises with scarcity (fewer trees left on
@@ -297,6 +298,115 @@ export function parcelIdAt(x: number, z: number): string {
   return parcelIdFromGrid(gx, gz);
 }
 
+export function parcelGridCenter(gx: number, gz: number): { x: number; z: number } {
+  return { x: gx * PARCEL_SIZE, z: gz * PARCEL_SIZE };
+}
+
+function parseParcelId(id: string): { gx: number; gz: number } | null {
+  const match = id.match(/^p:([-0-9]+):([-0-9]+)$/);
+  if (!match) return null;
+  const gx = Number(match[1]);
+  const gz = Number(match[2]);
+  return Number.isInteger(gx) && Number.isInteger(gz) ? { gx, gz } : null;
+}
+
+export function parcelCellIntersectsBase(gx: number, gz: number): boolean {
+  const { x, z } = parcelGridCenter(gx, gz);
+  const half = PARCEL_SIZE / 2;
+  const nearestX = Math.max(x - half, Math.min(0, x + half));
+  const nearestZ = Math.max(z - half, Math.min(0, z + half));
+  return Math.hypot(nearestX, nearestZ) <= PARCEL_BASE_WORLD_RADIUS;
+}
+
+function parcelWithinHardLimit(gx: number, gz: number): boolean {
+  const { x, z } = parcelGridCenter(gx, gz);
+  return Math.hypot(x, z) <= PARCEL_HARD_WORLD_RADIUS;
+}
+
+function normalizedClaimedIds(claimedIds: Iterable<string>): Set<string> {
+  const out = new Set<string>();
+  for (const id of claimedIds) {
+    const parsed = parseParcelId(id);
+    if (parsed) out.add(parcelIdFromGrid(parsed.gx, parsed.gz));
+  }
+  return out;
+}
+
+export function parcelIsClaimable(gx: number, gz: number, claimedIds: Iterable<string> = []): boolean {
+  const id = parcelIdFromGrid(gx, gz);
+  const claimed = normalizedClaimedIds(claimedIds);
+  if (claimed.has(id)) return false;
+  if (parcelCellIntersectsBase(gx, gz)) return false;
+  if (!parcelWithinHardLimit(gx, gz)) return false;
+
+  const neighbors = [
+    [gx + 1, gz],
+    [gx - 1, gz],
+    [gx, gz + 1],
+    [gx, gz - 1],
+  ] as const;
+  return neighbors.some(([nx, nz]) => parcelCellIntersectsBase(nx, nz) || claimed.has(parcelIdFromGrid(nx, nz)));
+}
+
+export function frontierClaimableCells(claimedIds: Iterable<string> = []): { gx: number; gz: number }[] {
+  const claimed = normalizedClaimedIds(claimedIds);
+  const candidates = new Set<string>();
+  const maxGrid = Math.ceil(PARCEL_HARD_WORLD_RADIUS / PARCEL_SIZE);
+
+  for (let gx = -maxGrid; gx <= maxGrid; gx++) {
+    for (let gz = -maxGrid; gz <= maxGrid; gz++) {
+      if (!parcelCellIntersectsBase(gx, gz)) continue;
+      for (const [nx, nz] of [[gx + 1, gz], [gx - 1, gz], [gx, gz + 1], [gx, gz - 1]] as const) {
+        const id = parcelIdFromGrid(nx, nz);
+        if (!claimed.has(id)) candidates.add(id);
+      }
+    }
+  }
+
+  for (const id of claimed) {
+    const parsed = parseParcelId(id);
+    if (!parsed) continue;
+    for (const [nx, nz] of [[parsed.gx + 1, parsed.gz], [parsed.gx - 1, parsed.gz], [parsed.gx, parsed.gz + 1], [parsed.gx, parsed.gz - 1]] as const) {
+      const nextId = parcelIdFromGrid(nx, nz);
+      if (!claimed.has(nextId)) candidates.add(nextId);
+    }
+  }
+
+  return Array.from(candidates)
+    .map((id) => parseParcelId(id))
+    .filter((cell): cell is { gx: number; gz: number } => !!cell && parcelIsClaimable(cell.gx, cell.gz, claimed))
+    .sort((a, b) => Math.hypot(a.gx, a.gz) - Math.hypot(b.gx, b.gz) || a.gx - b.gx || a.gz - b.gz);
+}
+
+export function worldExtentForClaims(claims: Pick<ParcelClaim, 'x' | 'z' | 'size'>[] = []): { minX: number; maxX: number; minZ: number; maxZ: number; radius: number } {
+  let minX = -PARCEL_BASE_WORLD_RADIUS;
+  let maxX = PARCEL_BASE_WORLD_RADIUS;
+  let minZ = -PARCEL_BASE_WORLD_RADIUS;
+  let maxZ = PARCEL_BASE_WORLD_RADIUS;
+  let radius = PARCEL_BASE_WORLD_RADIUS;
+  for (const claim of claims) {
+    const half = claim.size / 2;
+    minX = Math.min(minX, claim.x - half);
+    maxX = Math.max(maxX, claim.x + half);
+    minZ = Math.min(minZ, claim.z - half);
+    maxZ = Math.max(maxZ, claim.z + half);
+    radius = Math.max(radius, Math.hypot(claim.x, claim.z) + half);
+  }
+  return { minX, maxX, minZ, maxZ, radius };
+}
+
+export function cellLabel(gx: number, gz: number): string {
+  const offset = Math.ceil(PARCEL_BASE_WORLD_RADIUS / PARCEL_SIZE);
+  let col = gx + offset;
+  let label = '';
+  do {
+    const rem = ((col % 26) + 26) % 26;
+    label = String.fromCharCode(65 + rem) + label;
+    col = Math.floor(col / 26) - 1;
+  } while (col >= 0);
+  return `${label}${gz + offset + 1}`;
+}
+
 export function parcelClaimCost(gx: number, gz: number): number {
   const distance = Math.hypot(gx, gz);
   return Math.max(12, Math.round(18 + distance * 5));
@@ -326,7 +436,7 @@ function normalizeParcelClaims(raw: unknown): ParcelClaim[] {
     const id = parcelIdFromGrid(gx, gz);
     const x = gx * PARCEL_SIZE;
     const z = gz * PARCEL_SIZE;
-    if (Math.hypot(x, z) < PARCEL_MIN_RADIUS || Math.hypot(x, z) > WORLD_LIMIT_FOR_PARCELS) continue;
+    if (Math.hypot(x, z) < PARCEL_MIN_RADIUS || !parcelWithinHardLimit(gx, gz)) continue;
     const at = Math.round(Number(p.at ?? 0));
     claims.push({
       id,
@@ -688,9 +798,11 @@ export function previewParcelClaimAt(x: number, z: number, occupiedParcelIds: st
   const cz = gz * PARCEL_SIZE;
   const radius = Math.hypot(cx, cz);
   if (radius < PARCEL_MIN_RADIUS) return { ok: false, reason: 'Claim outside the village core.' };
-  if (radius > WORLD_LIMIT_FOR_PARCELS) return { ok: false, reason: 'This parcel is beyond the current frontier.' };
   if (state.parcelClaims.some((claim) => claim.id === id) || occupiedParcelIds.includes(id)) {
     return { ok: false, reason: 'That parcel is already claimed.' };
+  }
+  if (!parcelIsClaimable(gx, gz, [...state.parcelClaims.map((claim) => claim.id), ...occupiedParcelIds])) {
+    return { ok: false, reason: "Only the frontier grows — claim a square next to the map's edge." };
   }
   if (state.parcelClaims.length >= MAX_PARCEL_CLAIMS) return { ok: false, reason: 'Parcel claim cap reached.' };
   const claimCost = parcelClaimCost(gx, gz);
