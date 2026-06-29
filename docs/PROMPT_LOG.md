@@ -1226,3 +1226,16 @@ colliders por terreno, y fantasmas azules de las casillas reclamables en modo Cl
 caminar/construir en celdas reclamadas públicas/propias, renderiza tiles exteriores con recursos y
 colliders, muestra etiquetas de celda y fantasmas clickables; `public-world` expone snapshot para
 colisión; docs/status actualizados. `npx tsc --noEmit` limpio. **Commit:** _(este commit)_
+
+### 28 jun 2026 · Bugs de playtest: W trabada, dirección de gathering, HP bars en FP, rumbo aerial→FP
+**Pedido (humano):** (A) si se pierde el foco (popup de MetaMask) la W se queda apretada y no se
+destraba; (B) con árbol y roca cercanos, talar/minar se confunden — debería decidirlo la dirección
+en que mira el jugador; (C) las barras de HP/stats del edificio se ven en 1ª persona (no deberían);
+(D) al volver de aéreo a 1ª persona, la cámara debe conservar el rumbo del avatar.
+**Prompt sintetizado (Scene3D.tsx):** (A) en `blur`/`visibilitychange→hidden`, sintetizar `keyup`
+de todas las teclas del `keyboardMap` para que drei suelte el movimiento. (B) el target de gathering
+se elige por mayor alineación `dot(forward, dirAlRecurso)` dentro de un cono (~140°) entre árboles y
+rocas en rango; solo el mejor-mirado queda activo (el otro null), así talar vs minar lo decide la
+mirada. (C) señal módulo-level `viewSignal.aerial`; `BuildingHpBar` se oculta (`visible=false`) en
+1ª persona. (D) al re-enganchar FP, si no es la primera vez, `camera.lookAt` hacia
+`posRef.heading` (rumbo del avatar en aéreo). `npx tsc --noEmit` limpio. **Commit:** _(este commit)_

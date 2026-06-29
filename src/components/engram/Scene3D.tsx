@@ -134,6 +134,9 @@ export const dynamicNpcState: Record<NPCName, { x: number; z: number; targetX: n
 export const dynamicEnemyState: Record<string, { x: number; z: number; speed: number; dead: boolean; hp: number; maxHp: number; attackTimer: number }> = {};
 
 export const dynamicPlayerState = { x: 0, z: 0, hp: 100, maxHp: 100, dead: false, attackTimer: 0 };
+// Current camera view, mirrored module-side so useFrame-driven world labels (e.g.
+// building HP bars) can hide themselves in first person without prop threading.
+const viewSignal = { aerial: false };
 
 // ─── Gathering & combat animation state (module-level mutable, read by useFrame) ─
 // Same pattern as dynamicEnemyState: zero React overhead, picked up every frame.
@@ -651,10 +654,17 @@ function Player({
   useEffect(() => {
     if (!enabled) return;
     const { x, z } = posRef.current;
-    camera.position.set(x, getHeightAt(x, z) + EYE_HEIGHT, z);
+    const eyeY = getHeightAt(x, z) + EYE_HEIGHT;
+    camera.position.set(x, eyeY, z);
     if (!didLook.current) {
-      camera.lookAt(0, 1.2, 0);
+      camera.lookAt(0, 1.2, 0); // first entry: frame the village centre
       didLook.current = true;
+    } else {
+      // Returning to first person (from the aerial view or a dialogue): resume
+      // facing the avatar's heading so the look direction matches how it was last
+      // oriented in aerial, instead of snapping to an old/centre angle.
+      const h = posRef.current.heading ?? 0;
+      camera.lookAt(x + Math.sin(h), eyeY, z + Math.cos(h));
     }
     // Seed the touch-look angles from wherever the camera is now.
     lookEuler.current.setFromQuaternion(camera.quaternion, 'YXZ');
@@ -772,37 +782,44 @@ function Player({
       onNearbyChange(best);
     }
 
-    // Nearest choppable (non-chopped) tree within reach.
-    let bestTree = -1;
-    let bestTd = Infinity;
+    // Harvest target: you must FACE the resource, not just be near it — so a tree
+    // and a rock side by side aren't confused. Across all reachable trees/rocks
+    // that fall inside a forgiving frontal cone, pick the one you're facing most
+    // directly; ONLY that one becomes active (the other stays null), so chopping
+    // vs mining is decided by where you look. `forward` is the camera's horizontal
+    // look dir (set above for movement).
+    const FACING_MIN = 0.35; // dot(forward, dirToResource) ≥ this → within ~140° cone
+    const px = camera.position.x;
+    const pz = camera.position.z;
+    let bestKind: 'tree' | 'rock' | null = null;
+    let bestIdx = -1;
+    let bestScore = -Infinity;
     for (let i = 0; i < TREES.length; i++) {
       if (isChopped(i)) continue;
       const t = TREES[i];
-      const dd = Math.hypot(camera.position.x - t.x, camera.position.z - t.z);
-      if (dd < CHOP_RANGE && dd < bestTd) {
-        bestTd = dd;
-        bestTree = i;
-      }
+      const ddx = t.x - px, ddz = t.z - pz;
+      const dd = Math.hypot(ddx, ddz);
+      if (dd >= CHOP_RANGE || dd < 1e-3) continue;
+      const align = (forward.x * ddx + forward.z * ddz) / dd;
+      const score = align - dd * 0.02; // facing first, gently prefer closer on ties
+      if (align >= FACING_MIN && score > bestScore) { bestScore = score; bestKind = 'tree'; bestIdx = i; }
     }
-    const treeIdx = bestTree >= 0 ? bestTree : null;
+    for (let i = 0; i < ROCKS.length; i++) {
+      if (isMined(i)) continue;
+      const r = ROCKS[i];
+      const ddx = r.x - px, ddz = r.z - pz;
+      const dd = Math.hypot(ddx, ddz);
+      if (dd >= MINE_RANGE || dd < 1e-3) continue;
+      const align = (forward.x * ddx + forward.z * ddz) / dd;
+      const score = align - dd * 0.02;
+      if (align >= FACING_MIN && score > bestScore) { bestScore = score; bestKind = 'rock'; bestIdx = i; }
+    }
+    const treeIdx = bestKind === 'tree' ? bestIdx : null;
+    const rockIdx = bestKind === 'rock' ? bestIdx : null;
     if (treeIdx !== treeRef.current) {
       treeRef.current = treeIdx;
       onNearbyTreeChange?.(treeIdx);
     }
-
-    // Nearest mineable (non-mined) rock within reach.
-    let bestRock = -1;
-    let bestRd = Infinity;
-    for (let i = 0; i < ROCKS.length; i++) {
-      if (isMined(i)) continue;
-      const r = ROCKS[i];
-      const dd = Math.hypot(camera.position.x - r.x, camera.position.z - r.z);
-      if (dd < MINE_RANGE && dd < bestRd) {
-        bestRd = dd;
-        bestRock = i;
-      }
-    }
-    const rockIdx = bestRock >= 0 ? bestRock : null;
     if (rockIdx !== rockRef.current) {
       rockRef.current = rockIdx;
       onNearbyRockChange?.(rockIdx);
@@ -2525,7 +2542,10 @@ function BuildingHpBar({ b, ratio }: { b: Building; ratio: number }) {
   const color = ratio < 0.35 ? '#ff5f50' : ratio < 0.7 ? '#ffbd66' : '#8fd06a';
 
   useFrame(() => {
-    if (ref.current) ref.current.quaternion.copy(camera.quaternion);
+    if (!ref.current) return;
+    // HP bars are an aerial management readout — never float them in first person.
+    ref.current.visible = viewSignal.aerial;
+    ref.current.quaternion.copy(camera.quaternion);
   });
 
   return (
@@ -4071,6 +4091,26 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     const id = window.setInterval(() => setLocalHour(quantHour(new Date())), 30000);
     return () => window.clearInterval(id);
   }, []);
+  // When the window loses focus mid-move (e.g. a MetaMask popup steals focus), the
+  // browser never delivers the matching keyup, so drei's KeyboardControls keeps
+  // "W" held and the avatar walks forever. Synthesize keyup for every mapped key on
+  // blur / tab-hide so movement always releases.
+  useEffect(() => {
+    const releaseAll = () => {
+      for (const entry of keyboardMap) {
+        for (const code of entry.keys) {
+          window.dispatchEvent(new KeyboardEvent('keyup', { code, key: code, bubbles: true }));
+        }
+      }
+    };
+    const onVisibility = () => { if (document.hidden) releaseAll(); };
+    window.addEventListener('blur', releaseAll);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('blur', releaseAll);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, []);
   // Photo mode (for capturing the showcase thumbnail/logo): visiting with a
   // `?shot` query param hides the whole HUD and pins a flattering time of day.
   // `?shot` alone → golden dusk (torches lit); `?shot=12` noon, `?shot=20` night,
@@ -4220,6 +4260,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
 
   const fpExploring = exploring && view === 'fp';
   const aerialExploring = exploring && view === 'aerial';
+  viewSignal.aerial = view === 'aerial'; // mirror for useFrame-driven world labels
   const controlsArmed = isTouchDevice ? exploring : locked;
   const touchLookRef = useRef({ dx: 0, dy: 0 }); // first-person look (drag) on touch
   const [buildRot, setBuildRot] = useState(0); // rotation for touch placement
