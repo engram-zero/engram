@@ -1239,3 +1239,17 @@ rocas en rango; solo el mejor-mirado queda activo (el otro null), así talar vs 
 mirada. (C) señal módulo-level `viewSignal.aerial`; `BuildingHpBar` se oculta (`visible=false`) en
 1ª persona. (D) al re-enganchar FP, si no es la primera vez, `camera.lookAt` hacia
 `posRef.heading` (rumbo del avatar en aéreo). `npx tsc --noEmit` limpio. **Commit:** _(este commit)_
+
+### 28 jun 2026 · Prompt 22 completo — dataRoot de parcela en 0G + ParcelRegistry
+**Pedido (humano):** Terminar Prompt 22 para que la parcela no dependa solo del bundle general
+del dueño.
+**Prompt sintetizado:** Añadir bundle dedicado por parcela en 0G, anclar su `dataRoot` en
+`ParcelRegistry.claim(...)`, exponer `updateParcelData(...)` para futuras mutaciones y hacer que
+el public world hidrate parcelas desde esos roots.
+**Qué se hizo:** `/api/parcel-save` serializa `engram-parcel` y lo sube a 0G con sponsor key;
+la acción **Claim land** ahora sube la parcela antes de la tx y pasa el `dataRoot` al registry;
+`ParcelClaim` persiste `dataRoot/dataTxHash`; `public-world` escanea `ParcelClaimed` y
+`ParcelDataUpdated`, descarga el bundle de parcela por root y lo mezcla con bundles de wallet.
+Los recursos generados por parcela pasan de props visuales a nodos recolectables: click para
+sumar wood/stone, persistencia por `depletedParcelResources` y comisión si el recurso está en
+tierra ajena.

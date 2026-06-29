@@ -10,7 +10,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Stars, Sky, Html, ContactShadows, PointerLockControls, OrthographicCamera, KeyboardControls, useKeyboardControls } from '@react-three/drei';
 import * as THREE from 'three';
-import { useNetwork } from '@/app/providers';
+import { useNetwork, type NetworkType } from '@/app/providers';
 import { NPC_LIST } from '@/lib/npcs';
 import { BLOCK_SCALE_MAX, BLOCK_SCALE_MIN, BLOCK_UNIT, type NPCName, type NPCMemory } from '@/lib/types';
 import { writeWorldState } from '@/lib/memory';
@@ -56,6 +56,9 @@ import {
   frontierClaimableCells,
   parcelGridCenter,
   parcelIdAt,
+  parcelResourceKey,
+  isParcelResourceDepleted,
+  harvestParcelResource,
   recordParcelRentEvent,
   collectParcelRentIncome,
   damageBuilding,
@@ -82,6 +85,7 @@ import { useEngramAudio } from '@/context/AudioContext';
 import type { AudioCueId } from '@/lib/audio/manifest';
 import { getPublicWorldSnapshot, usePublicWorld } from '@/lib/public-world';
 import { claimParcelOnchain, getParcelRegistryAddress } from '@/lib/registry/parcels';
+import { saveParcelData } from '@/lib/parcel-data';
 
 // A tree carries its global index (into TREES) so chopping can target it.
 type TreeInst = TreeDef & { idx: number };
@@ -398,7 +402,19 @@ function pointInsideParcel(x: number, z: number, claim: { x: number; z: number; 
   return x >= claim.x - half && x <= claim.x + half && z >= claim.z - half && z <= claim.z + half;
 }
 
-function parcelResourceNodes(claim: { id: string; x: number; z: number; terrain: 'meadow' | 'grove' | 'quarry' }) {
+type ParcelResourceNode = {
+  id: string;
+  index: number;
+  type: 'wood' | 'stone';
+  x: number;
+  z: number;
+  localX: number;
+  localZ: number;
+  localY: number;
+  r: number;
+};
+
+function parcelResourceNodes(claim: { id: string; x: number; z: number; terrain: 'meadow' | 'grove' | 'quarry' }): ParcelResourceNode[] {
   const seed = claim.id.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
   const count = claim.terrain === 'quarry' ? 4 : claim.terrain === 'grove' ? 6 : 5;
   return Array.from({ length: count }, (_, i) => {
@@ -406,7 +422,12 @@ function parcelResourceNodes(claim: { id: string; x: number; z: number; terrain:
     const r = 2.4 + ((seed + i * 17) % 32) / 8;
     const x = claim.x + Math.cos(a) * r;
     const z = claim.z + Math.sin(a) * r;
+    const id = parcelResourceKey(claim.id, i);
+    const type: ParcelResourceNode['type'] = claim.terrain === 'quarry' ? 'stone' : 'wood';
     return {
+      id,
+      index: i,
+      type,
       x,
       z,
       localX: x - claim.x,
@@ -414,7 +435,7 @@ function parcelResourceNodes(claim: { id: string; x: number; z: number; terrain:
       localY: getHeightAt(x, z) - getHeightAt(claim.x, claim.z),
       r: claim.terrain === 'meadow' ? 0.28 : claim.terrain === 'grove' ? 0.46 : 0.52,
     };
-  });
+  }).filter((node) => !isParcelResourceDepleted(node.id));
 }
 
 function isFrontierWalkable(x: number, z: number): boolean {
@@ -2588,10 +2609,12 @@ function PublicBuildingMesh({ b, relation }: { b: Building; relation: WalletRela
 
 function ParcelOverlays({
   claimMode = false,
+  networkType,
   onDraftChange = () => {},
   onToolFeedback = () => {},
 }: {
   claimMode?: boolean;
+  networkType: NetworkType;
   onDraftChange?: () => void;
   onToolFeedback?: (feedback: ToolFeedback) => void;
 }) {
@@ -2624,7 +2647,7 @@ function ParcelOverlays({
             position={[x, y, z]}
             onClick={(e) => {
               e.stopPropagation();
-              void claimParcelFlow(x, z, occupied, onDraftChange, onToolFeedback);
+              void claimParcelFlow(x, z, occupied, networkType, onDraftChange, onToolFeedback);
             }}
           >
             <mesh rotation={[-Math.PI / 2, 0, 0]}>
@@ -2663,7 +2686,7 @@ function ParcelOverlays({
             <Html position={[0, 1.15, 0]} center distanceFactor={18} pointerEvents="none">
               <span className="rounded bg-black/65 px-1.5 py-0.5 text-[10px] font-bold text-[#f4e8d0]">{cellLabel(claim.gx, claim.gz)}</span>
             </Html>
-            <ParcelResourceCluster claim={claim} />
+            <ParcelResourceCluster claim={claim} onDraftChange={onDraftChange} onToolFeedback={onToolFeedback} />
           </group>
         );
       })}
@@ -2692,15 +2715,65 @@ function ParcelGroundTile({ claim, color }: { claim: { x: number; z: number; siz
   );
 }
 
-function ParcelResourceCluster({ claim }: { claim: { id: string; x: number; z: number; terrain: 'meadow' | 'grove' | 'quarry' } }) {
+function ParcelResourceCluster({
+  claim,
+  onDraftChange,
+  onToolFeedback,
+}: {
+  claim: { id: string; owner?: string; x: number; z: number; terrain: 'meadow' | 'grove' | 'quarry' };
+  onDraftChange: () => void;
+  onToolFeedback: (feedback: ToolFeedback) => void;
+}) {
+  const world = useWorld();
   const seed = claim.id.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
   const nodes = parcelResourceNodes(claim);
+  void world;
+
+  const harvest = (node: ParcelResourceNode) => {
+    const current = getWorldWallet()?.toLowerCase();
+    if (!current) {
+      onToolFeedback({ text: 'Connect a wallet first.', tone: 'bad' });
+      return;
+    }
+    if (isParcelResourceDepleted(node.id)) return;
+    if (node.type === 'wood' && getWorld().inventory.wood >= MAX_WOOD) {
+      onToolFeedback({ text: `Wood full (${MAX_WOOD}).`, tone: 'info' });
+      return;
+    }
+    if (node.type === 'stone' && getWorld().inventory.stone >= MAX_STONE) {
+      onToolFeedback({ text: `Stone full (${MAX_STONE}).`, tone: 'info' });
+      return;
+    }
+    if (claim.owner && claim.owner !== current) {
+      const rent = recordParcelRentEvent(claim.owner, claim.id, 'gather', PARCEL_GATHER_RENT_COIN);
+      if (!rent.ok) {
+        onToolFeedback({ text: rent.reason ?? 'Parcel commission failed.', tone: 'bad' });
+        return;
+      }
+    }
+    if (!harvestParcelResource(node.id, node.type)) {
+      onToolFeedback({ text: node.type === 'wood' ? `Wood full (${MAX_WOOD}).` : `Stone full (${MAX_STONE}).`, tone: 'info' });
+      return;
+    }
+    onDraftChange();
+    onToolFeedback({ text: `Collected ${node.type === 'wood' ? 'wood' : 'stone'} from parcel ${claim.id}. Save World to publish.`, tone: 'good' });
+  };
 
   if (claim.terrain === 'quarry') {
     return (
       <group>
         {nodes.map((node, i) => (
-          <mesh key={i} position={[node.localX, node.localY + 0.22, node.localZ]} rotation={[0.2, seed + i, -0.15]} castShadow receiveShadow>
+          <mesh
+            key={node.id}
+            position={[node.localX, node.localY + 0.22, node.localZ]}
+            rotation={[0.2, seed + i, -0.15]}
+            castShadow
+            receiveShadow
+            onClick={(e) => {
+              e.stopPropagation();
+              harvest(node);
+            }}
+          >
             <dodecahedronGeometry args={[0.42 + (i % 2) * 0.12, 0]} />
             <meshStandardMaterial color={i % 3 === 0 ? '#c9b26b' : '#9aa4ad'} map={getTextureVariant('stone', seed + i)} flatShading />
           </mesh>
@@ -2713,7 +2786,15 @@ function ParcelResourceCluster({ claim }: { claim: { id: string; x: number; z: n
     return (
       <group>
         {nodes.map((node, i) => (
-          <group key={i} position={[node.localX, node.localY, node.localZ]} rotation={[0, seed + i, 0]}>
+          <group
+            key={node.id}
+            position={[node.localX, node.localY, node.localZ]}
+            rotation={[0, seed + i, 0]}
+            onClick={(e) => {
+              e.stopPropagation();
+              harvest(node);
+            }}
+          >
             <mesh position={[0, 0.5, 0]} castShadow>
               <cylinderGeometry args={[0.09, 0.14, 1.0, 5]} />
               <meshStandardMaterial color="#5a3423" map={getTextureVariant('bark', seed + i)} flatShading />
@@ -2731,7 +2812,15 @@ function ParcelResourceCluster({ claim }: { claim: { id: string; x: number; z: n
   return (
     <group>
       {nodes.map((node, i) => (
-        <mesh key={i} position={[node.localX, node.localY + 0.16, node.localZ]} castShadow>
+        <mesh
+          key={node.id}
+          position={[node.localX, node.localY + 0.16, node.localZ]}
+          castShadow
+          onClick={(e) => {
+            e.stopPropagation();
+            harvest(node);
+          }}
+        >
           <coneGeometry args={[0.22, 0.34, 5]} />
           <meshStandardMaterial color={i % 2 === 0 ? '#557a3a' : '#6f8d45'} flatShading />
         </mesh>
@@ -2750,6 +2839,7 @@ async function claimParcelFlow(
   x: number,
   z: number,
   occupiedParcelIds: string[],
+  networkType: NetworkType,
   onDraftChange: () => void,
   onToolFeedback: (feedback: ToolFeedback) => void
 ) {
@@ -2766,8 +2856,11 @@ async function claimParcelFlow(
   }
 
   try {
-    const tx = await claimParcelOnchain(wallet, preview.claim.id, PARCEL_COMMISSION_BPS);
-    const committed = commitParcelClaim(preview.claim);
+    onToolFeedback({ text: `Saving ${cellLabel(preview.claim.gx, preview.claim.gz)} parcel data to 0G...`, tone: 'info' });
+    const saved = await saveParcelData(wallet, networkType, preview.claim);
+    const tx = await claimParcelOnchain(wallet, saved.parcel.id, PARCEL_COMMISSION_BPS, BigInt(0), saved.rootHash);
+    const claimWithRoot = { ...preview.claim, ...saved.parcel, dataRoot: saved.rootHash, dataTxHash: saved.txHash };
+    const committed = commitParcelClaim(claimWithRoot);
     if (!committed.ok) {
       onToolFeedback({ text: committed.reason ?? 'Claim failed.', tone: 'bad' });
       return;
@@ -3074,10 +3167,12 @@ function damageNearestForTest(x: number, z: number, reach = 2.4): boolean {
 
 function BuildController({
   mode,
+  networkType,
   onDraftChange,
   onToolFeedback,
 }: {
   mode: BuildTool;
+  networkType: NetworkType;
   onDraftChange: () => void;
   onToolFeedback: (feedback: ToolFeedback) => void;
 }) {
@@ -3134,7 +3229,7 @@ function BuildController({
         ...publicWorld.parcels.map((claim) => claim.id),
         ...getWorld().parcelClaims.map((claim) => claim.id),
       ];
-      void claimParcelFlow(px, pz, occupied, onDraftChange, onToolFeedback);
+      void claimParcelFlow(px, pz, occupied, networkType, onDraftChange, onToolFeedback);
     } else if (mode === 'damage') {
       if (isLocalhostFreeBuildWallet() && damageNearestForTest(px, pz)) {
         onDraftChange();
@@ -4346,7 +4441,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
         ...publicWorld.parcels.map((claim) => claim.id),
         ...getWorld().parcelClaims.map((claim) => claim.id),
       ];
-      void claimParcelFlow(p.x, p.z, occupied, markBuildDraftDirty, showToolFeedback);
+      void claimParcelFlow(p.x, p.z, occupied, networkType, markBuildDraftDirty, showToolFeedback);
       return;
     }
     if (buildMode === 'damage') {
@@ -5009,7 +5104,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
                   <meshBasicMaterial transparent opacity={0} depthWrite={false} />
                 </mesh>
               )}
-              {explorable && buildMode && !isTouchDevice && <BuildController mode={buildMode} onDraftChange={markBuildDraftDirty} onToolFeedback={showToolFeedback} />}
+              {explorable && buildMode && !isTouchDevice && <BuildController mode={buildMode} networkType={networkType} onDraftChange={markBuildDraftDirty} onToolFeedback={showToolFeedback} />}
               {explorable && buildMode && buildMode !== 'demolish' && buildMode !== 'repair' && buildMode !== 'raid' && buildMode !== 'claim' && buildMode !== 'damage' && isTouchDevice && (
                 <MobileBuildGhost mode={buildMode} posRef={posRef} rot={buildRot} />
               )}
@@ -5018,7 +5113,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
           {explorable && active && view === 'fp' && <TalkFraming active={active} />}
 
           <Village torchesLit={dn.torchesLit} />
-          {explorable && <ParcelOverlays claimMode={buildMode === 'claim'} onDraftChange={markBuildDraftDirty} onToolFeedback={showToolFeedback} />}
+          {explorable && <ParcelOverlays claimMode={buildMode === 'claim'} networkType={networkType} onDraftChange={markBuildDraftDirty} onToolFeedback={showToolFeedback} />}
           <River />
           <Fireflies active={dn.torchesLit} />
           {explorable && <Buildings tool={buildMode} onDraftChange={markBuildDraftDirty} onToolFeedback={showToolFeedback} />}

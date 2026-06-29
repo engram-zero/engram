@@ -167,16 +167,18 @@ submit a revised version if you advance. Snapshot = `main` at the round deadline
       clamped on hydrate so bad 0G data cannot cover the camera.
 - [x] **Growing map parcels (Prompt 21)** — aerial mode has **Claim land**; ownership is enforced
       by `ParcelRegistry` on 0G Chain (`0x11D2EB42d0BF30947EB36882A150ee25518f67d7`) and parcel
-      metadata lives in the player's 0G world bundle. Public discovery reads both
-      `ParcelClaimed` events and wallet bundles. Building or gathering on another wallet's parcel
-      records `ParcelRentEvent`, spends coin, and the owner can collect rent. Parcels render
-      data-driven terrain/resource overlays without redeploy.
+      metadata lives in both the player's 0G world bundle and a standalone per-parcel 0G bundle
+      anchored by registry `dataRoot`. Public discovery reads `ParcelClaimed`/`ParcelDataUpdated`
+      events plus wallet bundles. Building or gathering on another wallet's parcel records
+      `ParcelRentEvent`, spends coin, and the owner can collect rent. Parcels render data-driven
+      terrain/resource overlays without redeploy.
 - [x] **Expandable frontier milestone (Prompt 22)** — claims now grow the world one grid cell at
       a time: only cells adjacent to the base frontier or an existing claim are claimable. Claim
       mode shows blue frontier ghosts with cell labels; claimed cells outside the old world become
-      walkable/buildable data-driven terrain tiles with resource props/colliders. Per-parcel
-      `dataRoot` upload remains future hardening; the owner bundle + `ParcelClaimed` discovery is
-      the current persistence path.
+      walkable/buildable data-driven terrain tiles with resource props/colliders. Claiming uploads
+      an `engram-parcel` bundle to 0G, anchors its `dataRoot` in `ParcelRegistry.claim(...)`, and
+      public discovery hydrates that root cross-wallet/cross-device. Parcel-generated resources are
+      clickable harvest nodes with persisted depletion and parcel commission on foreign land.
 
 **Still open (deferred):**
 1. Real-time multiplayer (biggest differentiator; new prompt #19, scoped) — **deferred to a
@@ -186,9 +188,8 @@ submit a revised version if you advance. Snapshot = `main` at the round deadline
    building-specific history panels, defense upgrades, and demon schedule windows.
 4. 💡 **Mining = real 0G Compute work** (Prompt 20) — on-thesis future idea: gathering stone
    triggers a verifiable 0G compute job (proof-of-useful-work), not a placeholder.
-5. Parcel/frontier polish (Prompts 21/22) — anti-hoarding, richer parcel inspector, fully
-   harvestable generated resources, per-parcel dataRoot upload, and optional OG-real rent/claim
-   pricing.
+5. Parcel/frontier polish (Prompts 21/22) — anti-hoarding, richer parcel inspector, and optional
+   OG-real rent/claim pricing.
 
 Full backlog (still open) in `docs/ENGRAM_PROMPTS.md`: raids/sabotage fairness from player
 relations (13: defense/weapon upgrades), more market goods/stock depth (14), fair demon sieges (15), gathering

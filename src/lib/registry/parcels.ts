@@ -16,6 +16,12 @@ export function parcelIdToBytes32(parcelId: string): string {
   return encodeBytes32String(parcelId.slice(0, 31));
 }
 
+function normalizeDataRoot(dataRoot?: string | null): string {
+  if (!dataRoot) return ZeroHash;
+  if (!/^0x[a-fA-F0-9]{64}$/.test(dataRoot)) throw new Error('Invalid parcel data root.');
+  return dataRoot;
+}
+
 async function ensureGalileoChain() {
   const ethereum = (window as any).ethereum;
   if (!ethereum) throw new Error('No Ethereum provider found');
@@ -71,7 +77,8 @@ export async function claimParcelOnchain(
   wallet: string,
   parcelId: string,
   commissionBps: number,
-  valueWei: bigint = BigInt(0)
+  valueWei: bigint = BigInt(0),
+  dataRoot?: string | null
 ): Promise<{ txHash: string } | null> {
   const registry = getParcelRegistryAddress();
   if (!registry) return null;
@@ -90,10 +97,41 @@ export async function claimParcelOnchain(
   }
 
   const contract = new Contract(registry, PARCEL_REGISTRY_ABI, signer);
-  const tx = await contract.claim(parcelIdToBytes32(parcelId), ZeroHash, commissionBps, {
+  const tx = await contract.claim(parcelIdToBytes32(parcelId), normalizeDataRoot(dataRoot), commissionBps, {
     value: valueWei,
     gasPrice: await getLegacyGasPrice(provider),
     gasLimit: BigInt(180000),
+  });
+  await tx.wait();
+  return { txHash: tx.hash };
+}
+
+export async function updateParcelDataOnchain(
+  wallet: string,
+  parcelId: string,
+  dataRoot: string,
+  commissionBps: number
+): Promise<{ txHash: string } | null> {
+  const registry = getParcelRegistryAddress();
+  if (!registry) return null;
+
+  await ensureGalileoChain();
+
+  const [provider, providerErr] = await getProvider();
+  if (!provider) throw new Error(`Provider error: ${providerErr?.message}`);
+
+  const [signer, signerErr] = await getSigner(provider);
+  if (!signer) throw new Error(`Signer error: ${signerErr?.message}`);
+
+  const signerAddress = getAddress(await signer.getAddress());
+  if (signerAddress !== getAddress(wallet)) {
+    throw new Error(`Connected wallet ${signerAddress} cannot update parcel data for ${wallet}`);
+  }
+
+  const contract = new Contract(registry, PARCEL_REGISTRY_ABI, signer);
+  const tx = await contract.updateData(parcelIdToBytes32(parcelId), normalizeDataRoot(dataRoot), commissionBps, {
+    gasPrice: await getLegacyGasPrice(provider),
+    gasLimit: BigInt(160000),
   });
   await tx.wait();
   return { txHash: tx.hash };

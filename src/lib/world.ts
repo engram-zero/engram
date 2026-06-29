@@ -35,6 +35,7 @@ const MAX_RAID_EVENTS = 120;
 const MAX_REPAIR_EVENTS = 160;
 const MAX_PARCEL_CLAIMS = 48;
 const MAX_PARCEL_RENT_EVENTS = 160;
+const MAX_DEPLETED_PARCEL_RESOURCES = 512;
 const RAID_EVENT_TTL_MS = 1000 * 60 * 60 * 24 * 7;
 const REPAIR_EVENT_TTL_MS = 1000 * 60 * 60 * 24 * 14;
 
@@ -51,6 +52,7 @@ export const EMPTY_WORLD: WorldState = {
   parcelClaims: [],
   parcelRentEvents: [],
   parcelRentCollected: [],
+  depletedParcelResources: [],
   relations: {},
 };
 
@@ -423,6 +425,10 @@ function normalizeTerrain(raw: unknown): ParcelClaim['terrain'] {
   return raw === 'grove' || raw === 'quarry' ? raw : 'meadow';
 }
 
+function normalizeBytes32(raw: unknown): string | null {
+  return typeof raw === 'string' && /^0x[a-fA-F0-9]{64}$/.test(raw) ? raw : null;
+}
+
 function normalizeParcelClaims(raw: unknown): ParcelClaim[] {
   if (!Array.isArray(raw)) return [];
   const claims: ParcelClaim[] = [];
@@ -449,6 +455,8 @@ function normalizeParcelClaims(raw: unknown): ParcelClaim[] {
       claimCost: Math.max(0, Math.min(999, Math.round(Number(p.claimCost ?? parcelClaimCost(gx, gz))))),
       commissionBps: Math.max(0, Math.min(5000, Math.round(Number(p.commissionBps ?? PARCEL_COMMISSION_BPS)))),
       terrain: normalizeTerrain(p.terrain),
+      dataRoot: normalizeBytes32(p.dataRoot),
+      dataTxHash: normalizeBytes32(p.dataTxHash),
       at: Number.isFinite(at) && at > 0 ? at : Date.now(),
     });
   }
@@ -493,6 +501,11 @@ function normalizeCollectedRentIds(raw: unknown): string[] {
   return Array.from(new Set(raw.map((id) => cleanId(id, '')).filter(Boolean))).slice(0, MAX_PARCEL_RENT_EVENTS);
 }
 
+function normalizeParcelResourceIds(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return Array.from(new Set(raw.map((id) => cleanId(id, '')).filter(Boolean))).slice(0, MAX_DEPLETED_PARCEL_RESOURCES);
+}
+
 export function normalizeWorldState(raw: unknown): WorldState {
   const p = raw && typeof raw === 'object' ? (raw as any) : {};
   const intIndexSet = (raw: unknown): number[] =>
@@ -521,6 +534,7 @@ export function normalizeWorldState(raw: unknown): WorldState {
     parcelClaims: normalizeParcelClaims(p?.parcelClaims),
     parcelRentEvents: normalizeParcelRentEvents(p?.parcelRentEvents),
     parcelRentCollected: normalizeCollectedRentIds(p?.parcelRentCollected),
+    depletedParcelResources: normalizeParcelResourceIds(p?.depletedParcelResources),
     relations: normalizeRelations(p?.relations),
   };
 }
@@ -539,6 +553,7 @@ export function cloneWorldState(value: WorldState = EMPTY_WORLD): WorldState {
     parcelClaims: value.parcelClaims.map((claim) => ({ ...claim })),
     parcelRentEvents: value.parcelRentEvents.map((event) => ({ ...event })),
     parcelRentCollected: [...value.parcelRentCollected],
+    depletedParcelResources: [...value.depletedParcelResources],
     relations: { ...value.relations },
   };
 }
@@ -679,6 +694,26 @@ export function oreIsFull(ore: OreType): boolean {
 /** Back-compat: stone-specific full check. */
 export function stoneIsFull(): boolean {
   return oreIsFull('stone');
+}
+
+export function parcelResourceKey(parcelId: string, nodeIndex: number): string {
+  return `parcel:${parcelId}:${Math.max(0, Math.round(nodeIndex))}`;
+}
+
+export function isParcelResourceDepleted(resourceId: string): boolean {
+  return state.depletedParcelResources.includes(resourceId);
+}
+
+export function harvestParcelResource(resourceId: string, type: Extract<ResourceType, 'wood' | 'stone'>): boolean {
+  if (!resourceId || isParcelResourceDepleted(resourceId)) return false;
+  const cap = type === 'wood' ? MAX_WOOD : MAX_STONE;
+  if (state.inventory[type] >= cap) return false;
+  commit({
+    ...state,
+    inventory: { ...state.inventory, [type]: Math.min(cap, state.inventory[type] + 1) },
+    depletedParcelResources: [resourceId, ...state.depletedParcelResources].slice(0, MAX_DEPLETED_PARCEL_RESOURCES),
+  });
+  return true;
 }
 
 /** Extract one unit of `ore` from a rock (mirrors harvestTree). After ROCK_MINES

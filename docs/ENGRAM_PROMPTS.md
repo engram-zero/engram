@@ -33,7 +33,7 @@
 18. [Reparación, durabilidad y mantenimiento del mundo](#prompt-18--reparación-durabilidad-y-mantenimiento-del-mundo) — 🟢 done: hp/maxHp + daño visual + barras HP WebGL + reparación con madera/kits + eventos públicos de mantenimiento/raid en 0G + reparación de aliados
 20. [Minar = trabajo real en 0G Compute (proof-of-useful-work)](#prompt-20--minar--trabajo-real-en-0g-compute) — 🟡 construido, **gateado OFF + sin verificar en vivo** (falta fondear el ledger y probar)
 21. [Mapa que crece: parcelas de tierra propiedad del jugador + renta (en 0G)](#prompt-21--mapa-que-crece-parcelas-de-tierra-en-0g) — 🟢 implemented core: ParcelRegistry on 0G Chain + 0G bundle parcel data + rent/commission loop + data-driven parcel resources
-22. [Frontera expandible: el mapa crece casilla a casilla](#prompt-22--frontera-expandible-el-mapa-crece-casilla-a-casilla) — 🟡 milestone (martelaxe): frontier adjacency + walkable claimed cells + data-driven outer tiles + claim ghosts/labels
+22. [Frontera expandible: el mapa crece casilla a casilla](#prompt-22--frontera-expandible-el-mapa-crece-casilla-a-casilla) — 🟢 implemented core: frontier adjacency + walkable claimed cells + per-parcel 0G dataRoot anchored in ParcelRegistry
 
 > **Tareas no-código (ADMIN):** ✅ deploy a Vercel + env vars · ✅ save a 0G end-to-end ·
 > ✅ **Group Stage ENVIADO y ACEPTADO** · ✅ **Round of 32 CLASIFICADO (top 32)** · ✅ video demo
@@ -1053,13 +1053,13 @@ redespliega. Refuerza "own your world".
 
 ## Prompt 22 — Frontera expandible: el mapa crece casilla a casilla
 
-> 🟡 **Milestone — 28 jun 2026.** La frontera ya no es un radio fijo para claims:
+> 🟢 **Core implementado — 28 jun 2026.** La frontera ya no es un radio fijo para claims:
 > `parcelIsClaimable` exige adyacencia 4-way a la frontera base o a una parcela reclamada.
 > En vista aérea, **Claim land** pinta fantasmas azules de las únicas casillas reclamables,
 > con etiqueta tipo tablero (`cellLabel`). Al reclamar, se añade una sola celda; el jugador
-> puede caminar y construir en esa celda, y otras wallets la descubren por `ParcelClaimed` +
-> bundles públicos. Las celdas fuera del terreno base se renderizan como tiles propios con
-> suelo y recursos data-driven.
+> puede caminar y construir en esa celda, y otras wallets la descubren por `ParcelClaimed`,
+> `ParcelDataUpdated` y/o el `dataRoot` de parcela subido a 0G. Las celdas fuera del terreno
+> base se renderizan como tiles propios con suelo y recursos data-driven.
 
 ### Implementado
 - Modelo puro de frontera en `world.ts`: `parcelIsClaimable`, `frontierClaimableCells`,
@@ -1069,20 +1069,23 @@ redespliega. Refuerza "own your world".
   `getHeightAt`, más recursos visuales/colliders por terreno.
 - UX de tablero: fantasmas de frontera en modo Claim, etiqueta por celda y feedback claro para
   intentos no adyacentes.
+- `/api/parcel-save` sube un `engram-parcel` bundle por parcela a 0G antes del claim; el
+  cliente pasa ese `dataRoot` a `ParcelRegistry.claim(...)` y expone `updateParcelDataOnchain`
+  para evoluciones futuras de la parcela.
+- `public-world` escanea `ParcelClaimed` + `ParcelDataUpdated`, hidrata `dataRoot` desde 0G y
+  usa el registry como fuente pública de propiedad/descubrimiento.
+- Los recursos generados por parcela ya son nodos recolectables: al clickearlos dan wood/stone,
+  desaparecen por `depletedParcelResources`, persisten en el `WorldState` 0G y cobran comisión si
+  el nodo está en tierra ajena.
 
 ### Pendiente
-- Endpoint dedicado `/api/parcel-save` para subir un bundle de datos por parcela y anclar
-  `dataRoot` en `ParcelRegistry.updateData`; hoy el estado rico de parcela viaja en el
-  `WorldState` del dueño y se descubre por el root de wallet.
-- Recursos generados por parcela como nodos recolectables con estado propio, no solo props
-  con colisión y comisión sobre el gathering existente.
 - Refinar labels/base chess mapping si se quiere un tablero humano exacto a1…h8.
 
 ### Criterios de aceptación
 1. Solo las casillas adyacentes al borde aparecen reclamables.
 2. Reclamar añade una sola casilla, no una fila/columna.
 3. El jugador puede caminar/construir en la casilla reclamada.
-4. Otras wallets ven la casilla por descubrimiento público.
+4. Otras wallets ven la casilla por descubrimiento público y pueden hidratar su `dataRoot`.
 5. Sin parcelas, el mundo base se juega igual.
 
 ---

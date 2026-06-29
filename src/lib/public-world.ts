@@ -1,7 +1,7 @@
 'use client';
 
 import { useSyncExternalStore } from 'react';
-import { Contract, JsonRpcProvider, decodeBytes32String, type EventLog } from 'ethers';
+import { Contract, JsonRpcProvider, ZeroHash, decodeBytes32String, type EventLog } from 'ethers';
 import type { NetworkType } from '@/app/providers';
 import { downloadByRootHashAPI } from '@/lib/0g/downloader';
 import { getNetworkConfig } from '@/lib/0g/network';
@@ -77,6 +77,10 @@ function scanLookback(): number {
   return Number.isFinite(value) && value > 0 ? value : 300_000;
 }
 
+function normalizeRoot(raw: unknown): string | null {
+  return typeof raw === 'string' && /^0x[a-fA-F0-9]{64}$/.test(raw) && raw !== ZeroHash ? raw : null;
+}
+
 function parcelFromRegistryEvent(log: EventLog): PublicParcelClaim | null {
   try {
     const id = decodeBytes32String(String(log.args?.parcelId ?? ''));
@@ -98,9 +102,28 @@ function parcelFromRegistryEvent(log: EventLog): PublicParcelClaim | null {
       claimCost: parcelClaimCost(gx, gz),
       commissionBps: Number(log.args?.commissionBps ?? 0),
       terrain: parcelTerrainForGrid(gx, gz),
+      dataRoot: normalizeRoot(log.args?.dataRoot),
       at: Number(log.args?.at ?? 0) * 1000,
     };
     return claim;
+  } catch {
+    return null;
+  }
+}
+
+async function downloadParcelData(owner: string, root: string | null | undefined, storageRpc: string): Promise<PublicParcelClaim | null> {
+  const dataRoot = normalizeRoot(root);
+  if (!dataRoot) return null;
+
+  const [data, err] = await downloadByRootHashAPI(dataRoot, storageRpc);
+  if (err || !data) return null;
+
+  try {
+    const raw = JSON.parse(new TextDecoder('utf-8').decode(data));
+    if (raw?.kind !== 'engram-parcel') return null;
+    const world = normalizeWorldState({ parcelClaims: [raw.parcel] });
+    const parcel = world.parcelClaims.find((claim) => claim.owner === owner);
+    return parcel ? { ...parcel, dataRoot, author: owner } : null;
   } catch {
     return null;
   }
@@ -178,9 +201,10 @@ export async function initPublicWorld(
     const parcelContract = parcelRegistry ? new Contract(parcelRegistry, PARCEL_REGISTRY_ABI, provider) : null;
     const latestBlock = await provider.getBlockNumber();
     const fromBlock = Math.max(0, latestBlock - scanLookback());
-    const [events, parcelEvents] = await Promise.all([
+    const [events, parcelEvents, parcelDataEvents] = await Promise.all([
       contract.queryFilter(contract.filters.RootUpdated(), fromBlock, 'latest'),
       parcelContract ? parcelContract.queryFilter(parcelContract.filters.ParcelClaimed(), fromBlock, 'latest') : Promise.resolve([]),
+      parcelContract ? parcelContract.queryFilter(parcelContract.filters.ParcelDataUpdated(), fromBlock, 'latest') : Promise.resolve([]),
     ]);
     const latestRoots = new Map<string, string>();
     const excluded = currentWallet?.toLowerCase();
@@ -198,20 +222,36 @@ export async function initPublicWorld(
     const raidEvents = worlds.flatMap((world) => world.raidEvents);
     const repairEvents = worlds.flatMap((world) => world.repairEvents);
     const parcelRentEvents = worlds.flatMap((world) => world.parcelRentEvents);
-    const claimed = new Set<string>();
-    const registryParcels = parcelEvents
+    const registryById = new Map<string, PublicParcelClaim>();
+    for (const event of [...parcelEvents, ...parcelDataEvents]
       .map((event) => parcelFromRegistryEvent(event as EventLog))
-      .filter((parcel): parcel is PublicParcelClaim => !!parcel);
-    const parcels = [
-      ...worlds.flatMap((world) => world.parcels),
-      ...registryParcels,
-    ]
-      .sort((a, b) => a.at - b.at)
-      .filter((parcel) => {
-        if (claimed.has(parcel.id)) return false;
-        claimed.add(parcel.id);
-        return true;
+      .filter((parcel): parcel is PublicParcelClaim => !!parcel)
+      .sort((a, b) => a.at - b.at)) {
+      const previous = registryById.get(event.id);
+      registryById.set(event.id, {
+        ...(previous ?? event),
+        ...event,
+        dataRoot: event.dataRoot ?? previous?.dataRoot ?? null,
+        at: previous?.at ?? event.at,
       });
+    }
+    const registryParcels = await Promise.all(Array.from(registryById.values()).map(async (parcel) => {
+      const hydrated = await downloadParcelData(parcel.owner, parcel.dataRoot, storageRpc);
+      return hydrated ? { ...parcel, ...hydrated, dataRoot: parcel.dataRoot ?? hydrated.dataRoot } : parcel;
+    }));
+    const parcelsById = new Map<string, PublicParcelClaim>();
+    for (const parcel of registryParcels) parcelsById.set(parcel.id, parcel);
+    for (const parcel of worlds.flatMap((world) => world.parcels)) {
+      const onchain = parcelsById.get(parcel.id);
+      if (!onchain) {
+        parcelsById.set(parcel.id, parcel);
+        continue;
+      }
+      if (onchain.owner === parcel.owner) {
+        parcelsById.set(parcel.id, { ...onchain, ...parcel, dataRoot: onchain.dataRoot ?? parcel.dataRoot ?? null });
+      }
+    }
+    const parcels = Array.from(parcelsById.values()).sort((a, b) => a.at - b.at);
     const onchainBuildings = worlds.flatMap((world) => world.buildings).filter((building) => building.owner !== excluded);
     const byOwnerAndPosition = new Set<string>();
     const counts = new Map<string, { buildingCount: number; parcelCount: number }>();
@@ -261,6 +301,7 @@ export async function initPublicWorld(
       repairEvents: repairEvents.length,
       parcels: parcels.length,
       registryParcels: registryParcels.length,
+      parcelDataEvents: parcelDataEvents.length,
       parcelRentEvents: parcelRentEvents.length,
     });
     setPublicWorld({ buildings, raidEvents, repairEvents, parcels, parcelRentEvents, owners, loading: false });
