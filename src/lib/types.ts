@@ -94,8 +94,21 @@ export interface ParcelClaim {
   commissionBps: number;
   /** Simple biome/material hint for data-driven rendering. */
   terrain: 'meadow' | 'grove' | 'quarry';
+  /** 0G Storage root for the parcel's standalone data bundle. */
+  dataRoot?: string | null;
+  /** 0G Storage upload tx/hash for the parcel bundle, when available. */
+  dataTxHash?: string | null;
   /** Epoch ms when the owner claimed it. */
   at: number;
+}
+
+/** Standalone parcel payload stored on 0G and anchored in ParcelRegistry.dataRoot. */
+export interface ParcelDataBundle {
+  version: number;
+  kind: 'engram-parcel';
+  wallet: string;
+  parcel: ParcelClaim;
+  updatedAt: number;
 }
 
 export interface ParcelRentEvent {
@@ -139,6 +152,8 @@ export interface WorldState {
   parcelRentEvents: ParcelRentEvent[];
   /** Public rent event IDs this wallet has already collected as parcel owner. */
   parcelRentCollected: string[];
+  /** Parcel resource node IDs this wallet has harvested/depleted. */
+  depletedParcelResources: string[];
   /**
    * Player-declared social graph for public-world wallets. Neutral can be
    * represented by absence; allied/hostile are persisted in the same 0G bundle
