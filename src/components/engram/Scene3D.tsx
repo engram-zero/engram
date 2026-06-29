@@ -4037,9 +4037,13 @@ export default function Scene3D({ memories = null, active = null, talking = fals
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   const [touchMove, setTouchMove] = useState<MovementInput>(IDLE_MOVEMENT);
   const [buildMode, setBuildMode] = useState<BuildTool | null>(null);
+  const [buildMenuOpen, setBuildMenuOpen] = useState(false);
   // Building is aerial-only (needs the free cursor); leave it when not in aerial.
   useEffect(() => {
-    if (!(exploring && view === 'aerial')) setBuildMode(null);
+    if (!(exploring && view === 'aerial')) {
+      setBuildMode(null);
+      setBuildMenuOpen(false);
+    }
   }, [exploring, view]);
   const [flash, setFlash] = useState(false);
   const [playerHp, setPlayerHp] = useState(100);
@@ -4929,40 +4933,97 @@ export default function Scene3D({ memories = null, active = null, talking = fals
             <>
               <PublicRelationsPanel world={world} onRelationChange={markBuildDraftDirty} />
               <div className="absolute top-32 right-4 z-10 flex flex-col items-end gap-1.5">
-                {([
-                  ['wall', '🧱', 'Wall', BUILD_COST.wall],
-                  ['house', '🏠', 'House', BUILD_COST.house],
-                  ['repair', '🧰', 'Repair', null],
-                  ['raid', '⚔️', 'Raid', null],
-                  ['claim', '🗺️', 'Claim land', null],
-                  ['demolish', '🧨', 'Demolish', null],
-                  ...(localhostGod ? [['damage', '💥', 'Damage test', null] as const] : []),
-                ] as const).map(([m, icon, label, cost]) => (
-                  <button
-                    key={m}
-                    onClick={() => setBuildMode((cur) => (cur === m ? null : m))}
-                    className="inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-sm text-[#f4e8d0]"
-                    style={{
-                      background: buildMode === m ? 'rgba(95,150,90,0.85)' : 'rgba(0,0,0,0.5)',
-                      borderColor: buildMode === m ? '#8fd06a' : '#5a4a28',
-                    }}
-                  >
-                    <span>{icon} {label}</span>
-                    {cost !== null && (
+                {/* Build: a single dropdown folds Wall / House / AI so the bar isn't
+                    cluttered with placement tools. */}
+                {(() => {
+                  const buildActive = buildMode === 'wall' || buildMode === 'house';
+                  const toolBtn = (m: BuildTool, icon: string, label: string, cost: number) => (
+                    <button
+                      key={m}
+                      onClick={() => setBuildMode((cur) => (cur === m ? null : m))}
+                      className="inline-flex w-full items-center justify-between gap-2 rounded border px-3 py-1.5 text-sm text-[#f4e8d0]"
+                      style={{
+                        background: buildMode === m ? 'rgba(95,150,90,0.85)' : 'rgba(0,0,0,0.5)',
+                        borderColor: buildMode === m ? '#8fd06a' : '#5a4a28',
+                      }}
+                    >
+                      <span>{icon} {label}</span>
                       <span className="inline-flex items-center gap-0.5">({cost}<WoodIcon />)</span>
-                    )}
-                  </button>
-                ))}
+                    </button>
+                  );
+                  return (
+                    <div className="flex w-44 flex-col items-stretch gap-1">
+                      <button
+                        onClick={() => setBuildMenuOpen((o) => !o)}
+                        className="inline-flex items-center justify-between rounded-md border px-3 py-1.5 text-sm text-[#f4e8d0]"
+                        style={{
+                          background: buildActive ? 'rgba(95,150,90,0.85)' : 'rgba(0,0,0,0.5)',
+                          borderColor: buildActive ? '#8fd06a' : '#5a4a28',
+                        }}
+                      >
+                        <span>🏗️ Build</span>
+                        <span>{buildMenuOpen ? '▴' : '▾'}</span>
+                      </button>
+                      {buildMenuOpen && (
+                        <div className="flex flex-col gap-1 rounded-md border border-[#3b3220] bg-black/70 p-1.5">
+                          {toolBtn('wall', '🧱', 'Wall', BUILD_COST.wall)}
+                          {toolBtn('house', '🏠', 'House', BUILD_COST.house)}
+                          <button
+                            onClick={() => {
+                              setBuildMode(null);
+                              setAiMsg(null);
+                              setAiOpen(true);
+                              setBuildMenuOpen(false);
+                            }}
+                            className="rounded border border-[#7a6ad6] bg-black/40 px-3 py-1.5 text-sm text-[#f4e8d0] hover:border-[#b98bff]"
+                          >
+                            🤖 Build with AI
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+                {/* Claim land stays primary — it's how the world grows. */}
                 <button
-                  onClick={() => {
-                    setBuildMode(null);
-                    setAiMsg(null);
-                    setAiOpen(true);
+                  onClick={() => setBuildMode((cur) => (cur === 'claim' ? null : 'claim'))}
+                  className="inline-flex w-44 items-center justify-between rounded-md border px-3 py-1.5 text-sm text-[#f4e8d0]"
+                  style={{
+                    background: buildMode === 'claim' ? 'rgba(95,150,90,0.85)' : 'rgba(0,0,0,0.5)',
+                    borderColor: buildMode === 'claim' ? '#8fd06a' : '#5a4a28',
                   }}
-                  className="rounded-md border border-[#7a6ad6] bg-black/50 px-3 py-1.5 text-sm text-[#f4e8d0] hover:border-[#b98bff]"
                 >
-                  🤖 Build with AI
+                  <span>🗺️ Claim land</span>
                 </button>
+                {/* Repair / Demolish / Raid only appear when there's actually a valid
+                    target — keeps the bar clean and surfaces Raid only vs a hostile. */}
+                {(() => {
+                  const rel = (o?: string) => world.relations[(o ?? '').toLowerCase()] ?? 'neutral';
+                  const hasOwn = world.buildings.length > 0;
+                  const hasAlliedPublic = publicWorld.buildings.some((b) => rel(b.owner) === 'allied');
+                  const hasHostilePublic = publicWorld.buildings.some((b) => rel(b.owner) === 'hostile');
+                  const ctxBtn = (m: BuildTool, icon: string, label: string, accent: string) => (
+                    <button
+                      key={m}
+                      onClick={() => setBuildMode((cur) => (cur === m ? null : m))}
+                      className="inline-flex w-44 items-center justify-between rounded-md border px-3 py-1.5 text-sm text-[#f4e8d0]"
+                      style={{
+                        background: buildMode === m ? 'rgba(95,150,90,0.85)' : 'rgba(0,0,0,0.5)',
+                        borderColor: buildMode === m ? accent : '#5a4a28',
+                      }}
+                    >
+                      <span>{icon} {label}</span>
+                    </button>
+                  );
+                  return (
+                    <>
+                      {(hasOwn || hasAlliedPublic) && ctxBtn('repair', '🧰', 'Repair', '#8fd06a')}
+                      {hasOwn && ctxBtn('demolish', '🧨', 'Demolish', '#d6b84a')}
+                      {hasHostilePublic && ctxBtn('raid', '⚔️', 'Raid', '#d06a5f')}
+                      {localhostGod && ctxBtn('damage', '💥', 'Damage test', '#d06a5f')}
+                    </>
+                  );
+                })()}
                 <button
                   onClick={() => void publishWorld()}
                   disabled={publishStatus === 'saving' || (!buildDraftDirty && publishStatus !== 'error')}

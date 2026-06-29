@@ -1169,3 +1169,17 @@ swing (dt*3.0→dt*1.85, ~0.55s) para que cuadre con el sonido (~0.6s); el loop 
 (`bottom-16`), colapsable con ✕ → chip "👥 N nearby" para reabrir, sin obligar a elegir relación.
 **Qué se hizo:** los 4 cambios + modelo de pica en el view-space arm. `npx tsc --noEmit` limpio.
 **Commit:** _(este commit)_
+
+### 28 jun 2026 · #6 Declutter de la barra aérea (Build dropdown + acciones contextuales)
+**Pedido (humano):** La barra aérea se ensucia con tantas herramientas; fundir Wall/House (y AI) en
+un "Build" con dropdown; que Repair/Demolish/Raid no estén siempre fijos (Raid solo vs hostil).
+**Prompt sintetizado:** En `Scene3D.tsx` (vista aérea): (1) fundir Wall/House/Build-with-AI en un
+único botón **🏗️ Build** con dropdown (estado `buildMenuOpen`), resaltado verde si hay un modo de
+construcción activo. (2) Mantener **Claim land** como primario. (3) Gatear Repair/Demolish/Raid por
+contexto: Repair si tienes edificios propios o un público aliado; Demolish si tienes edificios;
+**Raid solo si hay un edificio público hostil descubierto**; damage-test solo en localhostGod. No
+se toca el modelo de clic (tool→tap) ni la lógica de raid/repair existente — solo qué botones se
+muestran. `npx tsc --noEmit` limpio.
+**Qué se hizo:** dropdown Build + Claim land + cluster contextual; `buildMenuOpen` state. **Nota:**
+el modelo "click-en-edificio → menú contextual" pleno y un 3er tipo de edificio quedan como
+iteración siguiente (tocan henrique/tipos/colliders). **Commit:** _(este commit)_
