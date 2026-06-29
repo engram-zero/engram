@@ -1299,3 +1299,16 @@ barra de HP y solo las acciones válidas: **Repair** (dañado y propio/aliado), 
 Claim land, Save World, y Damage-test solo en localhost). Selección se limpia al salir de aéreo.
 `npx tsc --noEmit` limpio.
 **Commit:** _(este commit)_
+
+### 29 jun 2026 · Pulido playtest: sparks sin cull, edificio seleccionado resaltado, labels ortho, attack hit, known issues
+**Pedido (humano):** resaltar el edificio seleccionado en aéreo (color por relación); chispas solo
+se ven en cierto ángulo; texto gigante "G1H17" al reclamar parcela; círculos múltiples bajo la
+antorcha; sonido de impacto de ataque; iniciar un log de problemas conocidos.
+**Prompt sintetizado:** (#2) `frustumCulled={false}` en los 3 `<points>` (el objeto se cull-eaba por
+bounding sphere en el origen) → chispas visibles desde cualquier ángulo. (a) `SelectionRing`
+pulsante bajo el edificio seleccionado, color por relación (dorado propio / verde-rojo-gris). (gama)
+quitar `distanceFactor` de las etiquetas `<Html>` de parcela (gigantes bajo cámara ortográfica).
+(c) ocultar el anillo de daño en piezas `block` (la antorcha apilaba círculos). (#5) cue `attack_hit`
+(`/audio/sfx/attack-hit.mp3`) al conectar un golpe. (+) `docs/KNOWN_ISSUES.md`. `npx tsc --noEmit`
+limpio.
+**Commit:** _(este commit)_

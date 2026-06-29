@@ -9,6 +9,7 @@ export type AudioCueId =
   | 'axe_chop'
   | 'mine_hit'
   | 'attack_swing'
+  | 'attack_hit'
   | 'dialogue_open'
   | 'dialogue_close'
   | 'save_success'
@@ -80,6 +81,11 @@ export const AUDIO_CUES: Record<AudioCueId, AudioCue> = {
     label: 'Player attack swing',
     src: '/audio/sfx/attack-swing.mp3',
     volume: 0.26,
+  },
+  attack_hit: {
+    label: 'Attack connects (impact on an enemy)',
+    src: '/audio/sfx/attack-hit.mp3',
+    volume: 0.3,
   },
   dialogue_open: {
     label: 'Open NPC dialogue',

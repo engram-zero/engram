@@ -1659,7 +1659,7 @@ function WoodChips() {
   });
 
   return (
-    <points ref={pointsRef} renderOrder={999}>
+    <points ref={pointsRef} renderOrder={999} frustumCulled={false}>
       <bufferGeometry>
         <bufferAttribute attach="attributes-position" args={[positions, 3]} />
         <bufferAttribute attach="attributes-color" args={[colors, 3]} />
@@ -1723,7 +1723,7 @@ function HitDust() {
   });
 
   return (
-    <points ref={pointsRef} renderOrder={999}>
+    <points ref={pointsRef} renderOrder={999} frustumCulled={false}>
       <bufferGeometry>
         <bufferAttribute attach="attributes-position" args={[positions, 3]} />
         <bufferAttribute attach="attributes-color" args={[colors, 3]} />
@@ -1795,7 +1795,7 @@ function MineDebris() {
   });
 
   return (
-    <points ref={pointsRef} renderOrder={999}>
+    <points ref={pointsRef} renderOrder={999} frustumCulled={false}>
       <bufferGeometry>
         <bufferAttribute attach="attributes-position" args={[positions, 3]} />
         <bufferAttribute attach="attributes-color" args={[colors, 3]} />
@@ -2598,12 +2598,17 @@ function DamageMarker({ b, ratio }: { b: Building; ratio: number }) {
   const color = ratio < 0.35 ? '#ff5f50' : '#ffbd66';
   return (
     <>
-      <group position={[b.x, y, b.z]}>
-        <mesh rotation={[-Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[radius, radius + 0.07, 48]} />
-          <meshBasicMaterial color={color} transparent opacity={0.72} depthWrite={false} />
-        </mesh>
-      </group>
+      {/* Voxel 'block' pieces (e.g. an AI-built torch) are small and numerous, so a
+          ground ring per block stacks into an ugly cluster of circles — skip the ring
+          for blocks and let the (aerial-only) HP bar carry the damage read. */}
+      {b.type !== 'block' && (
+        <group position={[b.x, y, b.z]}>
+          <mesh rotation={[-Math.PI / 2, 0, 0]}>
+            <ringGeometry args={[radius, radius + 0.07, 48]} />
+            <meshBasicMaterial color={color} transparent opacity={0.72} depthWrite={false} />
+          </mesh>
+        </group>
+      )}
       <BuildingHpBar b={b} ratio={ratio} />
     </>
   );
@@ -2652,6 +2657,26 @@ function RelationMarker({ b, relation }: { b: Building; relation: WalletRelation
       <mesh rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[radius, radius + 0.055, 48]} />
         <meshBasicMaterial color={style.color} transparent opacity={0.58} depthWrite={false} />
+      </mesh>
+    </group>
+  );
+}
+
+// Pulsing ground ring under the building selected in aerial, coloured by stance
+// (gold = yours, green/red/grey = allied/hostile/neutral) so you can tell which one
+// the stats card refers to.
+function SelectionRing({ b, color }: { b: Building; color: string }) {
+  const ref = useRef<THREE.Group>(null);
+  const y = getHeightAt(b.x, b.z) + 0.09;
+  const radius = b.type === 'house' ? 2.3 : b.type === 'wall' ? 1.2 : 0.5;
+  useFrame(({ clock }) => {
+    if (ref.current) ref.current.scale.setScalar(1 + Math.sin(clock.elapsedTime * 4) * 0.06);
+  });
+  return (
+    <group ref={ref} position={[b.x, y, b.z]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[radius, radius + 0.14, 48]} />
+        <meshBasicMaterial color={color} transparent opacity={0.95} depthWrite={false} toneMapped={false} />
       </mesh>
     </group>
   );
@@ -2717,7 +2742,7 @@ function ParcelOverlays({
               <ringGeometry args={[PARCEL_SIZE * 0.5 - 0.14, PARCEL_SIZE * 0.5, 4]} />
               <meshBasicMaterial color="#70d6ff" transparent opacity={0.72} depthWrite={false} />
             </mesh>
-            <Html position={[0, 1.0, 0]} center distanceFactor={16} pointerEvents="none">
+            <Html position={[0, 1.0, 0]} center pointerEvents="none">
               <span className="rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-bold text-[#9fd0e6]">{label}</span>
             </Html>
           </group>
@@ -2742,7 +2767,7 @@ function ParcelOverlays({
               <ringGeometry args={[claim.size * 0.5 - 0.08, claim.size * 0.5, 4]} />
               <meshBasicMaterial color={color} transparent opacity={own ? 0.72 : 0.45} depthWrite={false} />
             </mesh>
-            <Html position={[0, 1.15, 0]} center distanceFactor={18} pointerEvents="none">
+            <Html position={[0, 1.15, 0]} center pointerEvents="none">
               <span className="rounded bg-black/65 px-1.5 py-0.5 text-[10px] font-bold text-[#f4e8d0]">{cellLabel(claim.gx, claim.gz)}</span>
             </Html>
             <ParcelResourceCluster claim={claim} onDraftChange={onDraftChange} onToolFeedback={onToolFeedback} />
@@ -2936,16 +2961,20 @@ type SelectedBuilding =
   | { scope: 'own'; index: number; id?: string; type: BuildingType; hp: number; maxHp: number }
   | { scope: 'public'; id?: string; owner: string; type: BuildingType; hp: number; maxHp: number; relation: WalletRelation };
 
+const SELECTION_COLORS: Record<WalletRelation, string> = { neutral: '#e8e8e8', allied: '#7fd06a', hostile: '#ff5f50' };
+
 function Buildings({
   tool = null,
   onDraftChange = () => {},
   onToolFeedback = () => {},
   onSelectBuilding,
+  selected = null,
 }: {
   tool?: BuildTool | null;
   onDraftChange?: () => void;
   onToolFeedback?: (feedback: ToolFeedback) => void;
   onSelectBuilding?: (sel: SelectedBuilding) => void;
+  selected?: SelectedBuilding | null;
 }) {
   const world = useWorld();
   const publicWorld = usePublicWorld();
@@ -3027,6 +3056,9 @@ function Buildings({
               onSelectBuilding?.({ scope: 'public', id: b.id, owner: b.owner, type: b.type, hp, maxHp, relation });
             }}
           >
+            {selected?.scope === 'public' && selected.id === b.id && selected.owner === b.owner && (
+              <SelectionRing b={displayBuilding} color={SELECTION_COLORS[relation]} />
+            )}
             <PublicBuildingMesh b={displayBuilding} relation={relation} />
           </group>
         );
@@ -3072,6 +3104,9 @@ function Buildings({
               onSelectBuilding?.({ scope: 'own', index: i, id: b.id, type: b.type, hp, maxHp });
             }}
           >
+            {selected?.scope === 'own' && selected.index === i && (
+              <SelectionRing b={displayBuilding} color="#d6b84a" />
+            )}
             <BuildingMesh b={displayBuilding} />
           </group>
         );
@@ -4674,6 +4709,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     chopArmSwing.type = 'attack';
     chopArmSwing.phase = 1;
     void play('attack_swing');
+    void play('attack_hit');
     enemy.hp -= 25;
     if (enemy.hp <= 0) enemy.dead = true;
     // Prompt 16 combat FX: hit-flash, knockback, dust burst
@@ -4870,6 +4906,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
       chopArmSwing.type = 'attack';
       chopArmSwing.phase = 1;
       void play('attack_swing');
+      void play('attack_hit');
       enemy.hp -= 25;
       if (enemy.hp <= 0) {
         enemy.dead = true;
@@ -5162,7 +5199,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
           {explorable && <ParcelOverlays claimMode={buildMode === 'claim'} networkType={networkType} onDraftChange={markBuildDraftDirty} onToolFeedback={showToolFeedback} />}
           <River />
           <Fireflies active={dn.torchesLit} />
-          {explorable && <Buildings tool={buildMode} onDraftChange={markBuildDraftDirty} onToolFeedback={showToolFeedback} onSelectBuilding={setSelectedBuilding} />}
+          {explorable && <Buildings tool={buildMode} onDraftChange={markBuildDraftDirty} onToolFeedback={showToolFeedback} onSelectBuilding={setSelectedBuilding} selected={view === 'aerial' ? selectedBuilding : null} />}
           {explorable && aiPreview && aiOrigin && <AIPreviewGhosts pieces={aiPreview} origin={aiOrigin} />}
           {explorable && <EnemySpawner />}
           {/* Prompt 16: particle FX & view-space arm — always alive while exploring */}
