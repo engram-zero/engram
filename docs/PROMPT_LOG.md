@@ -1285,3 +1285,17 @@ el `useEffect` con deps `[fpExploring]` → intervalo estable, 1 swing/sonido ca
 `resolveCollision` ahora también colisiona `getPublicWorldSnapshot().buildings` (muros radiales +
 casas huecas). (3) `PublicRelationsPanel` arranca replegado (`open=false`). `npx tsc --noEmit` limpio.
 **Commit:** _(este commit)_
+
+### 29 jun 2026 · Menú contextual de edificio (tarjeta fija) + quitar Repair/Demolish/Raid de la barra
+**Pedido (humano):** Quitar Repair/Demolish/Raid del panel derecho; en aéreo, click izquierdo en un
+edificio lo selecciona y muestra sus stats + acciones válidas en una tarjeta fija.
+**Prompt sintetizado (Scene3D.tsx):** `Buildings` recibe `onSelectBuilding`; el click en edificio
+(propio o público) ya no depende de un tool: selecciona y reporta `{scope, index/id, owner, type,
+hp, maxHp, relation}` (damage-test localhost sigue como acción). El componente principal guarda
+`selectedBuilding` y renderiza una **tarjeta fija** (abajo-derecha, aéreo) con tipo, dueño/relación,
+barra de HP y solo las acciones válidas: **Repair** (dañado y propio/aliado), **Demolish** (propio),
+**Raid** (público hostil), reusando `repairBuilding`/`removeBuilding`/`recordRepairEvent`/
+`recordRaidEvent`. Se quitan los botones fijos Repair/Demolish/Raid de la barra (queda Build ▾,
+Claim land, Save World, y Damage-test solo en localhost). Selección se limpia al salir de aéreo.
+`npx tsc --noEmit` limpio.
+**Commit:** _(este commit)_

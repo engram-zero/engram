@@ -2932,54 +2932,23 @@ async function claimParcelFlow(
   }
 }
 
+type SelectedBuilding =
+  | { scope: 'own'; index: number; id?: string; type: BuildingType; hp: number; maxHp: number }
+  | { scope: 'public'; id?: string; owner: string; type: BuildingType; hp: number; maxHp: number; relation: WalletRelation };
+
 function Buildings({
   tool = null,
   onDraftChange = () => {},
   onToolFeedback = () => {},
+  onSelectBuilding,
 }: {
   tool?: BuildTool | null;
   onDraftChange?: () => void;
   onToolFeedback?: (feedback: ToolFeedback) => void;
+  onSelectBuilding?: (sel: SelectedBuilding) => void;
 }) {
   const world = useWorld();
   const publicWorld = usePublicWorld();
-  const handlePublicBuildingClick = (b: (Building & { owner?: string; raidEvents?: { id: string }[]; repairEvents?: { id: string }[] }), relation: WalletRelation) => {
-    if (tool !== 'raid' && tool !== 'repair') return;
-    if (!b.owner || !b.id) {
-      onToolFeedback({ text: 'This building is missing maintenance metadata.', tone: 'bad' });
-      return;
-    }
-    if (tool === 'repair') {
-      if (relation !== 'allied') {
-        onToolFeedback({ text: 'Mark that wallet Ally before repairing their buildings.', tone: 'info' });
-        return;
-      }
-      const before = hpOf(b);
-      if (before.hp >= before.maxHp) {
-        onToolFeedback({ text: `Already healthy (${before.hp}/${before.maxHp} HP).`, tone: 'info' });
-        return;
-      }
-      const result = recordRepairEvent(b.owner, b.id, Math.min(before.maxHp - before.hp, repairHealForInventory()));
-      if (!result.ok) {
-        onToolFeedback({ text: result.reason ?? 'Repair failed.', tone: 'bad' });
-        return;
-      }
-      onDraftChange();
-      onToolFeedback({ text: `Repair event queued: +${result.event?.heal ?? 0} HP (-${REPAIR_WOOD_COST} wood). Save World to publish.`, tone: 'good' });
-      return;
-    }
-    if (relation !== 'hostile') {
-      onToolFeedback({ text: 'Mark that wallet Hostile before raiding.', tone: 'info' });
-      return;
-    }
-    const result = recordRaidEvent(b.owner, b.id);
-    if (!result.ok) {
-      onToolFeedback({ text: result.reason ?? 'Raid failed.', tone: 'bad' });
-      return;
-    }
-    onDraftChange();
-    onToolFeedback({ text: `Raid event queued: -${result.event?.damage ?? 0} HP (-${RAID_STONE_COST} stone). Save World to publish.`, tone: 'bad' });
-  };
 
   const handleOwnBuildingClick = (index: number, displayBuilding?: Building) => {
     if (tool === 'demolish') {
@@ -3053,9 +3022,9 @@ function Buildings({
           <group
             key={`public-${b.owner}-${b.id ?? i}`}
             onClick={(e) => {
-              if (tool !== 'raid' && tool !== 'repair') return;
               e.stopPropagation();
-              handlePublicBuildingClick(displayBuilding, relation);
+              const { hp, maxHp } = hpOf(displayBuilding);
+              onSelectBuilding?.({ scope: 'public', id: b.id, owner: b.owner, type: b.type, hp, maxHp, relation });
             }}
           >
             <PublicBuildingMesh b={displayBuilding} relation={relation} />
@@ -3094,9 +3063,13 @@ function Buildings({
           <group
             key={b.id ?? i}
             onClick={(e) => {
-              if (tool !== 'demolish' && tool !== 'repair' && tool !== 'damage') return;
               e.stopPropagation();
-              handleOwnBuildingClick(i, displayBuilding);
+              if (tool === 'damage' && isLocalhostFreeBuildWallet()) {
+                handleOwnBuildingClick(i, displayBuilding);
+                return;
+              }
+              const { hp, maxHp } = hpOf(displayBuilding);
+              onSelectBuilding?.({ scope: 'own', index: i, id: b.id, type: b.type, hp, maxHp });
             }}
           >
             <BuildingMesh b={displayBuilding} />
@@ -4338,11 +4311,15 @@ export default function Scene3D({ memories = null, active = null, talking = fals
   const [touchMove, setTouchMove] = useState<MovementInput>(IDLE_MOVEMENT);
   const [buildMode, setBuildMode] = useState<BuildTool | null>(null);
   const [buildMenuOpen, setBuildMenuOpen] = useState(false);
+  // Aerial: a building selected by clicking it → its stats + actions show in a fixed
+  // card (instead of always-on Repair/Demolish/Raid tools cluttering the toolbar).
+  const [selectedBuilding, setSelectedBuilding] = useState<SelectedBuilding | null>(null);
   // Building is aerial-only (needs the free cursor); leave it when not in aerial.
   useEffect(() => {
     if (!(exploring && view === 'aerial')) {
       setBuildMode(null);
       setBuildMenuOpen(false);
+      setSelectedBuilding(null);
     }
   }, [exploring, view]);
   const [flash, setFlash] = useState(false);
@@ -5185,7 +5162,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
           {explorable && <ParcelOverlays claimMode={buildMode === 'claim'} networkType={networkType} onDraftChange={markBuildDraftDirty} onToolFeedback={showToolFeedback} />}
           <River />
           <Fireflies active={dn.torchesLit} />
-          {explorable && <Buildings tool={buildMode} onDraftChange={markBuildDraftDirty} onToolFeedback={showToolFeedback} />}
+          {explorable && <Buildings tool={buildMode} onDraftChange={markBuildDraftDirty} onToolFeedback={showToolFeedback} onSelectBuilding={setSelectedBuilding} />}
           {explorable && aiPreview && aiOrigin && <AIPreviewGhosts pieces={aiPreview} origin={aiOrigin} />}
           {explorable && <EnemySpawner />}
           {/* Prompt 16: particle FX & view-space arm — always alive while exploring */}
@@ -5243,6 +5220,87 @@ export default function Scene3D({ memories = null, active = null, talking = fals
           {aerialExploring && (
             <>
               <PublicRelationsPanel world={world} onRelationChange={markBuildDraftDirty} />
+              {selectedBuilding && (() => {
+                const sel = selectedBuilding;
+                const ratio = sel.maxHp > 0 ? sel.hp / sel.maxHp : 1;
+                const hpColor = ratio < 0.35 ? '#ff5f50' : ratio < 0.7 ? '#ffbd66' : '#8fd06a';
+                const damaged = sel.hp < sel.maxHp;
+                const isOwn = sel.scope === 'own';
+                const relation = sel.scope === 'public' ? sel.relation : 'neutral';
+                const canRepair = damaged && (isOwn || relation === 'allied');
+                const act = (fn: () => void) => { fn(); };
+                const repairSel = () => {
+                  if (isOwn) {
+                    const b = getWorld().buildings[sel.index];
+                    if (!b) { setSelectedBuilding(null); return; }
+                    const stored = hpOf(b);
+                    if (stored.hp >= stored.maxHp) { showToolFeedback({ text: `Already healthy (${stored.hp}/${stored.maxHp} HP).`, tone: 'info' }); return; }
+                    if (!isLocalhostFreeBuildWallet() && getWorld().inventory.wood < REPAIR_WOOD_COST) { showToolFeedback({ text: `Need ${REPAIR_WOOD_COST} wood to repair.`, tone: 'bad' }); return; }
+                    if (repairBuilding(sel.index)) {
+                      const after = hpOf(getWorld().buildings[sel.index]);
+                      markBuildDraftDirty();
+                      showToolFeedback({ text: `Repaired +${after.hp - stored.hp} HP · ${after.hp}/${after.maxHp}.`, tone: 'good' });
+                      setSelectedBuilding({ ...sel, hp: after.hp, maxHp: after.maxHp });
+                    }
+                  } else {
+                    if (relation !== 'allied') { showToolFeedback({ text: 'Mark that wallet Ally before repairing their buildings.', tone: 'info' }); return; }
+                    if (!sel.id) return;
+                    const result = recordRepairEvent(sel.owner, sel.id, Math.min(sel.maxHp - sel.hp, repairHealForInventory()));
+                    if (!result.ok) { showToolFeedback({ text: result.reason ?? 'Repair failed.', tone: 'bad' }); return; }
+                    markBuildDraftDirty();
+                    showToolFeedback({ text: `Repair queued: +${result.event?.heal ?? 0} HP. Save World to publish.`, tone: 'good' });
+                    setSelectedBuilding(null);
+                  }
+                };
+                const demolishSel = () => {
+                  if (!isOwn) return;
+                  removeBuilding(sel.index);
+                  markBuildDraftDirty();
+                  showToolFeedback({ text: 'Building demolished. Half its wood refunded.', tone: 'info' });
+                  setSelectedBuilding(null);
+                };
+                const raidSel = () => {
+                  if (sel.scope !== 'public') return;
+                  if (relation !== 'hostile') { showToolFeedback({ text: 'Mark that wallet Hostile before raiding.', tone: 'info' }); return; }
+                  if (!sel.id) return;
+                  const result = recordRaidEvent(sel.owner, sel.id);
+                  if (!result.ok) { showToolFeedback({ text: result.reason ?? 'Raid failed.', tone: 'bad' }); return; }
+                  markBuildDraftDirty();
+                  showToolFeedback({ text: `Raid queued: -${result.event?.damage ?? 0} HP. Save World to publish.`, tone: 'bad' });
+                  setSelectedBuilding({ ...sel, hp: Math.max(0, sel.hp - (result.event?.damage ?? 0)) });
+                };
+                return (
+                  <div className="pointer-events-auto absolute bottom-4 right-4 z-20 w-60 rounded-md border border-[#5a4a28] bg-black/75 p-3 text-xs text-[#f4e8d0] shadow-xl backdrop-blur-sm">
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="font-semibold capitalize text-[#d6b84a]">{sel.type}</span>
+                      <button type="button" onClick={() => setSelectedBuilding(null)} aria-label="Close" className="px-1 text-[#f4e8d0]/60 hover:text-[#f4e8d0]">✕</button>
+                    </div>
+                    <div className="mb-1 text-[11px] text-[#f4e8d0]/70">
+                      {isOwn ? 'Your building' : <>Owner <span className="font-mono">{sel.owner.slice(0, 6)}…{sel.owner.slice(-4)}</span> · <span style={{ color: RELATION_STYLES[relation]?.color }}>{relation}</span></>}
+                    </div>
+                    <div className="mb-2 flex items-center gap-2">
+                      <span>HP {Math.round(sel.hp)}/{sel.maxHp}</span>
+                      <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-black/55">
+                        <span className="block h-full rounded-full" style={{ width: `${Math.max(4, ratio * 100)}%`, background: hpColor }} />
+                      </span>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      {canRepair && (
+                        <button type="button" onClick={() => act(repairSel)} className="rounded border border-[#6a8a4a] bg-[#1a2410]/70 px-2 py-1.5 text-left hover:border-[#8fd06a]">🧰 Repair{isOwn ? ` (${REPAIR_WOOD_COST} wood)` : ' (ally)'}</button>
+                      )}
+                      {isOwn && (
+                        <button type="button" onClick={() => act(demolishSel)} className="rounded border border-[#8a6a3a] bg-[#241a10]/70 px-2 py-1.5 text-left hover:border-[#d6b84a]">🧨 Demolish (½ wood back)</button>
+                      )}
+                      {sel.scope === 'public' && relation === 'hostile' && (
+                        <button type="button" onClick={() => act(raidSel)} className="rounded border border-[#8a3a3a] bg-[#240f0f]/70 px-2 py-1.5 text-left hover:border-[#d06a5f]">⚔️ Raid ({RAID_STONE_COST} stone)</button>
+                      )}
+                      {!canRepair && !isOwn && relation !== 'hostile' && (
+                        <span className="text-[11px] text-[#f4e8d0]/55">Mark this wallet Ally (repair) or Hostile (raid) in Nearby wallets.</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
               <div className="absolute top-32 right-4 z-10 flex flex-col items-end gap-1.5">
                 {/* Build: a single dropdown folds Wall / House / AI so the bar isn't
                     cluttered with placement tools. */}
@@ -5306,35 +5364,21 @@ export default function Scene3D({ memories = null, active = null, talking = fals
                 >
                   <span>🗺️ Claim land</span>
                 </button>
-                {/* Repair / Demolish / Raid only appear when there's actually a valid
-                    target — keeps the bar clean and surfaces Raid only vs a hostile. */}
-                {(() => {
-                  const rel = (o?: string) => world.relations[(o ?? '').toLowerCase()] ?? 'neutral';
-                  const hasOwn = world.buildings.length > 0;
-                  const hasAlliedPublic = publicWorld.buildings.some((b) => rel(b.owner) === 'allied');
-                  const hasHostilePublic = publicWorld.buildings.some((b) => rel(b.owner) === 'hostile');
-                  const ctxBtn = (m: BuildTool, icon: string, label: string, accent: string) => (
-                    <button
-                      key={m}
-                      onClick={() => setBuildMode((cur) => (cur === m ? null : m))}
-                      className="inline-flex w-44 items-center justify-between rounded-md border px-3 py-1.5 text-sm text-[#f4e8d0]"
-                      style={{
-                        background: buildMode === m ? 'rgba(95,150,90,0.85)' : 'rgba(0,0,0,0.5)',
-                        borderColor: buildMode === m ? accent : '#5a4a28',
-                      }}
-                    >
-                      <span>{icon} {label}</span>
-                    </button>
-                  );
-                  return (
-                    <>
-                      {(hasOwn || hasAlliedPublic) && ctxBtn('repair', '🧰', 'Repair', '#8fd06a')}
-                      {hasOwn && ctxBtn('demolish', '🧨', 'Demolish', '#d6b84a')}
-                      {hasHostilePublic && ctxBtn('raid', '⚔️', 'Raid', '#d06a5f')}
-                      {localhostGod && ctxBtn('damage', '💥', 'Damage test', '#d06a5f')}
-                    </>
-                  );
-                })()}
+                {/* Repair / Demolish / Raid are no longer permanent tools — click a
+                    building to select it and act from its stats card. Damage-test
+                    stays here for localhost only. */}
+                {localhostGod && (
+                  <button
+                    onClick={() => setBuildMode((cur) => (cur === 'damage' ? null : 'damage'))}
+                    className="inline-flex w-44 items-center justify-between rounded-md border px-3 py-1.5 text-sm text-[#f4e8d0]"
+                    style={{
+                      background: buildMode === 'damage' ? 'rgba(95,150,90,0.85)' : 'rgba(0,0,0,0.5)',
+                      borderColor: buildMode === 'damage' ? '#d06a5f' : '#5a4a28',
+                    }}
+                  >
+                    <span>💥 Damage test</span>
+                  </button>
+                )}
                 <button
                   onClick={() => void publishWorld()}
                   disabled={publishStatus === 'saving' || (!buildDraftDirty && publishStatus !== 'error')}
