@@ -1029,7 +1029,30 @@ function AerialRig({
       zoom.current = THREE.MathUtils.clamp(zoom.current - e.deltaY * 0.02, 12, 55);
     };
     window.addEventListener('wheel', onWheel, { passive: true });
-    return () => window.removeEventListener('wheel', onWheel);
+
+    // Pinch-to-zoom on touch (two fingers): spreading fingers = zoom in, pinching
+    // together = zoom out — the standard mobile gesture, since there's no wheel.
+    let pinchPrev: number | null = null;
+    const pinchDist = (e: TouchEvent) => {
+      const a = e.touches[0], b = e.touches[1];
+      return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length !== 2) { pinchPrev = null; return; }
+      const d = pinchDist(e);
+      if (pinchPrev !== null) {
+        zoom.current = THREE.MathUtils.clamp(zoom.current + (d - pinchPrev) * 0.06, 12, 55);
+      }
+      pinchPrev = d;
+    };
+    const onTouchEnd = (e: TouchEvent) => { if (e.touches.length < 2) pinchPrev = null; };
+    window.addEventListener('touchmove', onTouchMove, { passive: true });
+    window.addEventListener('touchend', onTouchEnd, { passive: true });
+    return () => {
+      window.removeEventListener('wheel', onWheel);
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend', onTouchEnd);
+    };
   }, [enabled]);
 
   useFrame((_, dtRaw) => {
@@ -4964,8 +4987,14 @@ export default function Scene3D({ memories = null, active = null, talking = fals
   }, [exploring, play]);
   
   // Sync player HP to UI and handle death / respawn
+  const prevHpRef = useRef(dynamicPlayerState.hp);
   useEffect(() => {
     const interval = setInterval(() => {
+      const hp = dynamicPlayerState.hp;
+      // Hurt / death audio (rotating hurt variants so it isn't monotonous).
+      if (hp <= 0 && prevHpRef.current > 0) void play('player_death');
+      else if (hp < prevHpRef.current && hp > 0) void play('player_hurt');
+      prevHpRef.current = hp;
       // Sync HP display
       if (dynamicPlayerState.hp !== playerHp && !dynamicPlayerState.dead) {
         setPlayerHp(Math.max(0, dynamicPlayerState.hp));
@@ -4977,7 +5006,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
       }
     }, 100);
     return () => clearInterval(interval);
-  }, [playerHp, playerDead]);
+  }, [playerHp, playerDead, play]);
 
   // Respawn countdown tick
   useEffect(() => {
@@ -5087,6 +5116,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
           dpr={[1, 1.75]}
           camera={{ position: [0, 3.1, 9], fov: 60 }}
           gl={{ antialias: true, toneMappingExposure: forceBrightTestLighting ? 2.2 : 1.9 }}
+          onPointerMissed={() => setSelectedBuilding(null)}
         >
           <color attach="background" args={[forceBrightTestLighting ? '#a8caee' : dn.bg]} />
           {!forceBrightTestLighting && <fog attach="fog" args={[dn.fog, 30, 110]} />}

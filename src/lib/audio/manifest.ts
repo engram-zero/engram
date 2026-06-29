@@ -10,6 +10,8 @@ export type AudioCueId =
   | 'mine_hit'
   | 'attack_swing'
   | 'attack_hit'
+  | 'player_hurt'
+  | 'player_death'
   | 'dialogue_open'
   | 'dialogue_close'
   | 'save_success'
@@ -86,6 +88,22 @@ export const AUDIO_CUES: Record<AudioCueId, AudioCue> = {
     label: 'Attack connects (impact on an enemy)',
     src: '/audio/sfx/attack-hit.mp3',
     volume: 0.3,
+  },
+  player_hurt: {
+    label: 'Player takes a hit (rotates variants so it isn’t monotonous)',
+    src: [
+      '/audio/sfx/player-hurt-1.mp3',
+      '/audio/sfx/player-hurt-2.mp3',
+      '/audio/sfx/player-hurt-3.mp3',
+      '/audio/sfx/player-hurt-4.mp3',
+      '/audio/sfx/player-hurt-5.mp3',
+    ],
+    volume: 0.34,
+  },
+  player_death: {
+    label: 'Player dies (HP reaches 0)',
+    src: '/audio/sfx/player-mort.mp3',
+    volume: 0.42,
   },
   dialogue_open: {
     label: 'Open NPC dialogue',

@@ -1312,3 +1312,15 @@ quitar `distanceFactor` de las etiquetas `<Html>` de parcela (gigantes bajo cám
 (`/audio/sfx/attack-hit.mp3`) al conectar un golpe. (+) `docs/KNOWN_ISSUES.md`. `npx tsc --noEmit`
 limpio.
 **Commit:** _(este commit)_
+
+### 29 jun 2026 · Pulido: deselect en vacío, audio hurt/death variado, build más caro, pinch móvil
+**Pedido (humano):** (1) click izquierdo en vacío deselecciona el edificio; (3) cablear hurt con 5
+variantes + player-mort al morir (los sfx viejos no servían); (2) subir costo de muro/casa; (beta)
+pinch-zoom en aéreo móvil.
+**Prompt sintetizado:** (1) `onPointerMissed` del Canvas → `setSelectedBuilding(null)`. (3) cues
+`player_hurt` (array de player-hurt-1..5, rota por variedad) y `player_death` (player-mort.mp3);
+en el sync de HP, comparar con `prevHpRef` → hurt al bajar HP, death al llegar a 0. (2) `BUILD_COST`
+wall 3→6, house 10→24 (block 1). (beta) en el efecto de zoom aéreo, listeners `touchmove`/`touchend`
+de dos dedos: delta de distancia → `zoom.current` (separar=zoom in, juntar=zoom out). `npx tsc
+--noEmit` limpio.
+**Commit:** _(este commit)_
