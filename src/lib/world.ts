@@ -15,9 +15,9 @@
 //     NOT cross-device, NOT on-chain).
 
 import { useSyncExternalStore } from 'react';
-import { BLOCK_SCALE_MAX, BLOCK_SCALE_MIN, BLOCK_UNIT, type EcosystemState, type OreType, type ParcelClaim, type ParcelRentEvent, type RaidEvent, type RepairEvent, type ResourceType, type WalletRelation, type WorldState, type Building, type BuildingType } from '@/lib/types';
+import { BLOCK_SCALE_MAX, BLOCK_SCALE_MIN, BLOCK_UNIT, type DemonSiegeEvent, type EcosystemState, type OreType, type ParcelClaim, type ParcelRentEvent, type RaidEvent, type RepairEvent, type ResourceType, type WalletRelation, type WorldState, type Building, type BuildingType } from '@/lib/types';
 
-export type { EcosystemState, OreType, ParcelClaim, ParcelRentEvent, RaidEvent, RepairEvent, ResourceType, WalletRelation, WorldState, Building, BuildingType } from '@/lib/types';
+export type { DemonSiegeEvent, EcosystemState, OreType, ParcelClaim, ParcelRentEvent, RaidEvent, RepairEvent, ResourceType, WalletRelation, WorldState, Building, BuildingType } from '@/lib/types';
 
 /** How much wood the player can carry before they must use/drop some. Raised to
  * support AI-built structures and the pricier builds near the village centre. */
@@ -33,11 +33,13 @@ const MAX_BUILD_COORD = 150;
 const MAX_BLOCK_Y = 12;
 const MAX_RAID_EVENTS = 120;
 const MAX_REPAIR_EVENTS = 160;
+const MAX_DEMON_SIEGE_EVENTS = 160;
 const MAX_PARCEL_CLAIMS = 48;
 const MAX_PARCEL_RENT_EVENTS = 160;
 const MAX_DEPLETED_PARCEL_RESOURCES = 512;
 const RAID_EVENT_TTL_MS = 1000 * 60 * 60 * 24 * 7;
 const REPAIR_EVENT_TTL_MS = 1000 * 60 * 60 * 24 * 14;
+const DEMON_SIEGE_EVENT_TTL_MS = 1000 * 60 * 60 * 24 * 14;
 
 export const EMPTY_WORLD: WorldState = {
   inventory: { wood: 0, stone: 0, coin: 0, silver: 0, gold: 0 },
@@ -49,6 +51,7 @@ export const EMPTY_WORLD: WorldState = {
   repairKits: 0,
   raidEvents: [],
   repairEvents: [],
+  siegeEvents: [],
   parcelClaims: [],
   parcelRentEvents: [],
   parcelRentCollected: [],
@@ -96,6 +99,11 @@ export const REPAIR_KIT_HEAL = 60;
 export const RAID_STONE_COST = 2;
 export const RAID_BASE_DAMAGE = 18;
 export const RAID_COOLDOWN_MS = 1000 * 60 * 10;
+export const DEMON_SIEGE_DAMAGE = 4;
+export const DEMON_SIEGE_COOLDOWN_MS = 1000 * 15;
+export const DEMON_SIEGE_WINDOW_MS = 1000 * 60 * 10;
+export const DEMON_SIEGE_WINDOW_DAMAGE_CAP = 24;
+export const DEMON_SIEGE_SAFE_PHASE_MS = 1000 * 60 * 2;
 export const PARCEL_SIZE = 18;
 export const PARCEL_MIN_RADIUS = 26;
 export const PARCEL_BUILD_RENT_COIN = 2;
@@ -308,6 +316,38 @@ function normalizeRepairEvents(raw: unknown): RepairEvent[] {
     });
   }
   return events.filter((event) => event.buildingId).sort((a, b) => b.at - a.at).slice(0, MAX_REPAIR_EVENTS);
+}
+
+function normalizeDemonSiegeEvents(raw: unknown): DemonSiegeEvent[] {
+  if (!Array.isArray(raw)) return [];
+  const now = Date.now();
+  const events: DemonSiegeEvent[] = [];
+  for (const value of raw) {
+    if (!value || typeof value !== 'object') continue;
+    const p = value as Record<string, unknown>;
+    const owner = typeof p.owner === 'string' ? p.owner.toLowerCase() : '';
+    if (!/^0x[a-f0-9]{40}$/.test(owner)) continue;
+    const at = Math.round(Number(p.at ?? 0));
+    if (!Number.isFinite(at) || at <= 0 || at > now + 1000 * 60 * 10) continue;
+    if (now - at > DEMON_SIEGE_EVENT_TTL_MS) continue;
+    const windowStartedAt = Math.round(Number(p.windowStartedAt ?? demonSiegeWindowStart(at)));
+    const rawZone = typeof p.zone === 'string' ? p.zone : undefined;
+    const zone = rawZone && ['north_forest', 'riverlands', 'east_hills', 'south_fields', 'west_grove'].includes(rawZone)
+      ? rawZone as DemonSiegeEvent['zone']
+      : undefined;
+    events.push({
+      id: cleanId(p.id, createId('siege')),
+      owner,
+      buildingId: cleanId(p.buildingId, ''),
+      damage: Math.max(1, Math.min(DEMON_SIEGE_DAMAGE, Math.round(Number(p.damage ?? DEMON_SIEGE_DAMAGE)))),
+      at,
+      windowStartedAt,
+      zone,
+      source: 'demon',
+      capped: Boolean(p.capped),
+    });
+  }
+  return events.filter((event) => event.buildingId).sort((a, b) => b.at - a.at).slice(0, MAX_DEMON_SIEGE_EVENTS);
 }
 
 export function parcelGridAt(x: number, z: number): { gx: number; gz: number } {
@@ -626,6 +666,7 @@ export function normalizeWorldState(raw: unknown): WorldState {
     repairKits: Math.max(0, Math.round(Number(p?.repairKits ?? 0))),
     raidEvents: normalizeRaidEvents(p?.raidEvents),
     repairEvents: normalizeRepairEvents(p?.repairEvents),
+    siegeEvents: normalizeDemonSiegeEvents(p?.siegeEvents),
     parcelClaims: normalizeParcelClaims(p?.parcelClaims),
     parcelRentEvents: normalizeParcelRentEvents(p?.parcelRentEvents),
     parcelRentCollected: normalizeCollectedRentIds(p?.parcelRentCollected),
@@ -647,6 +688,7 @@ export function cloneWorldState(value: WorldState = EMPTY_WORLD): WorldState {
     repairKits: value.repairKits,
     raidEvents: value.raidEvents.map((event) => ({ ...event })),
     repairEvents: value.repairEvents.map((event) => ({ ...event })),
+    siegeEvents: value.siegeEvents.map((event) => ({ ...event })),
     parcelClaims: value.parcelClaims.map((claim) => ({ ...claim })),
     parcelRentEvents: value.parcelRentEvents.map((event) => ({ ...event })),
     parcelRentCollected: [...value.parcelRentCollected],
@@ -1039,6 +1081,95 @@ export function collectParcelRentIncome(events: ParcelRentEvent[]): { collected:
     parcelRentCollected: [...payable.map((event) => event.id), ...state.parcelRentCollected].slice(0, MAX_PARCEL_RENT_EVENTS),
   });
   return { collected, count: payable.length };
+}
+
+export function demonSiegeWindowStart(at = Date.now()): number {
+  return Math.floor(at / DEMON_SIEGE_WINDOW_MS) * DEMON_SIEGE_WINDOW_MS;
+}
+
+export function demonSiegeStatus(at = Date.now()): {
+  open: boolean;
+  windowStartedAt: number;
+  nextOpenAt: number;
+  damagePerHit: number;
+  damageCap: number;
+  cooldownMs: number;
+} {
+  const windowStartedAt = demonSiegeWindowStart(at);
+  const phase = at - windowStartedAt;
+  const open = phase >= DEMON_SIEGE_SAFE_PHASE_MS;
+  return {
+    open,
+    windowStartedAt,
+    nextOpenAt: open ? windowStartedAt + DEMON_SIEGE_WINDOW_MS + DEMON_SIEGE_SAFE_PHASE_MS : windowStartedAt + DEMON_SIEGE_SAFE_PHASE_MS,
+    damagePerHit: DEMON_SIEGE_DAMAGE,
+    damageCap: DEMON_SIEGE_WINDOW_DAMAGE_CAP,
+    cooldownMs: DEMON_SIEGE_COOLDOWN_MS,
+  };
+}
+
+export function latestDemonSiegeAgainst(owner: string, buildingId: string): DemonSiegeEvent | null {
+  const target = owner.toLowerCase();
+  return state.siegeEvents
+    .filter((event) => event.owner === target && event.buildingId === buildingId)
+    .sort((a, b) => b.at - a.at)[0] ?? null;
+}
+
+export function demonSiegeDamageInWindow(owner: string, windowStartedAt: number): number {
+  const target = owner.toLowerCase();
+  return state.siegeEvents
+    .filter((event) => event.owner === target && event.windowStartedAt === windowStartedAt)
+    .reduce((sum, event) => sum + event.damage, 0);
+}
+
+export function recordDemonSiegeHit(
+  buildingIndex: number,
+  options: { zone?: DemonSiegeEvent['zone'] } = {}
+): { ok: boolean; reason?: string; event?: DemonSiegeEvent; building?: Building; nextOpenAt?: number } {
+  const owner = wallet?.toLowerCase();
+  if (!owner) return { ok: false, reason: 'Connect a wallet before demon sieges can be recorded.' };
+  const built = state.buildings[buildingIndex];
+  if (!built) return { ok: false, reason: 'Missing building.' };
+  const maxHp = built.maxHp ?? built.hp ?? 0;
+  const hp = built.hp ?? maxHp;
+  if (!built.id || maxHp <= 0 || hp <= 0) return { ok: false, reason: 'This building is already a repairable ruin.' };
+
+  const now = Date.now();
+  const status = demonSiegeStatus(now);
+  if (!status.open) return { ok: false, reason: 'Village wards are holding for this window.', nextOpenAt: status.nextOpenAt };
+
+  const previous = latestDemonSiegeAgainst(owner, built.id);
+  if (previous && now - previous.at < DEMON_SIEGE_COOLDOWN_MS) {
+    return { ok: false, reason: 'Demon siege cooldown is still active.' };
+  }
+
+  const windowDamage = demonSiegeDamageInWindow(owner, status.windowStartedAt);
+  const remaining = Math.max(0, DEMON_SIEGE_WINDOW_DAMAGE_CAP - windowDamage);
+  if (remaining <= 0) {
+    return { ok: false, reason: 'Demon damage cap reached for this window.' };
+  }
+
+  const damage = Math.max(1, Math.min(DEMON_SIEGE_DAMAGE, remaining, hp));
+  const nextBuilding = { ...built, maxHp, hp: Math.max(0, hp - damage) };
+  const event: DemonSiegeEvent = {
+    id: createId('siege'),
+    owner,
+    buildingId: built.id,
+    damage,
+    at: now,
+    windowStartedAt: status.windowStartedAt,
+    zone: options.zone,
+    source: 'demon',
+    capped: damage < DEMON_SIEGE_DAMAGE || remaining <= DEMON_SIEGE_DAMAGE,
+  };
+  const newBuildings = [...state.buildings];
+  newBuildings[buildingIndex] = nextBuilding;
+  commit({
+    ...state,
+    buildings: newBuildings,
+    siegeEvents: [event, ...state.siegeEvents].slice(0, MAX_DEMON_SIEGE_EVENTS),
+  });
+  return { ok: true, event, building: nextBuilding };
 }
 
 export function raidDamageForWeapon(weaponLevel = 0): number {

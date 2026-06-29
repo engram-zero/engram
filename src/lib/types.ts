@@ -130,6 +130,27 @@ export interface RepairEvent {
   at: number;
 }
 
+export interface DemonSiegeEvent {
+  /** Stable event ID inside the owner's world bundle. */
+  id: string;
+  /** Wallet whose building was damaged by the world simulation. */
+  owner: string;
+  /** Target `Building.id` in the owner's world bundle. */
+  buildingId: string;
+  /** HP removed from the owner's persisted building health. */
+  damage: number;
+  /** Epoch ms when the demon hit landed. */
+  at: number;
+  /** Start of the fairness window this hit counted against. */
+  windowStartedAt: number;
+  /** Nature-agent zone that was applying pressure, if known. */
+  zone?: NatureZoneId;
+  /** Always `demon` for now; leaves room for wolves/blight later. */
+  source: 'demon';
+  /** True when the hit was trimmed by the per-window damage cap. */
+  capped: boolean;
+}
+
 export interface ParcelClaim {
   /** Stable grid parcel ID, e.g. `p:-1:2`. */
   id: string;
@@ -201,6 +222,8 @@ export interface WorldState {
   raidEvents: RaidEvent[];
   /** Public-world maintenance events authored by this wallet. */
   repairEvents: RepairEvent[];
+  /** Local ecosystem attacks against this wallet's own buildings. */
+  siegeEvents: DemonSiegeEvent[];
   /** Land parcels this wallet has claimed. */
   parcelClaims: ParcelClaim[];
   /** Outgoing rent/commission events this wallet paid on other players' parcels. */

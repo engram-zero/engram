@@ -62,12 +62,14 @@ import {
   recordParcelRentEvent,
   collectParcelRentIncome,
   damageBuilding,
+  recordDemonSiegeHit,
   recordRaidEvent,
   recordEnemyKill,
   setWalletRelation,
   BUILD_COST,
   BUILD_RADIUS,
   RAID_STONE_COST,
+  DEMON_SIEGE_COOLDOWN_MS,
   REPAIR_WOOD_COST,
   PARCEL_BUILD_RENT_COIN,
   PARCEL_GATHER_RENT_COIN,
@@ -80,6 +82,7 @@ import {
   type WorldState,
   type BuildingType,
   type Building,
+  type DemonSiegeEvent,
 } from '@/lib/world';
 import { useEngramAudio } from '@/context/AudioContext';
 import type { AudioCueId } from '@/lib/audio/manifest';
@@ -135,7 +138,7 @@ export const dynamicNpcState: Record<NPCName, { x: number; z: number; targetX: n
   sable: { x: NPC_POS.sable[0], z: NPC_POS.sable[2], targetX: NPC_POS.sable[0], targetZ: NPC_POS.sable[2], timer: 0, speed: 0.7, hp: 100, maxHp: 100, knockedOut: false, reviveTimer: 0, attackTimer: 0 },
 };
 
-export const dynamicEnemyState: Record<string, { x: number; z: number; speed: number; dead: boolean; hp: number; maxHp: number; attackTimer: number }> = {};
+export const dynamicEnemyState: Record<string, { x: number; z: number; speed: number; dead: boolean; hp: number; maxHp: number; attackTimer: number; siegeWindup?: number; siegeTarget?: string }> = {};
 
 export const dynamicPlayerState = { x: 0, z: 0, hp: 100, maxHp: 100, dead: false, attackTimer: 0 };
 // Current camera view, mirrored module-side so useFrame-driven world labels (e.g.
@@ -2214,7 +2217,7 @@ function EnemyBody({ id }: { id: string }) {
   );
 }
 
-function Enemy({ id }: { id: string }) {
+function Enemy({ id, onSiege }: { id: string; onSiege?: (event: DemonSiegeEvent, building: Building) => void }) {
   const group = useRef<THREE.Group>(null);
 
   useFrame((state, dtRaw) => {
@@ -2287,12 +2290,32 @@ function Enemy({ id }: { id: string }) {
           targetZ = b.z;
           const attackRange = BUILD_RADIUS[b.type] + 1.2;
           if (closestDist < attackRange) {
-            dyn.attackTimer -= dt;
-            if (dyn.attackTimer <= 0) {
-              damageBuilding(bIndex, 15);
-              dyn.attackTimer = 1.0;
+            const siegeTarget = b.id ?? `building_${bIndex}`;
+            if (dyn.siegeTarget !== siegeTarget) {
+              dyn.siegeTarget = siegeTarget;
+              dyn.siegeWindup = 1.8;
+              enemyHitFlash[id] = Math.max(enemyHitFlash[id] ?? 0, 0.55);
+            }
+            if ((dyn.siegeWindup ?? 0) > 0) {
+              dyn.siegeWindup = Math.max(0, (dyn.siegeWindup ?? 0) - dt);
+              enemyHitFlash[id] = Math.max(enemyHitFlash[id] ?? 0, 0.18);
+            } else {
+              dyn.attackTimer -= dt;
+              if (dyn.attackTimer <= 0) {
+                const result = recordDemonSiegeHit(bIndex, { zone: getWorld().ecosystem?.fauna?.dominantZone });
+                if (result.ok && result.event && result.building) {
+                  onSiege?.(result.event, result.building);
+                  hitDustQueue.push({ x: b.x, y: getHeightAt(b.x, b.z) + 1.0, z: b.z });
+                }
+                dyn.attackTimer = Math.max(2.5, DEMON_SIEGE_COOLDOWN_MS / 1000);
+                dyn.siegeWindup = 1.8;
+              }
             }
           } else {
+            if (dyn.siegeTarget === (b.id ?? `building_${bIndex}`)) {
+              dyn.siegeTarget = undefined;
+              dyn.siegeWindup = undefined;
+            }
             isMoving = true;
           }
         }
@@ -2374,7 +2397,7 @@ function Enemy({ id }: { id: string }) {
   );
 }
 
-function EnemySpawner() {
+function EnemySpawner({ onSiege }: { onSiege?: (event: DemonSiegeEvent, building: Building) => void }) {
   const [enemyIds, setEnemyIds] = useState<string[]>([]);
   const world = useWorld();
 
@@ -2422,7 +2445,7 @@ function EnemySpawner() {
   return (
     <group>
       {enemyIds.map((id) => (
-        <Enemy key={id} id={id} />
+        <Enemy key={id} id={id} onSiege={onSiege} />
       ))}
     </group>
   );
@@ -4143,6 +4166,12 @@ function PublicRelationsPanel({
       text: `${shortWallet(event.repairer)} repaired ${shortWallet(event.owner)} +${event.heal} HP`,
       color: '#aee5a6',
     })),
+    ...publicWorld.siegeEvents.map((event) => ({
+      id: event.id,
+      at: event.at,
+      text: `Demons besieged ${shortWallet(event.owner)} -${event.damage} HP`,
+      color: '#ff7a66',
+    })),
     ...publicWorld.parcelRentEvents.map((event) => ({
       id: event.id,
       at: event.at,
@@ -4468,13 +4497,13 @@ export default function Scene3D({ memories = null, active = null, talking = fals
   const aerialTargetRef = useRef<{ x: number; z: number } | null>(null);
   const [avatarSelected, setAvatarSelected] = useState(false);
 
-  const markBuildDraftDirty = () => {
+  const markBuildDraftDirty = useCallback(() => {
     setBuildDraftDirty(true);
     if (publishStatus !== 'saving') {
       setPublishStatus('idle');
       setPublishMsg('Unsaved changes. Save before leaving aerial view.');
     }
-  };
+  }, [publishStatus]);
 
   const showToolFeedback = useCallback((feedback: ToolFeedback) => {
     setToolFeedback(feedback);
@@ -4482,6 +4511,21 @@ export default function Scene3D({ memories = null, active = null, talking = fals
       setToolFeedback((current) => (current?.text === feedback.text ? null : current));
     }, 5000);
   }, []);
+
+  const handleDemonSiege = useCallback((event: DemonSiegeEvent, building: Building) => {
+    markBuildDraftDirty();
+    const hp = hpOf(building);
+    setSelectedBuilding((current) =>
+      current?.scope === 'own' && current.id === event.buildingId
+        ? { ...current, hp: hp.hp, maxHp: hp.maxHp }
+        : current
+    );
+    const zoneText = event.zone ? ` from ${event.zone.replace('_', ' ')}` : '';
+    showToolFeedback({
+      text: `Demon siege${zoneText}: -${event.damage} HP (${hp.hp}/${hp.maxHp}). Save World to publish.`,
+      tone: 'bad',
+    });
+  }, [markBuildDraftDirty, showToolFeedback]);
 
   // Actually leave aerial view for first person. `discard` reverts the draft to
   // the snapshot taken on entry (used by the "Discard & leave" path).
@@ -5245,7 +5289,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
           <Fireflies active={dn.torchesLit} />
           {explorable && <Buildings tool={buildMode} onDraftChange={markBuildDraftDirty} onToolFeedback={showToolFeedback} onSelectBuilding={setSelectedBuilding} selected={view === 'aerial' ? selectedBuilding : null} />}
           {explorable && aiPreview && aiOrigin && <AIPreviewGhosts pieces={aiPreview} origin={aiOrigin} />}
-          {explorable && <EnemySpawner />}
+          {explorable && <EnemySpawner onSiege={handleDemonSiege} />}
           {/* Prompt 16: particle FX & view-space arm — always alive while exploring */}
           {explorable && <WoodChips />}
           {explorable && <MineDebris />}

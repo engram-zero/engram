@@ -165,6 +165,10 @@ submit a revised version if you advance. Snapshot = `main` at the round deadline
       through the registry root, and shown in a maintenance log. Allied wallets can repair public
       buildings without directly mutating the owner's bundle. Wallet-loaded/public builds are
       clamped on hydrate so bad 0G data cannot cover the camera.
+- [x] **Fair demon sieges (Prompt 15)** — enemies can pressure player buildings, but damage is
+      slow and capped: a short wind-up telegraphs the hit, `DemonSiegeEvent`s persist in the
+      wallet's 0G world bundle, and each fairness window has a safe phase plus a total damage cap.
+      No offline catch-up damage is simulated, so players never return to an invisible wipe.
 - [x] **Growing map parcels (Prompt 21)** — aerial mode has **Claim land**; ownership is enforced
       by `ParcelRegistry` on 0G Chain (`0x11D2EB42d0BF30947EB36882A150ee25518f67d7`) and parcel
       metadata lives in both the player's 0G world bundle and a standalone per-parcel 0G bundle
@@ -185,13 +189,13 @@ submit a revised version if you advance. Snapshot = `main` at the round deadline
    later phase** by decision; coordinate with martelaxe when picked up.
 2. Further AV polish if wanted: avatar silhouettes (plain but recognisable).
 3. Repair/durability polish (Prompt 18) — core loop is implemented; future polish can add richer
-   building-specific history panels, defense upgrades, and demon schedule windows.
+   building-specific history panels and defense upgrades.
 4. 💡 **Mining = real 0G Compute work** (Prompt 20) — on-thesis future idea: gathering stone
    triggers a verifiable 0G compute job (proof-of-useful-work), not a placeholder.
 5. Parcel/frontier polish (Prompts 21/22) — anti-hoarding, richer parcel inspector, and optional
    OG-real rent/claim pricing.
 
 Full backlog (still open) in `docs/ENGRAM_PROMPTS.md`: raids/sabotage fairness from player
-relations (13: defense/weapon upgrades), more market goods/stock depth (14), fair demon sieges (15), gathering
+relations (13: defense/weapon upgrades), more market goods/stock depth (14), gathering
 animation polish (16), editable terrain / bigger map (17), repair/damage UI polish (18),
 verified 0G-compute mining live test/funding (20), parcel/frontier polish (21/22).

@@ -1349,3 +1349,14 @@ por mena desde `ROCKS`/`world.minedRocks` y el mercado de Aldric usa precios **d
 stone/silver/gold (suben con la escasez del mundo). `npx tsc --noEmit` limpio. **Pendiente:**
 tesorería explícita en 0G (F2), IA de naturaleza (F3/Prompt 8c), minar-cuesta-tokens (F4).
 **Commit:** _(este commit)_
+
+### 29 jun 2026 · Prompt 15: asedios demoníacos con fairness offline
+**Pedido (humano):** implementar Prompt 15 para que los demonios puedan atacar edificios sin que
+el jugador pierda una aldea entera por daño explosivo u offline.
+**Prompt sintetizado:** Añadir `DemonSiegeEvent` a `WorldState` y persistirlo en el bundle 0G;
+reemplazar el daño bruto de enemigos contra edificios por `recordDemonSiegeHit(...)`, con wind-up,
+daño bajo, cooldown por edificio, fase segura al inicio de cada ventana y cap total por wallet/ventana.
+El golpe baja HP del edificio propio y registra el evento para auditoría; no hay catch-up de daño
+offline. `public-world` descubre `siegeEvents` y el maintenance log muestra asedios junto a raids,
+repairs y rentas. Verificado con `npx tsc --noEmit`.
+**Commit:** _(este commit)_

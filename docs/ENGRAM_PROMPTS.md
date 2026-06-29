@@ -27,7 +27,7 @@
 12. [Edificios habitables (entrar dentro)](#prompt-12--edificios-habitables-entrar) — ✅ done (casas huecas con puerta libre)
 13. [Relaciones entre players: aliados, enemigos y sabotaje](#prompt-13--relaciones-entre-players-aliados-enemigos-y-sabotaje) — 🟡 MVP+ done: ally/hostile por wallet + raid events sobre edificios públicos, persistidos en 0G y anclados por registry; fairness/weapon upgrades pendiente
 14. [Mercado v2: bienes comprables, sinks y reparación](#prompt-14--mercado-v2-bienes-comprables-sinks-y-reparación) — 🟡 mayormente done (Aldric **vende** bienes con coin; **spread de casa** + **precio dinámico** madera; **stone** minable/comerciable; repair kits como boost de reparación). Más bienes/stock depth pendiente
-15. [Asedios y demonios con fairness offline](#prompt-15--asedios-y-demonios-con-fairness-offline) — ⏳ pendiente
+15. [Asedios y demonios con fairness offline](#prompt-15--asedios-y-demonios-con-fairness-offline) — 🟢 done: demon siege hits lentos, cap por ventana, fase segura, evento persistente en 0G y log público
 16. [Animaciones de gathering y feedback físico](#prompt-16--animaciones-de-gathering-y-feedback-físico) — 🟢 done: arma solo al golpear (axe/spear), tala (chips + shake), **minería (shake de roca + chispas por mena)**, combate (hit-flash + knockback + dust) y **pickup flotante "+1" por unidad**
 17. [Terreno editable, ríos y mapa más grande](#prompt-17--terreno-editable-ríos-y-mapa-más-grande) — 🟡 partial: **riachuelo** (cinta de agua drapeada, no tala terreno) hecho; terreno editable / mapa más grande siguen pendientes
 18. [Reparación, durabilidad y mantenimiento del mundo](#prompt-18--reparación-durabilidad-y-mantenimiento-del-mundo) — 🟢 done: hp/maxHp + daño visual + barras HP WebGL + reparación con madera/kits + eventos públicos de mantenimiento/raid en 0G + reparación de aliados
@@ -847,6 +847,13 @@ construcción, defensa y exploración.
 ---
 
 ## Prompt 15 — Asedios y demonios con fairness offline
+
+> **🟢 DONE — 29 jun 2026.** Los demonios ya no aplican daño bruto/explosivo a edificios:
+> usan `recordDemonSiegeHit(...)`, con wind-up visual, `DEMON_SIEGE_DAMAGE` bajo,
+> cooldown por edificio, fase segura al inicio de cada ventana y cap total por wallet/ventana.
+> Cada golpe genera `DemonSiegeEvent` en `WorldState.siegeEvents`; al guardar mundo viaja en
+> el bundle 0G y aparece en el maintenance log público. No hay acumulación de daño offline:
+> solo se registran golpes que ocurrieron durante la sesión.
 
 > Henrique quiere que los demonios puedan atacar edificios, pero eso requiere una
 > capa de fairness: no es justo que alguien pierda trabajo offline por completo.

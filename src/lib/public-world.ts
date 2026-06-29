@@ -9,10 +9,11 @@ import { ENGRAM_REGISTRY_ABI } from '@/lib/registry/abi';
 import { getRegistryAddress } from '@/lib/registry/registry';
 import { PARCEL_REGISTRY_ABI } from '@/lib/registry/parcel-abi';
 import { getParcelRegistryAddress } from '@/lib/registry/parcels';
-import { normalizeWorldState, PARCEL_SIZE, parcelClaimCost, parcelTerrainForGrid, type Building, type ParcelClaim, type ParcelRentEvent, type RaidEvent, type RepairEvent } from '@/lib/world';
+import { normalizeWorldState, PARCEL_SIZE, parcelClaimCost, parcelTerrainForGrid, type Building, type DemonSiegeEvent, type ParcelClaim, type ParcelRentEvent, type RaidEvent, type RepairEvent } from '@/lib/world';
 
 export type PublicRaidEvent = RaidEvent & { author: string };
 export type PublicRepairEvent = RepairEvent & { author: string };
+export type PublicDemonSiegeEvent = DemonSiegeEvent & { author: string };
 export type PublicParcelClaim = ParcelClaim & { author: string };
 export type PublicParcelRentEvent = ParcelRentEvent & { author: string };
 export type PublicBuilding = Building & {
@@ -21,6 +22,7 @@ export type PublicBuilding = Building & {
   repairHealing?: number;
   raidEvents?: PublicRaidEvent[];
   repairEvents?: PublicRepairEvent[];
+  siegeEvents?: PublicDemonSiegeEvent[];
 };
 export interface PublicWorldOwner {
   owner: string;
@@ -32,13 +34,14 @@ interface PublicWorldState {
   buildings: PublicBuilding[];
   raidEvents: PublicRaidEvent[];
   repairEvents: PublicRepairEvent[];
+  siegeEvents: PublicDemonSiegeEvent[];
   parcels: PublicParcelClaim[];
   parcelRentEvents: PublicParcelRentEvent[];
   owners: PublicWorldOwner[];
   loading: boolean;
 }
 
-const EMPTY_PUBLIC_WORLD: PublicWorldState = { buildings: [], raidEvents: [], repairEvents: [], parcels: [], parcelRentEvents: [], owners: [], loading: false };
+const EMPTY_PUBLIC_WORLD: PublicWorldState = { buildings: [], raidEvents: [], repairEvents: [], siegeEvents: [], parcels: [], parcelRentEvents: [], owners: [], loading: false };
 const listeners = new Set<() => void>();
 let state = EMPTY_PUBLIC_WORLD;
 let lastKey = '';
@@ -133,9 +136,9 @@ async function downloadWorldData(
   owner: string,
   root: string,
   storageRpc: string
-): Promise<{ buildings: PublicBuilding[]; raidEvents: PublicRaidEvent[]; repairEvents: PublicRepairEvent[]; parcels: PublicParcelClaim[]; parcelRentEvents: PublicParcelRentEvent[] }> {
+): Promise<{ buildings: PublicBuilding[]; raidEvents: PublicRaidEvent[]; repairEvents: PublicRepairEvent[]; siegeEvents: PublicDemonSiegeEvent[]; parcels: PublicParcelClaim[]; parcelRentEvents: PublicParcelRentEvent[] }> {
   const [data, err] = await downloadByRootHashAPI(root, storageRpc);
-  if (err || !data) return { buildings: [], raidEvents: [], repairEvents: [], parcels: [], parcelRentEvents: [] };
+  if (err || !data) return { buildings: [], raidEvents: [], repairEvents: [], siegeEvents: [], parcels: [], parcelRentEvents: [] };
 
   try {
     const raw = JSON.parse(new TextDecoder('utf-8').decode(data));
@@ -148,6 +151,9 @@ async function downloadWorldData(
       repairEvents: world.repairEvents
         .filter((event) => event.repairer === owner)
         .map((event) => ({ ...event, author: owner })),
+      siegeEvents: world.siegeEvents
+        .filter((event) => event.owner === owner)
+        .map((event) => ({ ...event, author: owner })),
       parcels: world.parcelClaims
         .filter((claim) => claim.owner === owner)
         .map((claim) => ({ ...claim, author: owner })),
@@ -156,7 +162,7 @@ async function downloadWorldData(
         .map((event) => ({ ...event, author: owner })),
     };
   } catch {
-    return { buildings: [], raidEvents: [], repairEvents: [], parcels: [], parcelRentEvents: [] };
+    return { buildings: [], raidEvents: [], repairEvents: [], siegeEvents: [], parcels: [], parcelRentEvents: [] };
   }
 }
 
@@ -182,6 +188,7 @@ export async function initPublicWorld(
     buildings: options.quiet ? state.buildings : [],
     raidEvents: options.quiet ? state.raidEvents : [],
     repairEvents: options.quiet ? state.repairEvents : [],
+    siegeEvents: options.quiet ? state.siegeEvents : [],
     parcels: options.quiet ? state.parcels : [],
     parcelRentEvents: options.quiet ? state.parcelRentEvents : [],
     owners: options.quiet ? state.owners : [],
@@ -221,6 +228,7 @@ export async function initPublicWorld(
     const worlds = await Promise.all(entries.map(([owner, root]) => downloadWorldData(owner, root, storageRpc)));
     const raidEvents = worlds.flatMap((world) => world.raidEvents);
     const repairEvents = worlds.flatMap((world) => world.repairEvents);
+    const siegeEvents = worlds.flatMap((world) => world.siegeEvents);
     const parcelRentEvents = worlds.flatMap((world) => world.parcelRentEvents);
     const registryById = new Map<string, PublicParcelClaim>();
     for (const event of [...parcelEvents, ...parcelDataEvents]
@@ -276,6 +284,9 @@ export async function initPublicWorld(
       const repairsForBuilding = repairEvents
         .filter((event) => event.owner === building.owner && event.buildingId === building.id)
         .sort((a, b) => b.at - a.at);
+      const siegesForBuilding = siegeEvents
+        .filter((event) => event.owner === building.owner && event.buildingId === building.id)
+        .sort((a, b) => b.at - a.at);
       const raidDamage = eventsForBuilding.reduce((sum, event) => sum + event.damage, 0);
       const repairHealing = repairsForBuilding.reduce((sum, event) => sum + event.heal, 0);
       const maxHp = Math.max(1, building.maxHp ?? building.hp ?? 1);
@@ -288,6 +299,7 @@ export async function initPublicWorld(
         repairHealing,
         raidEvents: eventsForBuilding,
         repairEvents: repairsForBuilding,
+        siegeEvents: siegesForBuilding,
       };
     });
     const owners = Array.from(counts.entries())
@@ -299,15 +311,16 @@ export async function initPublicWorld(
       buildings: buildings.length,
       raidEvents: raidEvents.length,
       repairEvents: repairEvents.length,
+      siegeEvents: siegeEvents.length,
       parcels: parcels.length,
       registryParcels: registryParcels.length,
       parcelDataEvents: parcelDataEvents.length,
       parcelRentEvents: parcelRentEvents.length,
     });
-    setPublicWorld({ buildings, raidEvents, repairEvents, parcels, parcelRentEvents, owners, loading: false });
+    setPublicWorld({ buildings, raidEvents, repairEvents, siegeEvents, parcels, parcelRentEvents, owners, loading: false });
   } catch (error) {
     console.warn('[engram] public world load failed:', error);
-    setPublicWorld({ buildings: state.buildings, raidEvents: state.raidEvents, repairEvents: state.repairEvents, parcels: state.parcels, parcelRentEvents: state.parcelRentEvents, owners: state.owners, loading: false });
+    setPublicWorld({ buildings: state.buildings, raidEvents: state.raidEvents, repairEvents: state.repairEvents, siegeEvents: state.siegeEvents, parcels: state.parcels, parcelRentEvents: state.parcelRentEvents, owners: state.owners, loading: false });
   }
 }
 
