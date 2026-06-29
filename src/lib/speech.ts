@@ -1,0 +1,111 @@
+'use client';
+
+// Browser speech via the Azure Speech SDK, using a short-lived token from
+// /api/speech-token (the key never reaches the client). STT fills the chat input
+// (the player confirms/edits before sending); TTS gives NPCs an optional voice.
+
+import type { NPCName } from '@/lib/types';
+
+type Cred = { token: string; region: string };
+let cached: (Cred & { at: number }) | null = null;
+
+/** Cached auth token (Azure tokens last ~10 min; refresh after 8). */
+async function getCred(): Promise<Cred | null> {
+  if (cached && Date.now() - cached.at < 8 * 60_000) return cached;
+  try {
+    const res = await fetch('/api/speech-token');
+    if (!res.ok) return null;
+    const data = (await res.json()) as Partial<Cred>;
+    if (!data.token || !data.region) return null;
+    cached = { token: data.token, region: data.region, at: Date.now() };
+    return cached;
+  } catch {
+    return null;
+  }
+}
+
+/** True when the deployment has Azure Speech env vars set. */
+export async function isSpeechAvailable(): Promise<boolean> {
+  return (await getCred()) !== null;
+}
+
+const MAX_WORDS = 60;
+function capWords(text: string): string {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  return words.length <= MAX_WORDS ? text.trim() : words.slice(0, MAX_WORDS).join(' ');
+}
+
+/**
+ * Record one utterance from the default mic and transcribe it. Auto-detects
+ * Spanish/English, stops on natural silence. Returns the (word-capped) text, or
+ * null on failure / no speech.
+ */
+export async function transcribeOnce(): Promise<string | null> {
+  const cred = await getCred();
+  if (!cred) return null;
+  const SDK = await import('microsoft-cognitiveservices-speech-sdk');
+  const speechConfig = SDK.SpeechConfig.fromAuthorizationToken(cred.token, cred.region);
+  const auto = SDK.AutoDetectSourceLanguageConfig.fromLanguages(['es-MX', 'en-US']);
+  const audioConfig = SDK.AudioConfig.fromDefaultMicrophoneInput();
+  const recognizer = SDK.SpeechRecognizer.FromConfig(speechConfig, auto, audioConfig);
+  return new Promise<string | null>((resolve) => {
+    recognizer.recognizeOnceAsync(
+      (result) => {
+        const text = result.reason === SDK.ResultReason.RecognizedSpeech ? result.text : '';
+        recognizer.close();
+        resolve(text ? capWords(text) : null);
+      },
+      () => {
+        recognizer.close();
+        resolve(null);
+      },
+    );
+  });
+}
+
+// A distinct neural voice per villager so they don't all sound the same.
+const NPC_VOICE: Record<NPCName, string> = {
+  aldric: 'en-US-DavisNeural',
+  maren: 'en-US-JaneNeural',
+  sable: 'en-US-TonyNeural',
+};
+
+let synth: import('microsoft-cognitiveservices-speech-sdk').SpeechSynthesizer | null = null;
+
+/** Speak `text` in the NPC's voice (best-effort; silently no-ops if unavailable). */
+export async function speakText(text: string, npc?: NPCName): Promise<void> {
+  const cred = await getCred();
+  if (!cred || !text.trim()) return;
+  const SDK = await import('microsoft-cognitiveservices-speech-sdk');
+  const speechConfig = SDK.SpeechConfig.fromAuthorizationToken(cred.token, cred.region);
+  speechConfig.speechSynthesisVoiceName = (npc && NPC_VOICE[npc]) || 'en-US-DavisNeural';
+  try {
+    synth?.close();
+  } catch {
+    /* ignore */
+  }
+  synth = new SDK.SpeechSynthesizer(speechConfig);
+  const active = synth;
+  await new Promise<void>((resolve) => {
+    active.speakTextAsync(
+      text,
+      () => {
+        try { active.close(); } catch { /* ignore */ }
+        resolve();
+      },
+      () => {
+        try { active.close(); } catch { /* ignore */ }
+        resolve();
+      },
+    );
+  });
+}
+
+export function stopSpeaking(): void {
+  try {
+    synth?.close();
+  } catch {
+    /* ignore */
+  }
+  synth = null;
+}

@@ -1360,3 +1360,14 @@ El golpe baja HP del edificio propio y registra el evento para auditoría; no ha
 offline. `public-world` descubre `siegeEvents` y el maintenance log muestra asedios junto a raids,
 repairs y rentas. Verificado con `npx tsc --noEmit`.
 **Commit:** _(este commit)_
+
+### 29 jun 2026 · Micrófono + voz de NPC (Azure Speech) con token efímero
+**Pedido (humano):** poder "hablar" con los NPCs: botón de grabar → transcribe (con límite) → llena
+el input para confirmar/editar antes de enviar; y voz opcional para los NPCs.
+**Prompt sintetizado:** key de Azure solo en server. `GET /api/speech-token` cambia
+`AZURE_SPEECH_KEY`/`REGION` por un token efímero (~10min). `src/lib/speech.ts` (Speech SDK vía
+token): `transcribeOnce()` (mic, auto es-MX/en-US, tope 60 palabras), `speakText(text, npc)` (voz
+neural distinta por NPC), `isSpeechAvailable()`. En `client-page`: botón 🎤 (dicta al input, no
+auto-envía) + toggle 🔊 (voz del NPC al responder), solo si hay vars. `.env.example` + `tmp/` al
+gitignore (repo ajeno de referencia). `npx tsc --noEmit` limpio (solo errores ajenos en tmp/).
+**Commit:** _(este commit)_

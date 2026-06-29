@@ -43,6 +43,7 @@ import { startPublicWorldPolling } from '@/lib/public-world';
 import { Portrait } from '@/components/engram/Art';
 import dynamic from 'next/dynamic';
 import { useEngramAudio } from '@/context/AudioContext';
+import { transcribeOnce, speakText, isSpeechAvailable, stopSpeaking } from '@/lib/speech';
 
 // Three.js is client-only and heavy — load it without SSR.
 const Scene3D = dynamic(() => import('@/components/engram/Scene3D'), { ssr: false });
@@ -185,6 +186,21 @@ function Game() {
   const [merchantBuyQty, setMerchantBuyQty] = useState(1);
   const [merchantStoneQty, setMerchantStoneQty] = useState(1);
   const [merchantMsg, setMerchantMsg] = useState<string | null>(null);
+  // Voice: dictate into the chat (STT) and optional NPC speech (TTS) via Azure.
+  const [speechOk, setSpeechOk] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [voiceOn, setVoiceOn] = useState(false);
+  useEffect(() => { isSpeechAvailable().then(setSpeechOk).catch(() => setSpeechOk(false)); }, []);
+  const startDictation = useCallback(async () => {
+    setRecording(true);
+    stopSpeaking();
+    try {
+      const text = await transcribeOnce();
+      if (text) setTyped((prev) => (prev ? `${prev} ${text}` : text));
+    } finally {
+      setRecording(false);
+    }
+  }, []);
   // "Explore as guest" — roam Aldenmoor without a wallet (no dialogue/saving).
   // The best mobile fallback when there's no injected wallet / WalletConnect.
   const [guest, setGuest] = useState(false);
@@ -371,6 +387,7 @@ function Game() {
       setMemories((prev) => (prev ? { ...prev, [npc]: data.memory } : prev));
       setDirty((d) => ({ ...d, [npc]: true }));
       setScene({ dialogue: data.response, options: data.options, loading: false });
+      if (voiceOn) void speakText(data.response, npc);
     } catch (e) {
       const error = e as ChatError;
       // Rate limited: be gentle, and auto-retry once for short cool-downs.
@@ -468,6 +485,7 @@ function Game() {
         setMerchantMsg('Aldric refused the offer. No coin changed hands.');
       }
       setScene({ dialogue: data.response, options: data.options, loading: false });
+      if (voiceOn) void speakText(data.response, 'aldric');
     } catch (e) {
       const error = e as ChatError;
       if (error.code === 429) {
@@ -820,9 +838,32 @@ function Game() {
             </div>
 
             <div className="flex gap-2 mt-3.5">
+              {speechOk && (
+                <>
+                  <button
+                    onClick={startDictation}
+                    disabled={scene.loading || recording}
+                    title="Speak your message (it fills the box; you confirm before sending)"
+                    aria-label="Dictate message"
+                    className="rounded-md border px-3 py-2 text-sm disabled:opacity-60"
+                    style={{ background: recording ? 'rgba(204,90,74,0.85)' : 'rgba(0,0,0,0.4)', borderColor: recording ? '#ff7a6a' : '#5a4a28' }}
+                  >
+                    {recording ? '● Listening…' : '🎤'}
+                  </button>
+                  <button
+                    onClick={() => { setVoiceOn((v) => { if (v) stopSpeaking(); return !v; }); }}
+                    title={voiceOn ? 'NPC voice on — click to mute' : 'Give the villager a voice'}
+                    aria-label="Toggle NPC voice"
+                    className="rounded-md border px-3 py-2 text-sm"
+                    style={{ background: voiceOn ? 'rgba(95,150,90,0.8)' : 'rgba(0,0,0,0.4)', borderColor: voiceOn ? '#8fd06a' : '#5a4a28' }}
+                  >
+                    {voiceOn ? '🔊' : '🔈'}
+                  </button>
+                </>
+              )}
               <input
                 className="flex-1 bg-black/40 border border-[#5a4a28] focus:border-[#d6b84a] outline-none rounded-md px-3 py-2 text-sm"
-                placeholder={`Say something to ${activeNpc.name}…`}
+                placeholder={recording ? 'Listening…' : `Say something to ${activeNpc.name}…`}
                 value={typed}
                 disabled={scene.loading}
                 onChange={(e) => setTyped(e.target.value)}
