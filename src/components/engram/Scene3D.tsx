@@ -5179,12 +5179,8 @@ export default function Scene3D({ memories = null, active = null, talking = fals
           <div className="pointer-events-none absolute top-20 left-4 z-10 flex flex-col items-start gap-1.5 text-sm text-[#f4e8d0]">
             <span className="inline-flex items-center rounded-md bg-black/45 px-2.5 py-1" title="Wood"><WoodIcon />{world.inventory.wood}/{MAX_WOOD}</span>
             <span className="inline-flex items-center rounded-md bg-black/45 px-2.5 py-1" title="Stone"><StoneIcon />{world.inventory.stone}/{MAX_STONE}</span>
-            {world.inventory.silver > 0 && (
-              <span className="inline-flex items-center rounded-md bg-black/45 px-2.5 py-1" title="Silver"><SilverIcon />{world.inventory.silver}/{MAX_SILVER}</span>
-            )}
-            {world.inventory.gold > 0 && (
-              <span className="inline-flex items-center rounded-md bg-black/45 px-2.5 py-1" title="Gold"><GoldIcon />{world.inventory.gold}/{MAX_GOLD}</span>
-            )}
+            <span className="inline-flex items-center rounded-md bg-black/45 px-2.5 py-1" title="Silver"><SilverIcon />{world.inventory.silver}/{MAX_SILVER}</span>
+            <span className="inline-flex items-center rounded-md bg-black/45 px-2.5 py-1" title="Gold"><GoldIcon />{world.inventory.gold}/{MAX_GOLD}</span>
             <span className="inline-flex items-center rounded-md bg-black/45 px-2.5 py-1" title="Coin"><CoinIcon />{world.inventory.coin}</span>
             {world.repairKits > 0 && (
               <span className="inline-flex items-center rounded-md bg-black/45 px-2.5 py-1" title="Repair kits">🧰 {world.repairKits}</span>
