@@ -1533,7 +1533,7 @@ function WoodChips() {
         <bufferAttribute attach="attributes-position" args={[positions, 3]} />
         <bufferAttribute attach="attributes-color" args={[colors, 3]} />
       </bufferGeometry>
-      <pointsMaterial size={0.11} sizeAttenuation vertexColors transparent depthWrite={false} />
+      <pointsMaterial size={0.14} sizeAttenuation vertexColors transparent depthWrite={false} />
     </points>
   );
 }
@@ -1607,9 +1607,9 @@ function HitDust() {
 // (matte grey for stone, bright sheen for silver/gold). Reads mineDebrisQueue.
 const MAX_DEBRIS = 40;
 const ORE_DEBRIS_RGB: Record<'stone' | 'silver' | 'gold', [number, number, number]> = {
-  stone: [0.46, 0.43, 0.39],
-  silver: [0.86, 0.9, 0.98],
-  gold: [0.92, 0.74, 0.26],
+  stone: [0.72, 0.68, 0.62],
+  silver: [0.92, 0.95, 1.0],
+  gold: [1.0, 0.82, 0.32],
 };
 type DebrisParticle = { x: number; y: number; z: number; vx: number; vy: number; vz: number; life: number; maxLife: number; r: number; g: number; b: number; active: boolean };
 
@@ -1669,7 +1669,7 @@ function MineDebris() {
         <bufferAttribute attach="attributes-position" args={[positions, 3]} />
         <bufferAttribute attach="attributes-color" args={[colors, 3]} />
       </bufferGeometry>
-      <pointsMaterial size={0.12} sizeAttenuation vertexColors transparent depthWrite={false} />
+      <pointsMaterial size={0.16} sizeAttenuation vertexColors transparent depthWrite={false} />
     </points>
   );
 }
@@ -1694,9 +1694,9 @@ function ChopArm() {
     const grp = groupRef.current;
     if (!grp) return;
     const dt = Math.min(dtRaw, 0.05);
-    // Decay swing phase (1 → 0 over ~0.55s) so a full swing reads as one weighty
-    // strike that lines up with the hit sound (~0.6s cadence), not a fast flick.
-    chopArmSwing.phase = Math.max(0, chopArmSwing.phase - dt * 1.85);
+    // Decay swing phase 1 → 0 over ~0.72s so ONE full swing matches ONE hit sound
+    // (SWING_MS = 720ms in the chop loop) — they go hand in hand, no fast looping.
+    chopArmSwing.phase = Math.max(0, chopArmSwing.phase - dt * 1.4);
     const phase = chopArmSwing.phase;
 
     // The weapon only exists while striking; hide it (and skip posing) at idle.
@@ -1718,14 +1718,18 @@ function ChopArm() {
     _right.crossVectors(_fwd, _up).normalize();
 
     if (isSwing) {
-      // Axe: vertical chop in front-right-below the camera.
+      // Vertical chop. Mining sits more centred and bites harder/lower than the
+      // axe, so a pickaxe reads as an overhead up→down strike (not a side swipe).
+      const isMine = kind === 'mine';
+      const side = isMine ? 0.12 : 0.23;
+      const pitch = isMine ? 1.2 : 0.9;
       grp.position
         .copy(camera.position)
         .addScaledVector(_fwd,   0.46)
-        .addScaledVector(_right, 0.23)
-        .addScaledVector(_up,   -0.24 - swing * 0.09);
+        .addScaledVector(_right, side)
+        .addScaledVector(_up,   -0.22 - swing * (isMine ? 0.16 : 0.09));
       grp.quaternion.copy(camera.quaternion);
-      _swingQ.setFromAxisAngle(_right, -swing * 0.9);
+      _swingQ.setFromAxisAngle(_right, -swing * pitch);
       grp.quaternion.premultiply(_swingQ);
     } else {
       // Spear: thrust forward (a shorter punch so it stays clearly in frame the
@@ -1796,22 +1800,23 @@ function ChopArm() {
         </mesh>
         {/* Eye/collar where the head meets the haft */}
         <mesh position={[0, 0, -0.225]} rotation={[Math.PI / 2, 0, 0]}>
-          <cylinderGeometry args={[0.027, 0.027, 0.05, 8]} />
+          <cylinderGeometry args={[0.03, 0.03, 0.055, 8]} />
           <meshStandardMaterial color="#6a6d78" roughness={0.5} metalness={0.62} />
         </mesh>
-        {/* Head bar across the haft */}
-        <mesh position={[0, 0, -0.225]}>
-          <boxGeometry args={[0.3, 0.028, 0.028]} />
-          <meshStandardMaterial color="#8d909e" roughness={0.34} metalness={0.74} />
+        {/* Long pick spike — curves forward and DOWN (the bit that drives into stone) */}
+        <mesh position={[0, -0.03, -0.34]} rotation={[-1.86, 0, 0]}>
+          <coneGeometry args={[0.03, 0.26, 6]} />
+          <meshStandardMaterial color="#9a9db2" roughness={0.3} metalness={0.78} />
         </mesh>
-        {/* Twin pointed tips */}
-        <mesh position={[0.19, 0, -0.225]} rotation={[0, 0, -Math.PI / 2]}>
-          <coneGeometry args={[0.022, 0.085, 6]} />
-          <meshStandardMaterial color="#dfe2f0" roughness={0.12} metalness={0.92} />
+        {/* Honed tip, angled a touch more to read as a curved horn */}
+        <mesh position={[0, -0.125, -0.43]} rotation={[-1.98, 0, 0]}>
+          <coneGeometry args={[0.015, 0.1, 6]} />
+          <meshStandardMaterial color="#eceefb" roughness={0.08} metalness={0.96} />
         </mesh>
-        <mesh position={[-0.19, 0, -0.225]} rotation={[0, 0, Math.PI / 2]}>
-          <coneGeometry args={[0.022, 0.085, 6]} />
-          <meshStandardMaterial color="#dfe2f0" roughness={0.12} metalness={0.92} />
+        {/* Short flat poll/adze on the back — counterweight, makes it clearly a pick */}
+        <mesh position={[0, 0.03, -0.13]} rotation={[0.5, 0, 0]}>
+          <boxGeometry args={[0.05, 0.05, 0.07]} />
+          <meshStandardMaterial color="#7e818e" roughness={0.42} metalness={0.7} />
         </mesh>
       </group>
       {/* Spear — combat (hidden until an attack) */}
@@ -3973,20 +3978,13 @@ export default function Scene3D({ memories = null, active = null, talking = fals
   const photoMode = !!photo;
   const forceBrightTestLighting = useMemo(() => {
     if (typeof window === 'undefined') return false;
-    const host = window.location.hostname;
     const params = new URLSearchParams(window.location.search);
-    const localOrLan =
-      host === 'localhost' ||
-      host === '127.0.0.1' ||
-      host === '0.0.0.0' ||
-      host.startsWith('10.') ||
-      host.startsWith('192.168.') ||
-      host.startsWith('172.') ||
-      window.location.port === '3000';
-    // In local/LAN testing we need readable interactions more than cinematic
-    // night. `?night=1` opts back into the dramatic lighting; `?day=1` forces
-    // this path anywhere and gives us a visible diagnostic badge.
-    return params.get('night') !== '1' && (params.get('day') === '1' || localOrLan || process.env.NODE_ENV !== 'production');
+    // Bright, luminous daylight is now the default EVERYWHERE (local and prod) —
+    // the previous cinematic path made production look washed-out/dark. The bright
+    // path still renders a visible <Sky> sun (see below). Opt-outs:
+    //   ?night=1 → dramatic cinematic day/night;  ?shot=… → pinned time for thumbnails.
+    if (params.has('shot')) return false;
+    return params.get('night') !== '1';
   }, []);
   const dn = useMemo(() => computeDayNight(forceBrightTestLighting ? 12 : photoMode ? photo!.hour : localHour), [forceBrightTestLighting, localHour, photoMode, photo]);
 
@@ -4470,7 +4468,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     }
     const PER_UNIT_MS = 5000; // ~5s of holding F = 1 unit of wood
     const TICK = 80;
-    const SWING_MS = 620; // play an axe-hit roughly every ~0.6s while chopping
+    const SWING_MS = 720; // one deliberate strike (+ its hit sound) every ~0.72s
     let sinceSwing = SWING_MS; // swing immediately on the first chopping tick
     const id = window.setInterval(() => {
       // Same hold-action harvests a tree (wood) or, if none is in range, a rock
@@ -4767,10 +4765,15 @@ export default function Scene3D({ memories = null, active = null, talking = fals
           <color attach="background" args={[forceBrightTestLighting ? '#a8caee' : dn.bg]} />
           {!forceBrightTestLighting && <fog attach="fog" args={[dn.fog, 30, 110]} />}
 
-          {/* Skydome — the sun position follows the player's local clock, so the
-              drei <Sky> shader paints day, dusk and night automatically. */}
-          {!forceBrightTestLighting && dn.skyVisible && (
-            <Sky distance={450000} sunPosition={dn.sunPos} turbidity={dn.turbidity} rayleigh={dn.rayleigh} mieCoefficient={0.02} mieDirectionalG={0.86} />
+          {/* Skydome. Bright mode: a fixed, low afternoon sun so the disc is clearly
+              visible (local's old defect was a missing sun) while the scene stays
+              luminous. Cinematic mode: the sun follows the local clock (day↔night). */}
+          {forceBrightTestLighting ? (
+            <Sky distance={450000} sunPosition={[-58, 15, -68]} turbidity={5} rayleigh={1.3} mieCoefficient={0.02} mieDirectionalG={0.92} />
+          ) : (
+            dn.skyVisible && (
+              <Sky distance={450000} sunPosition={dn.sunPos} turbidity={dn.turbidity} rayleigh={dn.rayleigh} mieCoefficient={0.02} mieDirectionalG={0.86} />
+            )
           )}
 
           {/* Lighting scales with time of day: warm strong sun at noon, dim cool
@@ -4778,7 +4781,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
           <ambientLight intensity={forceBrightTestLighting ? 3.2 : dn.ambIntensity} color={forceBrightTestLighting ? '#ffffff' : dn.ambColor} />
           <hemisphereLight args={[forceBrightTestLighting ? '#ffffff' : dn.hemiSky, forceBrightTestLighting ? '#b8d49a' : dn.hemiGround, forceBrightTestLighting ? 2.2 : dn.hemiIntensity]} />
           <directionalLight
-            position={forceBrightTestLighting ? [40, 70, 35] : dn.dirPos}
+            position={forceBrightTestLighting ? [-58, 42, -68] : dn.dirPos}
             intensity={forceBrightTestLighting ? 2.6 : dn.dirIntensity}
             color={forceBrightTestLighting ? '#fff4dd' : dn.dirColor}
             castShadow={!forceBrightTestLighting}

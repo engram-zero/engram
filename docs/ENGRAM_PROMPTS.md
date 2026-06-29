@@ -33,6 +33,7 @@
 18. [Reparación, durabilidad y mantenimiento del mundo](#prompt-18--reparación-durabilidad-y-mantenimiento-del-mundo) — 🟢 done: hp/maxHp + daño visual + barras HP WebGL + reparación con madera/kits + eventos públicos de mantenimiento/raid en 0G + reparación de aliados
 20. [Minar = trabajo real en 0G Compute (proof-of-useful-work)](#prompt-20--minar--trabajo-real-en-0g-compute) — 🟡 construido, **gateado OFF + sin verificar en vivo** (falta fondear el ledger y probar)
 21. [Mapa que crece: parcelas de tierra propiedad del jugador + renta (en 0G)](#prompt-21--mapa-que-crece-parcelas-de-tierra-en-0g) — 🟢 implemented core: ParcelRegistry on 0G Chain + 0G bundle parcel data + rent/commission loop + data-driven parcel resources
+22. [Frontera expandible: el mapa crece casilla a casilla (tablero) en 0G](#prompt-22--frontera-expandible-el-mapa-crece-casilla-a-casilla) — 📨 redactado, asignado a martelaxe
 
 > **Tareas no-código (ADMIN):** ✅ deploy a Vercel + env vars · ✅ save a 0G end-to-end ·
 > ✅ **Group Stage ENVIADO y ACEPTADO** · ✅ **Round of 32 CLASIFICADO (top 32)** · ✅ video demo
@@ -1047,6 +1048,55 @@ redespliega. Refuerza "own your world".
 1. Un jugador reclama una parcela (paga) y aparece terreno/recursos nuevos **sin redeploy**.
 2. Construir/extraer en parcela ajena paga renta/comisión al dueño, auditable.
 3. La propiedad y el estado de la parcela persisten en 0G y son descubribles por otros.
+
+---
+
+## Prompt 22 — Frontera expandible: el mapa crece casilla a casilla
+
+> 📨 **Redactado y asignado a martelaxe (28 jun 2026).** Continuación directa del Prompt 21.
+> Hoy las parcelas se reclaman DENTRO de un anillo fijo (`PARCEL_MIN_RADIUS=26 … WORLD_LIMIT_FOR_PARCELS=126`);
+> reclamar en el borde da "beyond the current frontier". Este prompt invierte eso: reclamar
+> una casilla del borde **empuja la frontera** y el jugador puede caminar a la casilla nueva.
+
+### El insight (mecánica de tablero de ajedrez)
+- La **frontera = mundo base ∪ casillas reclamadas**; crece SOLO en los bordes.
+- Una casilla `(gx,gz)` es reclamable sii **no** está ya en la frontera **y** es **adyacente**
+  (vecindad 4/8) a una casilla que sí lo está → crece **de a UNA casilla** (h8 → h9), nunca
+  una fila/columna entera ni un salto a una isla lejana.
+- Todo data-driven (eventos `ParcelClaimed` + bundle 0G por parcela), **sin redeploy**.
+
+### Fases
+1. **Modelo de frontera** (world.ts puro): `parcelIsClaimable(gx,gz,claimed)` por adyacencia;
+   reescribir `previewParcelClaimAt` (quitar el tope radial, conservar `PARCEL_MIN_RADIUS`);
+   `frontierClaimableCells(claimed)` (el anillo reclamable, para pintar fantasmas);
+   `worldExtentForClaims(claims)` para el clamp de movimiento. Topes: `MAX_PARCEL_CLAIMS`=48 +
+   radio duro generoso (~260).
+2. **Mundo caminable que crece** (coordinar con AriiBen — toca el `Player`): el clamp de
+   movimiento pasa de radial (`WORLD_RADIUS`) a "dentro del base **o** dentro de una casilla
+   reclamada" (test O(1) con `parcelGridAt` + set de casillas). Extender suelo/`fog.far`.
+3. **Render data-driven del tile nuevo**: cada casilla reclamada fuera del base se dibuja como
+   su propio tile (suelo por `getHeightAt`, tinte/recursos por `parcelTerrainForGrid`) con sus
+   colliders; reusar TreePart/Rocks (instancing).
+4. **UX de tablero**: `cellLabel(gx,gz)` estilo ajedrez (base a1…h8; extensiones h9, i1…);
+   en modo Claim, pintar como fantasmas SOLO las `frontierClaimableCells`; feedback claro si
+   no es adyacente.
+5. **Persistencia en 0G**: claim on-chain (ya, con `legacyGasPrice`) + bundle de datos de la
+   parcela (terreno/recursos/estado) en 0G anclando su `dataRoot` (hoy `ZeroHash`); el
+   descubrimiento hidrata ese estado. El mapa y su extensión viven en 0G, auditables.
+
+### Criterios de aceptación
+1. Solo casillas adyacentes al borde son reclamables (fantasmas); reclamar añade **una** casilla
+   ("H9") con tx on-chain que emite `ParcelClaimed`.
+2. Tras reclamar, el jugador **camina** en la casilla nueva (suelo + recursos).
+3. Otra wallet la ve y camina (data-driven, sin redeploy).
+4. No se puede reclamar una casilla no adyacente ni una fila/columna de golpe.
+5. Sin parcelas, el mundo es idéntico al actual. `npx tsc --noEmit` limpio.
+
+> Símbolos reales: `PARCEL_SIZE=18`, `PARCEL_MIN_RADIUS=26`, `WORLD_LIMIT_FOR_PARCELS=126`,
+> `WORLD_RADIUS=132`, `GROUND_RADIUS=140`, `MAX_PARCEL_CLAIMS=48` (`src/lib/world.ts` /
+> `src/components/engram/map.ts`); `parcelGridAt`/`parcelIdFromGrid` (`p:gx:gz`);
+> `previewParcelClaimAt`; clamp del `Player` en `Scene3D.tsx` (~375); `ParcelRegistry` en
+> `0x11D2EB42…`; descubrimiento en `src/lib/public-world.ts`.
 
 ---
 

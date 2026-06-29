@@ -1197,3 +1197,18 @@ mix(1.18,1.72)→(1.45,1.95), hemi (1.22,1.56)→(1.45,1.82), dir (0.45,2.05)→
 cinematic 1.6→1.9. Previsualizable en local con `?night=1`. `npx tsc --noEmit` limpio.
 **Qué se hizo:** los 5 ajustes de luz. ~+25% de luminosidad, noche más legible, sol/arco intactos.
 **Commit:** _(este commit)_
+
+### 28 jun 2026 · Pulido: swing sincronizado, pica real, prod luminoso+sol, chispas visibles, Prompt 22
+**Pedido (humano):** (1) el swing del hacha se ve como bucle rápido — que sea UNA animación por
+sonido; (2) bajar más el volumen del día; (3) la pica parece hacha — estilizarla como pica real
+(espiga curva, animación arriba-abajo); (4) prod apaga mucho los colores — preferir el look de
+local pero con sol visible; (5) en prod no se ven las chispas de minar/talar; (6) versionar el
+Prompt 22 (frontera expandible).
+**Prompt sintetizado:** En `Scene3D.tsx`/manifest/docs: (1) `SWING_MS` 620→720 y decay del swing
+1.85→1.4 para que 1 swing = 1 sonido. (2) `day_ambience.volume` 0.11→0.06. (3) Nuevo modelo de
+pica (espiga larga curva forward-down + poll trasero) y rama `mine` del swing más centrada y con
+más pitch (vertical). (4) El modo luminoso pasa a default en todas partes (gate `?night`/`?shot`
+como opt-out) y se le añade un `<Sky>` con sol bajo fijo + luz direccional alineada → prod se ve
+como local pero con sol. (5) Subir color/tamaño de `MineDebris`/`WoodChips` para que las chispas
+se lean en cualquier luz. (6) Sección Prompt 22 en `ENGRAM_PROMPTS.md`. `npx tsc --noEmit` limpio.
+**Commit:** _(este commit)_
