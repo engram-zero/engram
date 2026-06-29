@@ -1269,3 +1269,19 @@ default cinematic día/noche en todas partes (solo `?day=1` fuerza el plano bril
 conservando el +25% de brillo y el sol diurno → 20h = noche + grillos. (4) se resuelve solo con la
 noche cinematic (contraste); partículas ya venían con tamaño/color subidos. `npx tsc --noEmit` limpio.
 **Commit:** _(este commit)_
+
+### 28 jun 2026 · CAUSA REAL de la vibración + colisión de edificios públicos + panel replegado
+**Pedido (humano):** la anim de hacha/pica SIGUE vibrando como colibrí tras redeploy; además solo
+se ve/talas desde cierto ángulo (debería desde cualquiera); muros y casas se atraviesan; el panel
+"Nearby wallets" debería estar replegado por defecto.
+**Diagnóstico (el bueno):** el `useEffect` del loop de gathering tenía `publicWorld.parcels` +
+callbacks no memoizados en sus deps → se **recreaba en cada render** (y `setChopPct` re-renderiza
+cada 80ms), reseteando `sinceSwing` y disparando golpes cada ~80-160ms = vibración + `play()`
+reiniciando el clip (silencio al mantener). Lo del ángulo era el requisito de "facing" (ya removido
+en 34bd79f: un recurso solo siempre se selecciona). La colisión solo cubría `getWorld().buildings`
+(propios), no `publicWorld.buildings` (los de otras wallets) → atravesables.
+**Prompt sintetizado (Scene3D.tsx):** (1) mover deps inestables del loop a un `chopLoopRef` y dejar
+el `useEffect` con deps `[fpExploring]` → intervalo estable, 1 swing/sonido cada 720ms. (2)
+`resolveCollision` ahora también colisiona `getPublicWorldSnapshot().buildings` (muros radiales +
+casas huecas). (3) `PublicRelationsPanel` arranca replegado (`open=false`). `npx tsc --noEmit` limpio.
+**Commit:** _(este commit)_

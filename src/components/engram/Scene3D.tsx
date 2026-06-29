@@ -488,6 +488,24 @@ function resolveCollision(x: number, z: number): [number, number] {
       z += (dz / dist) * push;
     }
   }
+  // Other players' buildings (discovered public world) are solid too — you couldn't
+  // walk through them before because only your OWN buildings were collided.
+  for (const b of getPublicWorldSnapshot().buildings) {
+    if (b.type === 'block') continue;
+    if (b.type === 'house') {
+      [x, z] = resolveHouseCollision(x, z, b, PLAYER_RADIUS);
+      continue;
+    }
+    const dx = x - b.x;
+    const dz = z - b.z;
+    const dist = Math.hypot(dx, dz);
+    const min = (BUILD_RADIUS[b.type] ?? BUILD_RADIUS.wall) + PLAYER_RADIUS;
+    if (dist < min && dist > 1e-4) {
+      const push = min - dist;
+      x += (dx / dist) * push;
+      z += (dz / dist) * push;
+    }
+  }
   return [x, z];
 }
 
@@ -4018,9 +4036,9 @@ function PublicRelationsPanel({
   onRelationChange: () => void;
 }) {
   const publicWorld = usePublicWorld();
-  // Collapsible: a judge/player who doesn't want to label anyone yet can dismiss
-  // the panel to a small chip and reopen it later.
-  const [open, setOpen] = useState(true);
+  // Collapsible and collapsed by default — it's reference info, not something you
+  // want expanded over the view every time you enter aerial. Click the chip to open.
+  const [open, setOpen] = useState(false);
   if (publicWorld.owners.length === 0) return null;
   const currentWallet = getWorldWallet()?.toLowerCase();
   const uncollectedRent = currentWallet
@@ -4697,6 +4715,14 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     window.setTimeout(() => setMineReceipt(null), 15000);
   }, []);
 
+  // Live values the chop interval needs, behind a ref so the interval's effect can
+  // depend ONLY on fpExploring. (Previously `publicWorld.parcels` + callbacks were in
+  // the deps, so the effect tore down and re-created the interval on every render —
+  // every 80ms while chopping, thanks to setChopPct — which reset the swing timer and
+  // fired strikes in a rapid burst: the "hummingbird" vibration + restarted/silent
+  // hit sound. Keeping the interval stable fixes both.)
+  const chopLoopRef = useRef({ play, runMineReceipt, showPickup, markBuildDraftDirty, showToolFeedback, parcels: publicWorld.parcels });
+  chopLoopRef.current = { play, runMineReceipt, showPickup, markBuildDraftDirty, showToolFeedback, parcels: publicWorld.parcels };
   // Chopping takes time: hold F near a tree to fill a progress bar, then it falls.
   useEffect(() => {
     if (!fpExploring) {
@@ -4710,6 +4736,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     const SWING_MS = 720; // one deliberate strike (+ its hit sound) every ~0.72s
     let sinceSwing = SWING_MS; // swing immediately on the first chopping tick
     const id = window.setInterval(() => {
+      const d = chopLoopRef.current; // live callbacks + parcels (stable interval)
       // Same hold-action harvests a tree (wood) or, if none is in range, a rock
       // (stone). Trees take priority when both are reachable.
       const tree = nearbyTreeRef.current;
@@ -4721,7 +4748,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
         sinceSwing += TICK;
         if (sinceSwing >= SWING_MS) {
           // Mining a rock gets its own stony hit; chopping keeps the axe sound.
-          void play(canChop ? 'axe_chop' : 'mine_hit');
+          void d.play(canChop ? 'axe_chop' : 'mine_hit');
           sinceSwing = 0;
           // Prompt 16 gathering FX: arm swing + tree shake + wood chip burst.
           // Axe for wood, pickaxe for rock — distinct tool per resource.
@@ -4739,20 +4766,20 @@ export default function Scene3D({ memories = null, active = null, talking = fals
         }
         chopRef.current = Math.min(100, chopRef.current + (TICK / PER_UNIT_MS) * 100);
         if (chopRef.current >= 100) {
-          const rented = rentedParcelAt(dynamicPlayerState.x, dynamicPlayerState.z, publicWorld.parcels);
+          const rented = rentedParcelAt(dynamicPlayerState.x, dynamicPlayerState.z, d.parcels);
           if (rented) {
             const rent = recordParcelRentEvent(rented.owner, rented.id, 'gather', PARCEL_GATHER_RENT_COIN);
             if (!rent.ok) {
-              showToolFeedback({ text: rent.reason ?? 'Parcel commission failed.', tone: 'bad' });
+              d.showToolFeedback({ text: rent.reason ?? 'Parcel commission failed.', tone: 'bad' });
               chopRef.current = 0;
               setChopPct(0);
               return;
             }
-            markBuildDraftDirty();
+            d.markBuildDraftDirty();
           }
           if (canChop) {
             const { depleted } = harvestTree(tree!); // grant 1 wood; deplete after TREE_WOOD
-            showPickup('Wood', '#8fd06a'); // Prompt 16: floating "+1" feedback
+            d.showPickup('Wood', '#8fd06a'); // Prompt 16: floating "+1" feedback
             if (depleted) {
               setNearbyTree(null); // tree gone; Player repicks next frame
               // Prompt 16: big chip burst when the tree finally falls
@@ -4762,10 +4789,10 @@ export default function Scene3D({ memories = null, active = null, talking = fals
           } else {
             const ore = ROCKS[rock!].ore;
             const { depleted } = harvestRock(rock!, ore); // grant 1 of the rock's ore
-            showPickup(ORE_LABEL[ore], ore === 'gold' ? '#e0c25a' : ore === 'silver' ? '#cdd2de' : '#9aa0a8');
+            d.showPickup(ORE_LABEL[ore], ore === 'gold' ? '#e0c25a' : ore === 'silver' ? '#cdd2de' : '#9aa0a8');
             if (depleted) {
               setNearbyRock(null); // rock gone; Player repicks next frame
-              if (COMPUTE_ENABLED) void runMineReceipt(); // back the batch with 0G Compute
+              if (COMPUTE_ENABLED) void d.runMineReceipt(); // back the batch with 0G Compute
             }
           }
           chopRef.current = 0;
@@ -4777,7 +4804,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
       setChopPct(chopRef.current); // React skips re-render when unchanged
     }, TICK);
     return () => window.clearInterval(id);
-  }, [fpExploring, markBuildDraftDirty, play, publicWorld.parcels, runMineReceipt, showPickup, showToolFeedback]);
+  }, [fpExploring]);
 
   // Player combat / action listener. Left-click while locked attacks (combat).
   // Right-click is a context "action" button in first person: attack a nearby
