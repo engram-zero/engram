@@ -1183,3 +1183,17 @@ muestran. `npx tsc --noEmit` limpio.
 **Qué se hizo:** dropdown Build + Claim land + cluster contextual; `buildMenuOpen` state. **Nota:**
 el modelo "click-en-edificio → menú contextual" pleno y un 3er tipo de edificio quedan como
 iteración siguiente (tocan henrique/tipos/colliders). **Commit:** _(este commit)_
+
+### 28 jun 2026 · Subir luminosidad de producción (path cinematic) sin perder el sol
+**Pedido (humano):** En local todo se ve más luminoso (mejor) y en prod más apagado; en prod sí se
+ve la trayectoria del sol y en local no. Dejar prod "luminoso como local" pero conservando el sol.
+**Diagnóstico:** `forceBrightTestLighting` está ON en local/LAN/dev (`NODE_ENV!=='production'`):
+fuerza hora=12 + luces blancas planas + exposición 2.2, sin sombras/fog/Sky. Prod usa el path
+cinematic con la hora real → de tarde se ve apagado pero con el sol bajo visible. No es bug de
+texturas; es la iluminación.
+**Prompt sintetizado:** Subir moderadamente el path cinematic (solo prod) manteniendo Sky/sol/
+sombras: en `computeDayNight` elevar el piso `visible` 0.42→0.52 y las intensidades ambient
+mix(1.18,1.72)→(1.45,1.95), hemi (1.22,1.56)→(1.45,1.82), dir (0.45,2.05)→(0.75,2.2); exposición
+cinematic 1.6→1.9. Previsualizable en local con `?night=1`. `npx tsc --noEmit` limpio.
+**Qué se hizo:** los 5 ajustes de luz. ~+25% de luminosidad, noche más legible, sol/arco intactos.
+**Commit:** _(este commit)_

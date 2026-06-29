@@ -3673,7 +3673,7 @@ export function computeDayNight(hour: number): DayNight {
   // Keep a visibility floor so night still reads as night, but terrain, trees and
   // silhouettes don't collapse into pure black. The floor is the night "moonlight
   // fill" — raised slightly so the ground isn't crushed-black on real hardware.
-  const visible = 0.42 + daylight * 0.58;
+  const visible = 0.52 + daylight * 0.48;
   const skyVisible = Math.max(0, Math.min(1, (sunY - 0.02) / 0.28));
 
   // Moon rides its own arc across the night (sunset → sunrise).
@@ -3689,13 +3689,13 @@ export function computeDayNight(hour: number): DayNight {
     // lit-floor `visible`, so there's no blue/grey night sky) and back to day blue.
     bg: mixColor('#000000', '#a8caee', daylight),
     fog: mixColor('#000000', '#b8d0e8', daylight),
-    ambIntensity: mix(1.18, 1.72, visible),
+    ambIntensity: mix(1.45, 1.95, visible),
     ambColor: mixColor('#b4c3e5', '#fff3e0', visible),
     hemiSky: mixColor('#6f84ac', '#d7e6ff', visible),
     hemiGround: mixColor('#4f5c45', '#93a073', visible),
-    hemiIntensity: mix(1.22, 1.56, visible),
+    hemiIntensity: mix(1.45, 1.82, visible),
     dirPos: [sunX * 60, Math.max(18, sunY * 60), -40], // key light follows the sun; min height keeps moonlight
-    dirIntensity: mix(0.45, 2.05, visible),
+    dirIntensity: mix(0.75, 2.2, visible),
     dirColor: mixColor('#d3def7', '#fff1d6', visible),
     turbidity: mix(7.2, 10.8, visible),
     rayleigh: mix(0.8, 1.55, visible),
@@ -4762,7 +4762,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
           shadows={!forceBrightTestLighting}
           dpr={[1, 1.75]}
           camera={{ position: [0, 3.1, 9], fov: 60 }}
-          gl={{ antialias: true, toneMappingExposure: forceBrightTestLighting ? 2.2 : 1.6 }}
+          gl={{ antialias: true, toneMappingExposure: forceBrightTestLighting ? 2.2 : 1.9 }}
         >
           <color attach="background" args={[forceBrightTestLighting ? '#a8caee' : dn.bg]} />
           {!forceBrightTestLighting && <fog attach="fog" args={[dn.fog, 30, 110]} />}
