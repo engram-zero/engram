@@ -1337,3 +1337,15 @@ reciente** entre el borrador local y el bundle 0G → el gathering no guardado n
 viejo, y un 0G más nuevo (otro device) gana en navegador limpio. Save World sigue siendo el anclaje
 on-chain explícito (1 popup intencional). `npx tsc --noEmit` limpio.
 **Commit:** _(este commit)_
+
+### 29 jun 2026 · Prompt 23 doc + Fase 1 (precios de mena dinámicos por escasez)
+**Pedido (humano):** documentar Prompt 23 (economía respaldada en 0G), arrancar Fase 1, y dejar
+encaminado el Prompt 8 (IA de naturaleza).
+**Prompt sintetizado:** Documentar Prompt 23 (modelo banco/usuarios, conservación, precios por
+escasez×inflación viviendo en 0G, fases incl. IA de naturaleza = Prompt 8c y respaldo OG real
+post-torneo). Fase 1 en código: `quoteFromScarcity(base, fracciónRestante, coin)` en `world.ts`
+(generaliza `woodQuote`) + `oreQuote(world, ore, total, mined)`; client-page calcula totales/minados
+por mena desde `ROCKS`/`world.minedRocks` y el mercado de Aldric usa precios **dinámicos** de
+stone/silver/gold (suben con la escasez del mundo). `npx tsc --noEmit` limpio. **Pendiente:**
+tesorería explícita en 0G (F2), IA de naturaleza (F3/Prompt 8c), minar-cuesta-tokens (F4).
+**Commit:** _(este commit)_

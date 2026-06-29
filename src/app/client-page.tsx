@@ -25,6 +25,7 @@ import {
   receiveBoughtWood,
   addRepairKits,
   woodQuote,
+  oreQuote,
   MARKET,
   MAX_STONE,
   ORE_MAX,
@@ -33,7 +34,7 @@ import {
   REPAIR_KIT_COST,
   SAPLING_COST,
 } from '@/lib/world';
-import { TREES } from '@/components/engram/map';
+import { TREES, ROCKS } from '@/components/engram/map';
 import { createBundleWorldPersistence } from '@/lib/world-0g';
 import { startPublicWorldPolling } from '@/lib/public-world';
 import { Portrait } from '@/components/engram/Art';
@@ -151,6 +152,22 @@ function Game() {
   const world = useWorld();
   // Live wood quote (dynamic: tree scarcity × coin inflation, with house spread).
   const quote = useMemo(() => woodQuote(world, TREES.length), [world]);
+  // Prompt 23 Phase 1 — live ore quotes: each ore priced by how much of its rock is
+  // still unmined in the world (the on-0G "treasury" supply) × coin inflation.
+  const oreTotals = useMemo(() => {
+    const t = { stone: 0, silver: 0, gold: 0 } as Record<OreType, number>;
+    for (const r of ROCKS) t[r.ore] += 1;
+    return t;
+  }, []);
+  const oreQuotes = useMemo(() => {
+    const minedByOre = { stone: 0, silver: 0, gold: 0 } as Record<OreType, number>;
+    for (const i of world.minedRocks) { const r = ROCKS[i]; if (r) minedByOre[r.ore] += 1; }
+    return {
+      stone: oreQuote(world, 'stone', oreTotals.stone, minedByOre.stone),
+      silver: oreQuote(world, 'silver', oreTotals.silver, minedByOre.silver),
+      gold: oreQuote(world, 'gold', oreTotals.gold, minedByOre.gold),
+    } as Record<OreType, ReturnType<typeof oreQuote>>;
+  }, [world, oreTotals]);
 
   const [memories, setMemories] = useState<Record<NPCName, NPCMemory> | null>(null);
   const [active, setActive] = useState<NPCName | null>(null);
@@ -430,7 +447,7 @@ function Game() {
       setMerchantMsg(`You have no ${ore} to sell.`);
       return;
     }
-    const price = MARKET[ore]?.sell ?? 0;
+    const price = oreQuotes[ore].sell;
     const qty = clampInt(merchantStoneQty, 1, avail);
     const total = qty * price;
     await addResource(ore, -qty);
@@ -444,7 +461,7 @@ function Game() {
 
   async function buyOreFromAldric(ore: OreType) {
     if (!memories || active !== 'aldric' || scene.loading) return;
-    const price = MARKET[ore]?.buy ?? 0;
+    const price = oreQuotes[ore].buy;
     if (price <= 0) return;
     const want = clampInt(merchantStoneQty, 1, 999);
     const affordable = Math.floor(world.inventory.coin / price);
@@ -855,11 +872,11 @@ function Game() {
                     />
                   </div>
                   {(['stone', 'silver', 'gold'] as OreType[])
-                    .filter((ore) => ore === 'stone' || world.inventory[ore] > 0 || world.inventory.coin >= (MARKET[ore]?.buy ?? 0))
+                    .filter((ore) => ore === 'stone' || world.inventory[ore] > 0 || world.inventory.coin >= oreQuotes[ore].buy)
                     .map((ore) => (
                       <div key={ore} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
                         <span className="capitalize" style={{ color: ore === 'gold' ? '#e0c25a' : ore === 'silver' ? '#cdd2de' : '#bcd0e0' }}>
-                          {ore} · sell <strong>{MARKET[ore]?.sell}</strong> / buy <strong>{MARKET[ore]?.buy}</strong>
+                          {ore} · sell <strong>{oreQuotes[ore].sell}</strong> / buy <strong>{oreQuotes[ore].buy}</strong>
                         </span>
                         <span>You: <strong>{world.inventory[ore]}</strong></span>
                         <button
@@ -871,7 +888,7 @@ function Game() {
                         </button>
                         <button
                           onClick={() => buyOreFromAldric(ore)}
-                          disabled={scene.loading || world.inventory.coin < (MARKET[ore]?.buy ?? 0) || world.inventory[ore] >= ORE_MAX[ore]}
+                          disabled={scene.loading || world.inventory.coin < oreQuotes[ore].buy || world.inventory[ore] >= ORE_MAX[ore]}
                           className="bg-black/40 border border-[#8a6a32] hover:border-[#d6b84a] rounded-md px-3 py-1.5 text-sm disabled:opacity-40"
                         >
                           Buy

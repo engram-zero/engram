@@ -113,6 +113,14 @@ export const HOUSE_SPREAD = 1.3;
 export const WOOD_BASE_PRICE = 3; // coin per wood at neutral scarcity & inflation
 export const COIN_INFLATION_REF = 200; // coin balance at which inflation maxes out
 
+// Prompt 23 (economy) — Phase 1: ONE scarcity-driven pricing primitive for every
+// resource. Price = base × scarcity × coin-inflation, with the house spread. The
+// "treasury" is the world's remaining minable supply (trees/rocks left, which live
+// in the 0G world bundle), so prices respond to how much has been extracted.
+export const RESOURCE_BASE_PRICE: Record<'wood' | 'stone' | 'silver' | 'gold', number> = {
+  wood: 3, stone: 4.5, silver: 13, gold: 33,
+};
+
 export interface WoodQuote {
   /** Fair mid price (coin/unit) before the house spread. */
   mid: number;
@@ -128,16 +136,30 @@ export interface WoodQuote {
  * Live wood quote for this player's world. `totalTrees` is passed in (from
  * map.ts TREES.length) to keep this module decoupled from the heavy scene graph.
  */
-export function woodQuote(world: WorldState, totalTrees: number): WoodQuote {
-  const remaining = Math.max(0, totalTrees - world.choppedTrees.length);
-  const forest = totalTrees > 0 ? remaining / totalTrees : 1; // 1 full → 0 clearcut
-  const scarcity = 0.8 + 1.0 * (1 - forest); // 0.8 (abundant) → 1.8 (scarce)
-  const inflation = 1 + Math.min(world.inventory.coin / COIN_INFLATION_REF, 1) * 0.5; // 1 → 1.5
-  const mid = WOOD_BASE_PRICE * scarcity * inflation;
+/** The shared scarcity→price primitive. `fractionRemaining` is supply left in the
+ * world (1 = untouched, 0 = exhausted); `coinBalance` drives inflation. */
+export function quoteFromScarcity(basePrice: number, fractionRemaining: number, coinBalance: number): WoodQuote {
+  const frac = Math.max(0, Math.min(1, fractionRemaining));
+  const scarcity = 0.8 + 1.0 * (1 - frac); // 0.8 (abundant) → 1.8 (scarce)
+  const inflation = 1 + Math.min(coinBalance / COIN_INFLATION_REF, 1) * 0.5; // 1 → 1.5
+  const mid = basePrice * scarcity * inflation;
   const sell = Math.max(1, Math.round(mid / HOUSE_SPREAD));
   const haggleCeil = Math.max(sell, Math.round(mid)); // best negotiable = the fair mid
   const buy = Math.max(Math.round(mid * HOUSE_SPREAD), haggleCeil + 1); // strictly above haggle
   return { mid, sell, buy, haggleCeil };
+}
+
+export function woodQuote(world: WorldState, totalTrees: number): WoodQuote {
+  const remaining = Math.max(0, totalTrees - world.choppedTrees.length);
+  const forest = totalTrees > 0 ? remaining / totalTrees : 1; // 1 full → 0 clearcut
+  return quoteFromScarcity(RESOURCE_BASE_PRICE.wood, forest, world.inventory.coin);
+}
+
+/** Live ore quote: scarcity = fraction of that ore's rock outcrops still unmined. */
+export function oreQuote(world: WorldState, ore: OreType, totalOfOre: number, minedOfOre: number): WoodQuote {
+  const remaining = Math.max(0, totalOfOre - minedOfOre);
+  const frac = totalOfOre > 0 ? remaining / totalOfOre : 1;
+  return quoteFromScarcity(RESOURCE_BASE_PRICE[ore], frac, world.inventory.coin);
 }
 
 export function isLocalhostFreeBuildWallet(addr: string | null = wallet): boolean {

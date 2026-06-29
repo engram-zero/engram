@@ -34,6 +34,7 @@
 20. [Minar = trabajo real en 0G Compute (proof-of-useful-work)](#prompt-20--minar--trabajo-real-en-0g-compute) — 🟡 construido, **gateado OFF + sin verificar en vivo** (falta fondear el ledger y probar)
 21. [Mapa que crece: parcelas de tierra propiedad del jugador + renta (en 0G)](#prompt-21--mapa-que-crece-parcelas-de-tierra-en-0g) — 🟢 implemented core: ParcelRegistry on 0G Chain + 0G bundle parcel data + rent/commission loop + data-driven parcel resources
 22. [Frontera expandible: el mapa crece casilla a casilla](#prompt-22--frontera-expandible-el-mapa-crece-casilla-a-casilla) — 🟢 implemented core: frontier adjacency + walkable claimed cells + per-parcel 0G dataRoot anchored in ParcelRegistry
+23. [Economía respaldada en 0G: precios por escasez + tesorería + IA de naturaleza](#prompt-23--economía-respaldada-en-0g) — 🟡 Fase 1 en curso (precios dinámicos de mena por escasez); tesorería/tokens reales/IA de naturaleza pendientes
 
 > **Tareas no-código (ADMIN):** ✅ deploy a Vercel + env vars · ✅ save a 0G end-to-end ·
 > ✅ **Group Stage ENVIADO y ACEPTADO** · ✅ **Round of 32 CLASIFICADO (top 32)** · ✅ video demo
@@ -1087,6 +1088,55 @@ redespliega. Refuerza "own your world".
 3. El jugador puede caminar/construir en la casilla reclamada.
 4. Otras wallets ven la casilla por descubrimiento público y pueden hidratar su `dataRoot`.
 5. Sin parcelas, el mundo base se juega igual.
+
+---
+
+## Prompt 23 — Economía respaldada en 0G
+
+> 💡 **Visión (AriiBen) + Fase 1 arrancada (29 jun 2026).** La economía deja de estar
+> hardcodeada: **los precios derivan de la escasez del mundo y de la oferta monetaria**, y
+> esa tabla/estado **vive en 0G** (auditable, propiedad colectiva). El minero obtiene metal
+> respaldado por valor real (tokens), y una **IA de naturaleza** repone la oferta según
+> entran tokens — controlando la inflación. Cierra la Fase 8d del [Prompt 8](#prompt-8--visión-gameplay-loop--doble-vista).
+
+### El modelo (dos entidades)
+- **Tesorería / "banco del mundo":** posee el **stock** de minerales (la oferta minable que
+  queda: árboles/rocas no extraídos). Vive en 0G.
+- **Usuarios:** poseen **tokens** (coin in-game hoy; OG real como meta).
+- **Conservación (sin minteo artificial):** los tokens solo **circulan** banco↔usuarios
+  (minar/vender mueve valor); el stock es **finito** y solo se repone cuando entra valor real.
+  Análogo a un banco de puntos de clase: las tareas pagan **menos** a medida que el banco se
+  vacía; entran nuevos miembros → se inyecta oferta de forma **orgánica**.
+
+### Cómo se derivan los precios
+`precio = base × escasez × inflación`, con `escasez = f(stock restante / stock total)` e
+`inflación = f(tokens en circulación)`. Spread de casa (`HOUSE_SPREAD`) en ambos sentidos.
+
+### Fases
+1. **🟡 EN CURSO — precios por escasez para todos los recursos.** `quoteFromScarcity(base,
+   fracciónRestante, coin)` en `world.ts` (generaliza `woodQuote`); `oreQuote(...)` precia
+   stone/silver/gold por la fracción de rocas aún sin minar (la "tesorería" = supply en el
+   bundle 0G). El mercado de Aldric ya usa estos precios dinámicos (sube si el mundo se agota).
+2. **Tesorería explícita en 0G.** Mover `MARKET`/`BUILD_COST` a una **tabla de economía**
+   (`{ stock, tokensInCirculation, basePrices }`) persistida en 0G (bundle/contrato), no a
+   constantes. Auditable y descubrible. *(Ángulo fuerte de torneo: "la economía vive en 0G".)*
+3. **IA de naturaleza (Prompt 8c — crear).** Endpoint server (patrón `/api/npc`) que actúa de
+   "agente Tierra/Fauna": según el valor/tokens que entran al juego, **repone stock y spawnea**
+   nuevos árboles/rocas/vetas (data-driven, sin redeploy). Mantiene viva la oferta y modera la
+   inflación. Su estado (fertilidad por zona) también puede vivir en 0G.
+4. **Minar = pagar por el metal.** Invertir el gathering: minar **descuenta del stock del banco
+   y cuesta coin/tokens** → el metal in-game queda **respaldado**. Cambio de gameplay; va tras
+   2 y 3.
+5. **Respaldo en OG real (post-torneo).** Depositar OG → la tesorería lo custodia on-chain → el
+   mineral se "acuña" contra ese valor. Para la ronda: versión **testnet/simulada**, divulgada
+   con honestidad.
+
+### Criterios de aceptación (por fase)
+1. (F1) Los precios de mena **suben** cuando el mundo se agota y **bajan** cuando es abundante;
+   derivados de estado 0G, no hardcodeados. `npx tsc --noEmit` limpio.
+2. (F2) `MARKET`/`BUILD_COST` ya no son constantes: la tabla de economía se lee de 0G.
+3. (F3) Al entrar valor/tokens, la IA repone oferta sin redeploy; auditable.
+4. (F4) Minar descuenta stock del banco y cuesta tokens; el balance no se mintea de la nada.
 
 ---
 
