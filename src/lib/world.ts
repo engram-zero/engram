@@ -15,9 +15,9 @@
 //     NOT cross-device, NOT on-chain).
 
 import { useSyncExternalStore } from 'react';
-import { BLOCK_SCALE_MAX, BLOCK_SCALE_MIN, BLOCK_UNIT, type OreType, type ParcelClaim, type ParcelRentEvent, type RaidEvent, type RepairEvent, type ResourceType, type WalletRelation, type WorldState, type Building, type BuildingType } from '@/lib/types';
+import { BLOCK_SCALE_MAX, BLOCK_SCALE_MIN, BLOCK_UNIT, type EcosystemState, type OreType, type ParcelClaim, type ParcelRentEvent, type RaidEvent, type RepairEvent, type ResourceType, type WalletRelation, type WorldState, type Building, type BuildingType } from '@/lib/types';
 
-export type { OreType, ParcelClaim, ParcelRentEvent, RaidEvent, RepairEvent, ResourceType, WalletRelation, WorldState, Building, BuildingType } from '@/lib/types';
+export type { EcosystemState, OreType, ParcelClaim, ParcelRentEvent, RaidEvent, RepairEvent, ResourceType, WalletRelation, WorldState, Building, BuildingType } from '@/lib/types';
 
 /** How much wood the player can carry before they must use/drop some. Raised to
  * support AI-built structures and the pricier builds near the village centre. */
@@ -53,6 +53,7 @@ export const EMPTY_WORLD: WorldState = {
   parcelRentEvents: [],
   parcelRentCollected: [],
   depletedParcelResources: [],
+  ecosystem: undefined,
   relations: {},
 };
 
@@ -528,6 +529,78 @@ function normalizeParcelResourceIds(raw: unknown): string[] {
   return Array.from(new Set(raw.map((id) => cleanId(id, '')).filter(Boolean))).slice(0, MAX_DEPLETED_PARCEL_RESOURCES);
 }
 
+function normalizeEcosystem(raw: unknown): EcosystemState | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const p = raw as Record<string, any>;
+  const updatedAt = Number(p.updatedAt);
+  const baseUpdatedAt = Number.isFinite(updatedAt) && updatedAt > 0 ? updatedAt : Date.now();
+  const sourceFingerprint = typeof p.sourceFingerprint === 'string' ? p.sourceFingerprint : undefined;
+
+  const earthRaw = p.earth && typeof p.earth === 'object' ? p.earth : undefined;
+  const earth = earthRaw
+    ? {
+        updatedAt: Math.max(0, Math.round(Number(earthRaw.updatedAt ?? baseUpdatedAt))) || baseUpdatedAt,
+        cadenceMs: Math.max(15000, Math.min(1000 * 60 * 30, Math.round(Number(earthRaw.cadenceMs ?? 1000 * 60 * 4)))),
+        nextGrowthAt: Math.max(0, Math.round(Number(earthRaw.nextGrowthAt ?? 0))),
+        dominantZone: cleanNatureZoneId(earthRaw.dominantZone),
+        zones: normalizeEarthZones(earthRaw.zones),
+        summary: typeof earthRaw.summary === 'string' ? earthRaw.summary : 'The soil shifts quietly beneath Aldenmoor.',
+      }
+    : undefined;
+
+  const faunaRaw = p.fauna && typeof p.fauna === 'object' ? p.fauna : undefined;
+  const fauna = faunaRaw
+    ? {
+        updatedAt: Math.max(0, Math.round(Number(faunaRaw.updatedAt ?? baseUpdatedAt))) || baseUpdatedAt,
+        spawnIntervalMs: Math.max(15000, Math.min(1000 * 60 * 8, Math.round(Number(faunaRaw.spawnIntervalMs ?? 1000 * 60 * 2)))),
+        calmDelayMs: Math.max(0, Math.min(1000 * 60 * 10, Math.round(Number(faunaRaw.calmDelayMs ?? 20000)))),
+        maxEnemies: Math.max(1, Math.min(24, Math.round(Number(faunaRaw.maxEnemies ?? 8)))),
+        speedMultiplier: Math.max(0.6, Math.min(2.2, Number(faunaRaw.speedMultiplier ?? 1))),
+        dominantZone: cleanNatureZoneId(faunaRaw.dominantZone),
+        mood: faunaRaw.mood === 'hostile' || faunaRaw.mood === 'neutral' ? faunaRaw.mood : 'wary',
+        zones: normalizeFaunaZones(faunaRaw.zones),
+        summary: typeof faunaRaw.summary === 'string' ? faunaRaw.summary : 'The fauna circles the map edge, waiting for weakness.',
+      }
+    : undefined;
+
+  if (!earth && !fauna) return undefined;
+  return { updatedAt: baseUpdatedAt, sourceFingerprint, earth, fauna };
+}
+
+function cleanNatureZoneId(raw: unknown): 'north_forest' | 'riverlands' | 'east_hills' | 'south_fields' | 'west_grove' {
+  return raw === 'riverlands' || raw === 'east_hills' || raw === 'south_fields' || raw === 'west_grove' ? raw : 'north_forest';
+}
+
+function normalizeEarthZones(raw: unknown): NonNullable<NonNullable<EcosystemState['earth']>['zones']> {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((zone) => zone && typeof zone === 'object')
+    .map((zone) => {
+      const z = zone as Record<string, any>;
+      return {
+        id: cleanNatureZoneId(z.id),
+        fertility: Math.max(0, Math.min(100, Math.round(Number(z.fertility ?? 50)))),
+        regrowthShare: Math.max(0, Math.min(1, Number(z.regrowthShare ?? 0.2))),
+        note: typeof z.note === 'string' ? z.note : 'The soil holds steady.',
+      };
+    });
+}
+
+function normalizeFaunaZones(raw: unknown): NonNullable<NonNullable<EcosystemState['fauna']>['zones']> {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((zone) => zone && typeof zone === 'object')
+    .map((zone) => {
+      const z = zone as Record<string, any>;
+      return {
+        id: cleanNatureZoneId(z.id),
+        demeanor: z.demeanor === 'hostile' || z.demeanor === 'neutral' ? z.demeanor : 'wary',
+        spawnWeight: Math.max(0, Math.min(1, Number(z.spawnWeight ?? 0.2))),
+        note: typeof z.note === 'string' ? z.note : 'Tracks gather and disperse without warning.',
+      };
+    });
+}
+
 export function normalizeWorldState(raw: unknown): WorldState {
   const p = raw && typeof raw === 'object' ? (raw as any) : {};
   const intIndexSet = (raw: unknown): number[] =>
@@ -557,6 +630,7 @@ export function normalizeWorldState(raw: unknown): WorldState {
     parcelRentEvents: normalizeParcelRentEvents(p?.parcelRentEvents),
     parcelRentCollected: normalizeCollectedRentIds(p?.parcelRentCollected),
     depletedParcelResources: normalizeParcelResourceIds(p?.depletedParcelResources),
+    ecosystem: normalizeEcosystem(p?.ecosystem),
     relations: normalizeRelations(p?.relations),
     savedAt: Number.isFinite(Number(p?.savedAt)) ? Number(p?.savedAt) : 0,
   };
@@ -577,6 +651,23 @@ export function cloneWorldState(value: WorldState = EMPTY_WORLD): WorldState {
     parcelRentEvents: value.parcelRentEvents.map((event) => ({ ...event })),
     parcelRentCollected: [...value.parcelRentCollected],
     depletedParcelResources: [...value.depletedParcelResources],
+    ecosystem: value.ecosystem
+      ? {
+          ...value.ecosystem,
+          earth: value.ecosystem.earth
+            ? {
+                ...value.ecosystem.earth,
+                zones: value.ecosystem.earth.zones.map((zone) => ({ ...zone })),
+              }
+            : undefined,
+          fauna: value.ecosystem.fauna
+            ? {
+                ...value.ecosystem.fauna,
+                zones: value.ecosystem.fauna.zones.map((zone) => ({ ...zone })),
+              }
+            : undefined,
+        }
+      : undefined,
     relations: { ...value.relations },
   };
 }
@@ -661,6 +752,10 @@ async function commit(next: WorldState) {
 
 export function replaceWorldState(next: WorldState) {
   return commit(next);
+}
+
+export function setEcosystemState(ecosystem: EcosystemState | undefined) {
+  return commit({ ...state, ecosystem });
 }
 
 export function addResource(type: ResourceType, amount: number) {

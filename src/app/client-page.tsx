@@ -13,11 +13,13 @@ import ConnectButton from '@/components/ConnectButton';
 import NetworkToggle from '@/components/NetworkToggle';
 import { useWallet } from '@/hooks/useWallet';
 import { NPC_LIST } from '@/lib/npcs';
-import type { NPCName, NPCMemory, TradeOffer, TradeDecision } from '@/lib/types';
+import type { EarthAgentResponse, FaunaAgentResponse, NPCName, NPCMemory, TradeOffer, TradeDecision } from '@/lib/types';
 import { readAllMemories, writeMemory, getBundleRoot } from '@/lib/memory';
 import {
   addResource,
+  getWorld,
   initWorld,
+  replaceWorldState,
   setWorldPersistence,
   useWorld,
   replantTree,
@@ -34,6 +36,7 @@ import {
   REPAIR_KIT_COST,
   SAPLING_COST,
 } from '@/lib/world';
+import { computeNatureSnapshot, fingerprintNature, pickTreeToRegrow } from '@/lib/ecosystem';
 import { TREES, ROCKS } from '@/components/engram/map';
 import { createBundleWorldPersistence } from '@/lib/world-0g';
 import { startPublicWorldPolling } from '@/lib/public-world';
@@ -245,6 +248,104 @@ function Game() {
     initWorld(address).catch(() => {});
     return startPublicWorldPolling(networkType, address);
   }, [address, isConnected, networkType]);
+
+  const natureFingerprint = useMemo(() => fingerprintNature(world), [
+    world.choppedTrees.length,
+    world.minedRocks.length,
+    world.buildings.length,
+    world.parcelClaims.length,
+    world.inventory.coin,
+    world.enemiesKilled,
+  ]);
+  const natureRequestRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!isConnected || !address) return;
+    if (world.ecosystem?.sourceFingerprint === natureFingerprint) return;
+    if (natureRequestRef.current === natureFingerprint) return;
+    natureRequestRef.current = natureFingerprint;
+
+    let cancelled = false;
+    const snapshot = computeNatureSnapshot(world);
+
+    void (async () => {
+      try {
+        const baseBody = {
+          walletAddress: address,
+          world,
+          snapshot,
+          current: world.ecosystem,
+        };
+
+        const [earthRes, faunaRes] = await Promise.all([
+          fetch('/api/earth-agent', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(baseBody),
+          }),
+          fetch('/api/fauna-agent', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(baseBody),
+          }),
+        ]);
+
+        if (cancelled || !earthRes.ok || !faunaRes.ok) return;
+        const earthData = (await earthRes.json()) as EarthAgentResponse;
+        const faunaData = (await faunaRes.json()) as FaunaAgentResponse;
+        if (cancelled) return;
+
+        const current = getWorld();
+        if (fingerprintNature(current) !== natureFingerprint) return;
+
+        await replaceWorldState({
+          ...current,
+          ecosystem: {
+            updatedAt: Date.now(),
+            sourceFingerprint: natureFingerprint,
+            earth: earthData.earth,
+            fauna: faunaData.fauna,
+          },
+        });
+      } catch (error) {
+        console.warn('[engram] nature agents failed:', error);
+        natureRequestRef.current = null;
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [address, isConnected, natureFingerprint, world, world.ecosystem, networkType]);
+
+  useEffect(() => {
+    const earth = world.ecosystem?.earth;
+    if (!earth || world.choppedTrees.length === 0) return;
+    const delay = Math.max(1000, earth.nextGrowthAt - Date.now());
+    const timer = window.setTimeout(() => {
+      const current = getWorld();
+      const liveEarth = current.ecosystem?.earth;
+      if (!liveEarth || current.choppedTrees.length === 0 || liveEarth.nextGrowthAt > Date.now()) return;
+      const treeIndex = pickTreeToRegrow(current.choppedTrees, liveEarth);
+      if (treeIndex === null) return;
+      void replaceWorldState({
+        ...current,
+        choppedTrees: current.choppedTrees.filter((id) => id !== treeIndex),
+        ecosystem: {
+          ...current.ecosystem,
+          updatedAt: Date.now(),
+          earth: {
+            ...liveEarth,
+            updatedAt: Date.now(),
+            nextGrowthAt: Date.now() + liveEarth.cadenceMs,
+            summary: `${liveEarth.summary} One sapling stirs back to life in ${liveEarth.dominantZone.replace('_', ' ')}.`,
+          },
+        },
+      });
+    }, delay);
+
+    return () => window.clearTimeout(timer);
+  }, [world.choppedTrees, world.ecosystem?.earth]);
 
   // Auto-dismiss the "✓ Saved to 0G" banner after a while so it doesn't linger.
   useEffect(() => {

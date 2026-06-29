@@ -2376,11 +2376,17 @@ function Enemy({ id }: { id: string }) {
 
 function EnemySpawner() {
   const [enemyIds, setEnemyIds] = useState<string[]>([]);
+  const world = useWorld();
 
   useEffect(() => {
-    // Hold off so the player can explore in peace, then spawn 1 enemy every ~9s
-    // up to a small cap (kept low so it doesn't feel like a horde).
-    const MAX_ENEMIES = 13;
+    const fauna = world.ecosystem?.fauna;
+    // The fauna agent tunes how hard the wild edge pushes back: a calmer world
+    // grants a longer peace window and fewer simultaneous threats; a harsh one
+    // thickens the pressure without turning the map into a constant horde.
+    const MAX_ENEMIES = fauna?.maxEnemies ?? 13;
+    const START_DELAY = fauna?.calmDelayMs ?? 20000;
+    const SPAWN_INTERVAL = fauna?.spawnIntervalMs ?? 120000;
+    const SPEED_MULT = fauna?.speedMultiplier ?? 1;
     let interval: ReturnType<typeof setInterval> | undefined;
     const startDelay = setTimeout(() => {
       interval = setInterval(() => {
@@ -2395,7 +2401,7 @@ function EnemySpawner() {
           dynamicEnemyState[id] = {
             x: Math.cos(angle) * radius,
             z: Math.sin(angle) * radius,
-            speed: 1.5 + Math.random() * 1.0,
+            speed: (1.5 + Math.random() * 1.0) * SPEED_MULT,
             dead: false,
             hp: 50,
             maxHp: 50,
@@ -2404,14 +2410,14 @@ function EnemySpawner() {
 
           return [...alive, id];
         });
-      }, 120000); // a new enemy every ~2 minutes
-    }, 20000); // ~20s of calm before the first enemy
+      }, SPAWN_INTERVAL);
+    }, START_DELAY);
 
     return () => {
       clearTimeout(startDelay);
       if (interval) clearInterval(interval);
     };
-  }, []);
+  }, [world.ecosystem?.fauna]);
 
   return (
     <group>

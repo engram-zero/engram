@@ -20,7 +20,7 @@
 5. [Texturas PNG en lugar de materiales planos](#prompt-5--texturas-png) — ✅ done (22 texturas en webp; ver [`ART_ASSETS.md`](ART_ASSETS.md))
 6. [Audio ambiental (fogata, pasos, noche)](#prompt-6--audio-ambiental) — ✅ done: ambiente **espacial por distancia** (fogata, bolsas de grillos night-only, bed diurno) + foley (pasos/hacha/salto) + toggle de mute.
 7. [Verificar end-to-end la UX del 429 en el cliente](#prompt-7--verificación-diferida-ux-del-429) — ⏳ diferida (ver precondición)
-8. [Visión: gameplay loop, doble vista y mundo persistente en 0G](#prompt-8--visión-gameplay-loop--doble-vista) — 🟡 partial: 8a done, 8b persistencia MVP done (martelaxe)
+8. [Visión: gameplay loop, doble vista y mundo persistente en 0G](#prompt-8--visión-gameplay-loop--doble-vista) — 🟡 partial: 8a done, 8b persistencia MVP done (martelaxe), **8c core done** (Agente Tierra/Fauna)
 9. [Construir edificios + persistir el mundo en 0G](#prompt-9--construir--persistir-el-mundo-en-0g) — ✅ 9a (gameplay + zonas/precios) y 9b (persistencia 0G, martelaxe) hechos
 10. [Mercado: vender recursos a los NPCs → reputación en 0G](#prompt-10--mercado-vender-recursos--reputación) — ✅ v1 + v2 done (venta simple + **regateo con LLM**: Aldric acepta/contraoferta/rechaza, ajusta trust, persiste en 0G)
 11. [Construcción con IA + tokens (describir y que la IA edifique)](#prompt-11--construcción-con-ia--tokens) — ✅ done (`/api/build` + modal; **bloques voxel** refinados a grid fino, preview, costo USD, tope de gasto, BYO key)
@@ -531,6 +531,16 @@ Quick win, alto valor, bajo riesgo. En `src/components/engram/Scene3D.tsx`:
   Engancha con `debts`/economía ya existente en la memoria de los NPCs.
 
 ### Fase 8c — Agentes de naturaleza (IA gobernando la sim)
+> **🟡 Core implementado — 29 jun 2026.** Ya existen dos endpoints server-side,
+> [`/api/earth-agent`](../src/app/api/earth-agent/route.ts) y
+> [`/api/fauna-agent`](../src/app/api/fauna-agent/route.ts), siguiendo el patrón de
+> `/api/npc`: usan Claude/Gemini cuando hay key y fallback determinista si no. Su salida se
+> persiste en `WorldState.ecosystem` dentro del mismo `MemoryBundle.world`, así que la
+> "memoria del ecosistema" también viaja en 0G. En runtime, **Agente Tierra** gobierna la
+> cadencia de regeneración de árboles por zona del mapa, y **Agente Fauna** gobierna la
+> presión del borde salvaje (delay inicial, intervalo de spawn, cap y velocidad de enemigos).
+> Queda pendiente una v2 con animales visibles/no-combate y más efectos por zona, pero el
+> mundo ya dejó de ser una sim totalmente estática.
 - **Agente Tierra**: por zona del mapa, dice qué tan rápido crecen los árboles (fertilidad).
 - **Agente Fauna**: comportamiento de animales (hostil/neutral), dónde proliferan, etc.
 - Reusar el patrón server-side de `/api/npc` (un endpoint por agente que devuelve parámetros

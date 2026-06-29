@@ -8,9 +8,64 @@ export type ResourceType = 'wood' | 'stone' | 'coin' | 'silver' | 'gold';
 /** Minerals you can mine out of rock outcrops (a subset of ResourceType). */
 export type OreType = 'stone' | 'silver' | 'gold';
 export type WalletRelation = 'neutral' | 'allied' | 'hostile';
+export type NatureZoneId = 'north_forest' | 'riverlands' | 'east_hills' | 'south_fields' | 'west_grove';
+export type FaunaMood = 'hostile' | 'wary' | 'neutral';
 export const BLOCK_UNIT = 0.1; // smaller voxels → more detailed, realistic builds
 export const BLOCK_SCALE_MIN = BLOCK_UNIT;
 export const BLOCK_SCALE_MAX = 0.25;
+
+export interface NatureZoneSnapshot {
+  id: NatureZoneId;
+  label: string;
+  standingTrees: number;
+  choppedTrees: number;
+  intactRocks: number;
+  minedRocks: number;
+  parcelClaims: number;
+  playerBuilds: number;
+}
+
+export interface EarthZoneDirective {
+  id: NatureZoneId;
+  fertility: number;
+  regrowthShare: number;
+  note: string;
+}
+
+export interface FaunaZoneDirective {
+  id: NatureZoneId;
+  demeanor: FaunaMood;
+  spawnWeight: number;
+  note: string;
+}
+
+export interface EarthAgentState {
+  updatedAt: number;
+  cadenceMs: number;
+  nextGrowthAt: number;
+  dominantZone: NatureZoneId;
+  zones: EarthZoneDirective[];
+  summary: string;
+}
+
+export interface FaunaAgentState {
+  updatedAt: number;
+  spawnIntervalMs: number;
+  calmDelayMs: number;
+  maxEnemies: number;
+  speedMultiplier: number;
+  dominantZone: NatureZoneId;
+  mood: FaunaMood;
+  zones: FaunaZoneDirective[];
+  summary: string;
+}
+
+export interface EcosystemState {
+  updatedAt: number;
+  sourceFingerprint?: string;
+  earth?: EarthAgentState;
+  fauna?: FaunaAgentState;
+}
 
 export type BuildingType = 'wall' | 'house' | 'block';
 /** A structure the player has placed in the world. `block` is a small coloured
@@ -154,6 +209,8 @@ export interface WorldState {
   parcelRentCollected: string[];
   /** Parcel resource node IDs this wallet has harvested/depleted. */
   depletedParcelResources: string[];
+  /** Server-authored nature-agent directives that make the world evolve over time. */
+  ecosystem?: EcosystemState;
   /**
    * Player-declared social graph for public-world wallets. Neutral can be
    * represented by absence; allied/hostile are persisted in the same 0G bundle
@@ -314,6 +371,28 @@ export interface NPCChatResponse {
   delta: MemoryUpdate;
   /** Aldric's verdict, present only when the request carried an `offer`. */
   trade?: TradeDecision;
+}
+
+export interface EarthAgentRequest {
+  walletAddress: string;
+  world: WorldState;
+  snapshot: NatureZoneSnapshot[];
+  current?: EcosystemState;
+}
+
+export interface EarthAgentResponse {
+  earth: EarthAgentState;
+}
+
+export interface FaunaAgentRequest {
+  walletAddress: string;
+  world: WorldState;
+  snapshot: NatureZoneSnapshot[];
+  current?: EcosystemState;
+}
+
+export interface FaunaAgentResponse {
+  fauna: FaunaAgentState;
 }
 
 /** Factory for a brand-new NPC memory (first contact defaults). */
