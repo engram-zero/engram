@@ -1629,12 +1629,12 @@ function WoodChips() {
   });
 
   return (
-    <points ref={pointsRef}>
+    <points ref={pointsRef} renderOrder={999}>
       <bufferGeometry>
         <bufferAttribute attach="attributes-position" args={[positions, 3]} />
         <bufferAttribute attach="attributes-color" args={[colors, 3]} />
       </bufferGeometry>
-      <pointsMaterial size={0.14} sizeAttenuation vertexColors transparent depthWrite={false} />
+      <pointsMaterial size={0.14} sizeAttenuation vertexColors transparent depthWrite={false} depthTest={false} />
     </points>
   );
 }
@@ -1693,12 +1693,12 @@ function HitDust() {
   });
 
   return (
-    <points ref={pointsRef}>
+    <points ref={pointsRef} renderOrder={999}>
       <bufferGeometry>
         <bufferAttribute attach="attributes-position" args={[positions, 3]} />
         <bufferAttribute attach="attributes-color" args={[colors, 3]} />
       </bufferGeometry>
-      <pointsMaterial size={0.22} sizeAttenuation vertexColors transparent opacity={0.8} depthWrite={false} />
+      <pointsMaterial size={0.22} sizeAttenuation vertexColors transparent opacity={0.8} depthWrite={false} depthTest={false} />
     </points>
   );
 }
@@ -1765,12 +1765,12 @@ function MineDebris() {
   });
 
   return (
-    <points ref={pointsRef}>
+    <points ref={pointsRef} renderOrder={999}>
       <bufferGeometry>
         <bufferAttribute attach="attributes-position" args={[positions, 3]} />
         <bufferAttribute attach="attributes-color" args={[colors, 3]} />
       </bufferGeometry>
-      <pointsMaterial size={0.16} sizeAttenuation vertexColors transparent depthWrite={false} />
+      <pointsMaterial size={0.16} sizeAttenuation vertexColors transparent depthWrite={false} depthTest={false} />
     </points>
   );
 }
