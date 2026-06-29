@@ -1253,3 +1253,19 @@ la acción **Claim land** ahora sube la parcela antes de la tx y pasa el `dataRo
 Los recursos generados por parcela pasan de props visuales a nodos recolectables: click para
 sumar wood/stone, persistencia por `depletedParcelResources` y comisión si el recurso está en
 tierra ajena.
+
+### 28 jun 2026 · Fix regresiones: hold-F estable (anim+sonido), noche restaurada, chispas
+**Pedido (humano):** (1) la animación de hacha/pica vibra como colibrí (antes se veía 1 swing por
+sonido); (2) al MANTENER F no suena el mp3, solo al hacer taps; (3) son las 20h y se ve día — debería
+ser noche con grillos; (4) se perdieron otra vez las chispas de hachazo/tala (sospecha: iluminación).
+**Diagnóstico:** mi selección por "facing" ponía el recurso en null cuando no lo mirabas exacto →
+el loop reseteaba `sinceSwing` y re-golpeaba en ráfaga (vibra). Como `play()` hace `currentTime=0`
+en cada llamada, la ráfaga reiniciaba el clip antes de sonar (silencio al mantener; los taps espaciados
+sí suenan). Y el "modo luminoso 24/7" que metí tapaba la noche/grillos y lavaba las chispas.
+**Prompt sintetizado (Scene3D.tsx):** (1/2) Reescribir el scan de gathering: un recurso solo en
+rango SIEMPRE se selecciona (sin exigir facing → target estable, cadencia 720ms firme); el facing
+solo desempata árbol-vs-roca cuando ambos están en rango. (3) `forceBrightTestLighting` vuelve a
+default cinematic día/noche en todas partes (solo `?day=1` fuerza el plano brillante; `?shot` intacto),
+conservando el +25% de brillo y el sol diurno → 20h = noche + grillos. (4) se resuelve solo con la
+noche cinematic (contraste); partículas ya venían con tamaño/color subidos. `npx tsc --noEmit` limpio.
+**Commit:** _(este commit)_

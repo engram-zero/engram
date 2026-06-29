@@ -803,40 +803,35 @@ function Player({
       onNearbyChange(best);
     }
 
-    // Harvest target: you must FACE the resource, not just be near it — so a tree
-    // and a rock side by side aren't confused. Across all reachable trees/rocks
-    // that fall inside a forgiving frontal cone, pick the one you're facing most
-    // directly; ONLY that one becomes active (the other stays null), so chopping
-    // vs mining is decided by where you look. `forward` is the camera's horizontal
-    // look dir (set above for movement).
-    const FACING_MIN = 0.35; // dot(forward, dirToResource) ≥ this → within ~140° cone
+    // Harvest target. A lone reachable resource is ALWAYS selectable (no facing
+    // requirement → stable target, so holding F gives a steady swing+sound cadence
+    // and never flickers). Facing is used only to DISAMBIGUATE when both a tree and
+    // a rock are in reach: the one you look at more directly wins, so a tree beside
+    // a rock isn't harvested when you meant the other. `forward` = horizontal look.
     const px = camera.position.x;
     const pz = camera.position.z;
-    let bestKind: 'tree' | 'rock' | null = null;
-    let bestIdx = -1;
-    let bestScore = -Infinity;
+    let bestTree = -1, bestTd = Infinity;
     for (let i = 0; i < TREES.length; i++) {
       if (isChopped(i)) continue;
       const t = TREES[i];
-      const ddx = t.x - px, ddz = t.z - pz;
-      const dd = Math.hypot(ddx, ddz);
-      if (dd >= CHOP_RANGE || dd < 1e-3) continue;
-      const align = (forward.x * ddx + forward.z * ddz) / dd;
-      const score = align - dd * 0.02; // facing first, gently prefer closer on ties
-      if (align >= FACING_MIN && score > bestScore) { bestScore = score; bestKind = 'tree'; bestIdx = i; }
+      const dd = Math.hypot(t.x - px, t.z - pz);
+      if (dd < CHOP_RANGE && dd < bestTd) { bestTd = dd; bestTree = i; }
     }
+    let bestRock = -1, bestRd = Infinity;
     for (let i = 0; i < ROCKS.length; i++) {
       if (isMined(i)) continue;
       const r = ROCKS[i];
-      const ddx = r.x - px, ddz = r.z - pz;
-      const dd = Math.hypot(ddx, ddz);
-      if (dd >= MINE_RANGE || dd < 1e-3) continue;
-      const align = (forward.x * ddx + forward.z * ddz) / dd;
-      const score = align - dd * 0.02;
-      if (align >= FACING_MIN && score > bestScore) { bestScore = score; bestKind = 'rock'; bestIdx = i; }
+      const dd = Math.hypot(r.x - px, r.z - pz);
+      if (dd < MINE_RANGE && dd < bestRd) { bestRd = dd; bestRock = i; }
     }
-    const treeIdx = bestKind === 'tree' ? bestIdx : null;
-    const rockIdx = bestKind === 'rock' ? bestIdx : null;
+    let treeIdx = bestTree >= 0 ? bestTree : null;
+    let rockIdx = bestRock >= 0 ? bestRock : null;
+    if (treeIdx !== null && rockIdx !== null) {
+      const t = TREES[treeIdx], r = ROCKS[rockIdx];
+      const ta = (forward.x * (t.x - px) + forward.z * (t.z - pz)) / (bestTd || 1);
+      const ra = (forward.x * (r.x - px) + forward.z * (r.z - pz)) / (bestRd || 1);
+      if (ta >= ra) rockIdx = null; else treeIdx = null; // keep the one you face
+    }
     if (treeIdx !== treeRef.current) {
       treeRef.current = treeIdx;
       onNearbyTreeChange?.(treeIdx);
@@ -4221,12 +4216,13 @@ export default function Scene3D({ memories = null, active = null, talking = fals
   const forceBrightTestLighting = useMemo(() => {
     if (typeof window === 'undefined') return false;
     const params = new URLSearchParams(window.location.search);
-    // Bright, luminous daylight is now the default EVERYWHERE (local and prod) —
-    // the previous cinematic path made production look washed-out/dark. The bright
-    // path still renders a visible <Sky> sun (see below). Opt-outs:
-    //   ?night=1 → dramatic cinematic day/night;  ?shot=… → pinned time for thumbnails.
+    // Cinematic day/night is the default EVERYWHERE again (8pm should read as night,
+    // crickets and all). It was brightened ~25% (see computeDayNight) so it's not
+    // washed-out/dark like before, and the moving sun is visible by day. The old
+    // flat-bright path is now opt-in only: ?day=1 (debug/readability); ?shot=… keeps
+    // its pinned thumbnail time.
     if (params.has('shot')) return false;
-    return params.get('night') !== '1';
+    return params.get('day') === '1';
   }, []);
   const dn = useMemo(() => computeDayNight(forceBrightTestLighting ? 12 : photoMode ? photo!.hour : localHour), [forceBrightTestLighting, localHour, photoMode, photo]);
 
