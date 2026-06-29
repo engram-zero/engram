@@ -25,7 +25,7 @@ export const MAX_WOOD = 100;
 
 /** BASE wood cost per building. The actual cost scales up the closer you build
  * to the village centre (computed in the scene); persistence is unaffected. */
-export const BUILD_COST: Record<BuildingType, number> = { wall: 6, house: 24, block: 0.4 };
+export const BUILD_COST: Record<BuildingType, number> = { wall: 6, house: 24, block: 0.1 };
 /** Collider radius for each building (kept in sync with the rendered footprint).
  * Blocks are decorative voxels — they don't collide (radius 0). */
 export const BUILD_RADIUS: Record<BuildingType, number> = { wall: 0.9, house: 1.8, block: 0 };

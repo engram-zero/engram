@@ -8,9 +8,9 @@ export type ResourceType = 'wood' | 'stone' | 'coin' | 'silver' | 'gold';
 /** Minerals you can mine out of rock outcrops (a subset of ResourceType). */
 export type OreType = 'stone' | 'silver' | 'gold';
 export type WalletRelation = 'neutral' | 'allied' | 'hostile';
-export const BLOCK_UNIT = 0.2;
+export const BLOCK_UNIT = 0.1; // smaller voxels → more detailed, realistic builds
 export const BLOCK_SCALE_MIN = BLOCK_UNIT;
-export const BLOCK_SCALE_MAX = 0.4;
+export const BLOCK_SCALE_MAX = 0.25;
 
 export type BuildingType = 'wall' | 'house' | 'block';
 /** A structure the player has placed in the world. `block` is a small coloured
