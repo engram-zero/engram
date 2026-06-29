@@ -4988,12 +4988,17 @@ export default function Scene3D({ memories = null, active = null, talking = fals
   
   // Sync player HP to UI and handle death / respawn
   const prevHpRef = useRef(dynamicPlayerState.hp);
+  const lastHurtRef = useRef(0);
   useEffect(() => {
     const interval = setInterval(() => {
       const hp = dynamicPlayerState.hp;
-      // Hurt / death audio (rotating hurt variants so it isn't monotonous).
+      // Hurt / death audio (rotating hurt variants so it isn't monotonous; hurt is
+      // throttled so continuous enemy DPS can't machine-gun the clip).
       if (hp <= 0 && prevHpRef.current > 0) void play('player_death');
-      else if (hp < prevHpRef.current && hp > 0) void play('player_hurt');
+      else if (hp < prevHpRef.current && hp > 0 && Date.now() - lastHurtRef.current > 450) {
+        lastHurtRef.current = Date.now();
+        void play('player_hurt');
+      }
       prevHpRef.current = hp;
       // Sync HP display
       if (dynamicPlayerState.hp !== playerHp && !dynamicPlayerState.dead) {
