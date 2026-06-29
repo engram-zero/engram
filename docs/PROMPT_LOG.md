@@ -1197,3 +1197,17 @@ mix(1.18,1.72)→(1.45,1.95), hemi (1.22,1.56)→(1.45,1.82), dir (0.45,2.05)→
 cinematic 1.6→1.9. Previsualizable en local con `?night=1`. `npx tsc --noEmit` limpio.
 **Qué se hizo:** los 5 ajustes de luz. ~+25% de luminosidad, noche más legible, sol/arco intactos.
 **Commit:** _(este commit)_
+
+### 28 jun 2026 · Prompt 22 — frontera expandible casilla a casilla
+**Pedido (humano):** Continuar la tarea de Prompt 22: que el mapa crezca por parcelas adyacentes,
+no por un radio fijo.
+**Prompt sintetizado:** Implementar Fase 1-4 como hito seguro: modelo puro de frontera
+(`parcelIsClaimable`, `frontierClaimableCells`, `worldExtentForClaims`, `cellLabel`), claims solo
+adyacentes a la frontera base o a parcelas existentes, movimiento/building dentro de
+`WORLD_RADIUS ∪ claimedCells`, tiles de suelo data-driven para claims fuera del mapa base, props y
+colliders por terreno, y fantasmas azules de las casillas reclamables en modo Claim. Dejar
+`/api/parcel-save` + `ParcelRegistry.updateData(dataRoot)` como siguiente fase.
+**Qué se hizo:** `world.ts` reemplaza el tope radial de claim por adyacencia; `Scene3D` permite
+caminar/construir en celdas reclamadas públicas/propias, renderiza tiles exteriores con recursos y
+colliders, muestra etiquetas de celda y fantasmas clickables; `public-world` expone snapshot para
+colisión; docs/status actualizados. `npx tsc --noEmit` limpio. **Commit:** _(este commit)_

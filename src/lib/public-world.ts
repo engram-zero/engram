@@ -63,6 +63,10 @@ function getSnapshot(): PublicWorldState {
   return state;
 }
 
+export function getPublicWorldSnapshot(): PublicWorldState {
+  return state;
+}
+
 function setPublicWorld(next: PublicWorldState) {
   state = next;
   emit();
