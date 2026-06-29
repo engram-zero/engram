@@ -3149,6 +3149,9 @@ const NO_BUILD_RADIUS = 12;
 /** Wood cost to build `type` at (x,z): base cost × a distance multiplier that
  * ramps from 6× at the no-build edge down to 1× out at radius 45. */
 function buildCostAt(type: BuildingType, x: number, z: number): number {
+  // Tiny AI voxels: a flat fractional cost (no distance multiplier, no rounding to
+  // 0) so detailed multi-block builds stay affordable.
+  if (type === 'block') return BUILD_COST.block;
   const d = Math.hypot(x, z);
   const mult = Math.max(1, Math.min(6, 6 - (d - NO_BUILD_RADIUS) * (5 / 33)));
   return Math.round(BUILD_COST[type] * mult);
@@ -5272,7 +5275,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
       {exploring && !photoMode && (
         <>
           <div className="pointer-events-none absolute top-20 left-4 z-10 flex flex-col items-start gap-1.5 text-sm text-[#f4e8d0]">
-            <span className="inline-flex items-center rounded-md bg-black/45 px-2.5 py-1" title="Wood"><WoodIcon />{world.inventory.wood}/{MAX_WOOD}</span>
+            <span className="inline-flex items-center rounded-md bg-black/45 px-2.5 py-1" title="Wood"><WoodIcon />{Math.round(world.inventory.wood * 10) / 10}/{MAX_WOOD}</span>
             <span className="inline-flex items-center rounded-md bg-black/45 px-2.5 py-1" title="Stone"><StoneIcon />{world.inventory.stone}/{MAX_STONE}</span>
             <span className="inline-flex items-center rounded-md bg-black/45 px-2.5 py-1" title="Silver"><SilverIcon />{world.inventory.silver}/{MAX_SILVER}</span>
             <span className="inline-flex items-center rounded-md bg-black/45 px-2.5 py-1" title="Gold"><GoldIcon />{world.inventory.gold}/{MAX_GOLD}</span>

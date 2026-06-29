@@ -1324,3 +1324,16 @@ wall 3→6, house 10→24 (block 1). (beta) en el efecto de zoom aéreo, listene
 de dos dedos: delta de distancia → `zoom.current` (separar=zoom in, juntar=zoom out). `npx tsc
 --noEmit` limpio.
 **Commit:** _(este commit)_
+
+### 29 jun 2026 · Block 0.4 madera + persistencia "preferir el más nuevo" (sin popups)
+**Pedido (humano):** los blocks son pequeñitos → deberían costar ~0.4 (incluso 0.2/0.1 si fueran más
+chicos); y los recursos no se guardan (pero autosave a 0G cada 10s = popup de wallet molesto, y
+autosave al cerrar = riesgo de limbo si se apaga la PC).
+**Prompt sintetizado:** (block) `BUILD_COST.block` 1→0.4; `buildCostAt` devuelve plano para block
+(sin mult de distancia ni redondeo a 0); HUD de madera redondeado a 1 decimal. (persistencia) sin
+autosave ni firmas extra: añadir `savedAt` a `WorldState`, estamparlo en `commit` (cada mutación),
+preservarlo en `normalizeWorldState`; en `createBundleWorldPersistence.load` elegir el **más
+reciente** entre el borrador local y el bundle 0G → el gathering no guardado no se pisa con un 0G
+viejo, y un 0G más nuevo (otro device) gana en navegador limpio. Save World sigue siendo el anclaje
+on-chain explícito (1 popup intencional). `npx tsc --noEmit` limpio.
+**Commit:** _(este commit)_

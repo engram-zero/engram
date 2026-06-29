@@ -25,7 +25,7 @@ export const MAX_WOOD = 100;
 
 /** BASE wood cost per building. The actual cost scales up the closer you build
  * to the village centre (computed in the scene); persistence is unaffected. */
-export const BUILD_COST: Record<BuildingType, number> = { wall: 6, house: 24, block: 1 };
+export const BUILD_COST: Record<BuildingType, number> = { wall: 6, house: 24, block: 0.4 };
 /** Collider radius for each building (kept in sync with the rendered footprint).
  * Blocks are decorative voxels — they don't collide (radius 0). */
 export const BUILD_RADIUS: Record<BuildingType, number> = { wall: 0.9, house: 1.8, block: 0 };
@@ -536,6 +536,7 @@ export function normalizeWorldState(raw: unknown): WorldState {
     parcelRentCollected: normalizeCollectedRentIds(p?.parcelRentCollected),
     depletedParcelResources: normalizeParcelResourceIds(p?.depletedParcelResources),
     relations: normalizeRelations(p?.relations),
+    savedAt: Number.isFinite(Number(p?.savedAt)) ? Number(p?.savedAt) : 0,
   };
 }
 
@@ -623,7 +624,9 @@ export function getWorldWallet(): string | null {
 }
 
 async function commit(next: WorldState) {
-  state = applyLocalhostFreeBuild(next);
+  // Stamp the mutation time so load() can prefer the newer of the local draft vs a
+  // (possibly stale) 0G bundle — no extra wallet signature, no autosave needed.
+  state = applyLocalhostFreeBuild({ ...next, savedAt: Date.now() });
   emit();
   if (wallet) {
     try {

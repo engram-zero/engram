@@ -160,6 +160,10 @@ export interface WorldState {
    * as the player's world so future co-op/raid rules can read one source.
    */
   relations: Record<string, WalletRelation>;
+  /** When this state was last mutated (ms). Used to prefer the newer of the local
+   * draft vs the 0G bundle on load, so unsaved gathering isn't clobbered by a stale
+   * 0G snapshot. Not gameplay data. */
+  savedAt?: number;
 }
 
 /**

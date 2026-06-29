@@ -25,9 +25,14 @@ export function createBundleWorldPersistence(networkType: NetworkType): WorldPer
         const bundle = await readBundle(wallet, networkType);
         if (!bundle?.world) return fallback;
 
-        const world = normalizeWorldState(bundle.world);
-        await localWorldPersistence.save(wallet, world);
-        return world;
+        const remote = normalizeWorldState(bundle.world);
+        // Prefer whichever was mutated more recently: a newer LOCAL draft (e.g. wood
+        // gathered after the last "Save World") must not be clobbered by a stale 0G
+        // snapshot — and a newer 0G snapshot (saved on another device) wins on a fresh
+        // browser. No autosave / extra signature needed.
+        const chosen = (fallback.savedAt ?? 0) > (remote.savedAt ?? 0) ? fallback : remote;
+        await localWorldPersistence.save(wallet, chosen);
+        return chosen;
       } catch (error) {
         console.warn('[engram] world load from 0G failed:', error);
         return fallback;
