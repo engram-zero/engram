@@ -1449,4 +1449,67 @@ documentar alcance y viabilidad antes de comprometer.
 
 ---
 
+## Prompt 35 — Arreglar la arquitectura de caminabilidad de la frontera (URGENTE)
+
+**Para:** Codex (world.ts / frontier). Backend, sin tocar Scene3D.tsx.
+
+### El bug
+Una parcela proclamada **no es caminable**: hay un **hueco** entre el mundo base (círculo,
+`WORLD_RADIUS = 132`) y la parcela (grid de `PARCEL_SIZE = 18`). `frontierClaimableCells` ofrece
+celdas que son **vecinas** de una que intersecta la base, pero la celda vecina puede **no**
+intersectar la base (p. ej. la base llega a 132 y la parcela va de 135 a 153) → queda un hueco no
+caminable. Con pasos chicos el jugador siempre cae en la mitad cercana al círculo y **rebota**,
+nunca cruza. (En Scene3D, `isFrontierWalkable = dentro del círculo ∪ dentro de una parcela`.)
+
+### El arreglo (arquitectura)
+Garantiza que **la región caminable sea siempre conexa**: una celda solo es **reclamable** si
+**solapa** (toca/intersecta) tierra ya caminable — el círculo base **o** una parcela ya reclamada —
+no solo si es grid-vecina. Así, cada parcela nueva se pega a lo caminable y nunca hay hueco. Ajusta
+`parcelCellIntersectsBase` / `frontierClaimableCells` / `parcelIsClaimable` en `world.ts`.
+Expón (si ayuda) un único `parcelOverlapsWalkable(gx,gz, claims)` para que Scene3D no necesite
+lógica extra. Considera parcelas YA reclamadas que quedaron desconectadas (que al menos las
+contiguas a la base/otra parcela sigan siendo válidas).
+
+### Restricciones
+NO toques `src/components/engram/Scene3D.tsx` (Claude consume el resultado). `npx tsc --noEmit`
+limpio; `git pull --no-edit` antes de push; co-author Codex; entrada en `docs/PROMPT_LOG.md`.
+
+### Aceptación
+1. Solo puedes reclamar parcelas que **tocan** tierra caminable → todo lo reclamado es alcanzable.
+2. No hay hueco entre el mundo base y la primera parcela; caminas a tu parcela sin rebotar.
+3. `tsc` limpio; sin tocar Scene3D.
+
+---
+
+## Prompt 36 — Almacenar en CUALQUIER edificio (capacidad por área)
+
+**Para:** Codex (backend) + Claude (UI). Reemplaza el "warehouse" único.
+
+Cualquier edificio del jugador puede **almacenar** recursos; su **capacidad** se deriva del
+**área/tamaño** del edificio (huella). Backend (world.ts): capacidad por-edificio = f(footprint),
+deposit/withdraw por edificio, total persistido en 0G. Expón capacidad + contenido por edificio para
+que Claude abra el panel al estar en/seleccionar **cualquier** edificio (reemplaza el gate de
+`isWarehouseLabel`). Mantén el tope de bolsillo; el almacén lo excede.
+
+---
+
+## Prompt 37 — Reverdecer el desierto plantando árboles (filosófico/educativo)
+
+**Para:** futuro. Ver `docs/DESIGN_PILLARS.md` (1 y 5).
+
+Si alguien **planta un árbol** en zona desértica, el área alrededor (un radio) **se reverdece** (la
+textura del suelo se funde hacia pasto). Persistir las "zonas reverdecidas" como estado 0G y que el
+shader de biomas (Scene3D) las mezcle por encima del bioma base. Mensaje filosófico/educativo: la
+acción del jugador regenera el mundo. Diseñar ritmo (¿gradual?) y costo.
+
+---
+
+## Prompt 38 — NPCs lejos de la aldea (decisión de diseño)
+
+**Para:** futuro. Cuando el mapa crece mucho, ¿qué pasa con los NPCs? Evaluar: los mismos Aldric/
+Maren/Sable también en zonas lejanas; o **nuevos NPCs** con otros nombres por zona; o aldeas
+satélite. Atar su memoria/identidad a 0G. Sin decidir aún — documentado.
+
+---
+
 *Engram — Zero Cup 2026 — Build on 0G. Own your story.*
