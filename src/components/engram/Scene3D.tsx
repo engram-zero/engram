@@ -586,6 +586,47 @@ function clampToFrontier(x: number, z: number): [number, number] {
   return [bx, bz];
 }
 
+// Pillar 8 (verticality): AI-built voxel structures are real — you can stand and
+// climb on them. A step you can walk up is ≤ STEP_UP; anything taller is a wall.
+const STEP_UP = 0.62;
+
+/** Highest block top the player can stand on at (x,z) given their reference feet
+ *  height (so they can step UP onto it). -Infinity when nothing supports them. */
+function blockSupportTop(x: number, z: number, refY: number): number {
+  let top = -Infinity;
+  for (const b of getWorld().buildings) {
+    if (b.type !== 'block') continue;
+    const s = b.scale ?? BLOCK_UNIT;
+    const half = s / 2 + PLAYER_RADIUS;
+    if (Math.abs(x - b.x) > half || Math.abs(z - b.z) > half) continue;
+    const t = getHeightAt(b.x, b.z) + (b.y ?? 0) + s;
+    if (t <= refY + STEP_UP + 1e-3 && t > top) top = t;
+  }
+  return top;
+}
+
+/** Slide (x,z) out of any voxel that is a WALL at the player's body height — its
+ *  top is too high to step onto and its base is below head height. Lets you climb
+ *  stairs but not walk through a tower's walls. */
+function resolveBlockWalls(x: number, z: number, feetY: number): [number, number] {
+  const headY = feetY + EYE_HEIGHT;
+  for (const b of getWorld().buildings) {
+    if (b.type !== 'block') continue;
+    const s = b.scale ?? BLOCK_UNIT;
+    const base = getHeightAt(b.x, b.z) + (b.y ?? 0);
+    if (base + s <= feetY + STEP_UP + 1e-3) continue; // low enough to step onto
+    if (base >= headY) continue; // above your head
+    const half = s / 2 + PLAYER_RADIUS;
+    const dx = x - b.x;
+    const dz = z - b.z;
+    if (Math.abs(dx) < half && Math.abs(dz) < half) {
+      if (half - Math.abs(dx) < half - Math.abs(dz)) x = b.x + (dx >= 0 ? half : -half);
+      else z = b.z + (dz >= 0 ? half : -half);
+    }
+  }
+  return [x, z];
+}
+
 // Slide the player out of the boundary and any prop/NPC they overlap.
 function resolveCollision(x: number, z: number): [number, number] {
   if (!isFrontierWalkable(x, z)) [x, z] = clampToFrontier(x, z);
@@ -815,6 +856,7 @@ function Player({
   const bob = useRef({ t: 0, off: 0 });
   const jump = useRef({ y: 0, vy: 0, held: false }); // first-person jump (Space)
   const footstep = useRef(0);
+  const groundYRef = useRef(0); // last frame's ground height — step-up reference for voxels
   const nearbyRef = useRef<NPCName | null>(null);
   const treeRef = useRef<number | null>(null);
   const rockRef = useRef<number | null>(null);
@@ -896,8 +938,10 @@ function Player({
     if (moving) {
       move.normalize().multiplyScalar(WALK_SPEED * dt);
       const [nx, nz] = resolveCollision(camera.position.x + move.x, camera.position.z + move.z);
-      camera.position.x = nx;
-      camera.position.z = nz;
+      // Voxel structures block you at body height but let you step up onto low ones.
+      const [bx, bz] = resolveBlockWalls(nx, nz, groundYRef.current);
+      camera.position.x = bx;
+      camera.position.z = bz;
       bob.current.t += dt * 10.5;
       bob.current.off = Math.sin(bob.current.t) * 0.045;
     } else {
@@ -920,6 +964,11 @@ function Player({
         groundY = Math.max(groundY, staticCottageFloorY(cottage));
       }
     }
+    // Stand on AI-built voxels you can reach (climb stairs, top of a tower). Use the
+    // previous ground as the step-up reference so you ascend one step at a time.
+    const support = blockSupportTop(camera.position.x, camera.position.z, Math.max(groundYRef.current, groundY));
+    if (support > groundY) groundY = support;
+    groundYRef.current = groundY;
     camera.position.y = groundY + EYE_HEIGHT + bob.current.off + jump.current.y;
     for (const cottage of COTTAGES) {
       if (isInsideStaticCottage(cottage, camera.position.x, camera.position.z)) {

@@ -1801,3 +1801,16 @@ base. Expón una regla compartida para futuros consumidores y mantén `tsc` limp
 modo que las parcelas nuevas siempre se pegan físicamente a tierra caminable. `parcelCellsOverlap`
 acepta contacto por borde y evita contacto diagonal de esquina. Sin cambios en `Scene3D.tsx`.
 **Commit:** `5d8dc4b`
+
+### 2026-06-30 · Pilar de verticalidad (Warren Spector) + estructuras escalables (Prompt 32)
+**Pedido (humano):** agregar a la filosofía el punto de Warren Spector (un mundo 3D debe tener
+sentido vertical: arriba —escaleras/torres— y abajo —cavar—); revisar saldo de tokens; y continuar
+con otro prompt mientras Codex trabaja.
+**Qué se hizo:** DESIGN_PILLARS pilar 8 (verticalidad con sentido). Saldo del sponsor: 5.40 OG
+(subió ~2 OG por la transferencia). Implementé el Prompt 32 (estructuras escalables) en Scene3D
+(no choca con Codex en world.ts): los voxels IA ahora son SÓLIDOS y ESCALABLES — `blockSupportTop`
+permite pararse/subir escalones ≤ STEP_UP (0.62) (escaleras, cima de torre); `resolveBlockWalls`
+frena al jugador contra voxels altos (muros de torre) pero deja subir escalones. Integrado en el
+grounding y la colisión del Player FP, con `groundYRef` como referencia de step-up. (Limitación
+conocida: saltar sobre plataformas altas aún no aterriza encima; subir por escaleras sí — pendiente
+de playtest.) `tsc` limpio; solo Scene3D.tsx + docs. **Commit:** _(este commit)_

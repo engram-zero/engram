@@ -53,6 +53,15 @@ menú. Nada que rompa la ilusión sin una buena razón (etiquetas flotantes, ind
 El **modo de construcción manual** (ver las manos, hacer labores; pilar 4 y Prompt 34) es la
 dirección estrella de este pilar.
 
+## 8. Verticalidad con sentido (Warren Spector)
+Si el mundo es 3D, el eje **vertical** tiene que **significar algo** — no ser decorado. El jugador
+debe poder ir **arriba** y **abajo** de verdad:
+- **Arriba:** escaleras que se suben, edificios/torres a los que se asciende, plataformas
+  (ver Prompt 32 "estructuras escalables").
+- **Abajo:** **cavar** el terreno, sótanos, túneles, vertientes en el río (ver Prompt 33).
+Una escalera que no se sube, o un sótano que no se cava, es un 3D mentiroso. (Extensión directa del
+pilar 1: todo elemento justificado — incluido el espacio vertical.)
+
 ---
 
 > Regla práctica: antes de añadir X, escribe en una frase **por qué existe** y **con qué se
