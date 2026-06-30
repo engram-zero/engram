@@ -865,26 +865,33 @@ function Player({
       onNearbyChange(best);
     }
 
-    // Harvest target. A lone reachable resource is ALWAYS selectable (no facing
-    // requirement → stable target, so holding F gives a steady swing+sound cadence
-    // and never flickers). Facing is used only to DISAMBIGUATE when both a tree and
-    // a rock are in reach: the one you look at more directly wins, so a tree beside
-    // a rock isn't harvested when you meant the other. `forward` = horizontal look.
+    // Harvest target: you must be FACING the resource — it has to sit in a forgiving
+    // frontal cone, so you can't chop/mine (or even see the "Hold F" hint) with your
+    // back to it. A stable interval (not this scan) drives the swing, so requiring
+    // facing no longer causes the old flicker. The closest in-front resource wins;
+    // facing also disambiguates a tree vs a rock side by side. `forward` = look dir.
+    const FACING_MIN = 0.2; // dot(forward, dirToResource) ≥ this → within ~155° front cone
     const px = camera.position.x;
     const pz = camera.position.z;
     let bestTree = -1, bestTd = Infinity;
     for (let i = 0; i < TREES.length; i++) {
       if (isChopped(i)) continue;
       const t = TREES[i];
-      const dd = Math.hypot(t.x - px, t.z - pz);
-      if (dd < CHOP_RANGE && dd < bestTd) { bestTd = dd; bestTree = i; }
+      const ddx = t.x - px, ddz = t.z - pz;
+      const dd = Math.hypot(ddx, ddz);
+      if (dd >= CHOP_RANGE || dd < 1e-3) continue;
+      if ((forward.x * ddx + forward.z * ddz) / dd < FACING_MIN) continue; // behind you
+      if (dd < bestTd) { bestTd = dd; bestTree = i; }
     }
     let bestRock = -1, bestRd = Infinity;
     for (let i = 0; i < ROCKS.length; i++) {
       if (isMined(i)) continue;
       const r = ROCKS[i];
-      const dd = Math.hypot(r.x - px, r.z - pz);
-      if (dd < MINE_RANGE && dd < bestRd) { bestRd = dd; bestRock = i; }
+      const ddx = r.x - px, ddz = r.z - pz;
+      const dd = Math.hypot(ddx, ddz);
+      if (dd >= MINE_RANGE || dd < 1e-3) continue;
+      if ((forward.x * ddx + forward.z * ddz) / dd < FACING_MIN) continue; // behind you
+      if (dd < bestRd) { bestRd = dd; bestRock = i; }
     }
     let treeIdx = bestTree >= 0 ? bestTree : null;
     let rockIdx = bestRock >= 0 ? bestRock : null;
@@ -1241,8 +1248,17 @@ function Terrain() {
 }
 
 // ── Moon ── emissive disc + an additive halo sprite.
-// Sun (warm, big glow) or moon (cool, small glow). Position is supplied by the
-// day/night cycle so it rises and sets with the player's local clock.
+// Real lunar phase from the date (synodic month since a known new moon). The
+// illuminated fraction is the same worldwide, so this reads correctly from central
+// Mexico too. waxing → lit on the right (Northern-Hemisphere convention).
+function moonPhase(now = Date.now()): { illum: number; waxing: boolean } {
+  const SYN = 29.53058867 * 86400000; // synodic month (ms)
+  const NEW0 = Date.UTC(2000, 0, 6, 18, 14); // a known new moon
+  const phase = ((((now - NEW0) % SYN) + SYN) % SYN) / SYN; // 0=new → 0.5=full → 1=new
+  return { illum: (1 - Math.cos(2 * Math.PI * phase)) / 2, waxing: phase < 0.5 };
+}
+
+// Sun (warm, big glow) or moon (cool, small glow, with the real-calendar phase).
 function Celestial({ position, sun = false }: { position: [number, number, number]; sun?: boolean }) {
   const halo = useMemo(
     () =>
@@ -1251,14 +1267,25 @@ function Celestial({ position, sun = false }: { position: [number, number, numbe
         : makeRadialTexture('rgba(255,247,224,0.9)', 'rgba(214,226,255,0.22)'),
     [sun]
   );
+  // Moon: occlude the unlit part with a near-black sphere offset along screen-X by
+  // the phase, so it shows as a crescent/gibbous/full per tonight's real phase.
+  const R = sun ? 4 : 3;
+  const phase = useMemo(() => moonPhase(), []);
+  const occluderX = (phase.waxing ? -1 : 1) * (1 - phase.illum) * 2 * R;
   return (
     <group position={position} raycast={() => null}>
       <mesh raycast={() => null}>
-        <sphereGeometry args={[sun ? 4 : 3, 24, 24]} />
+        <sphereGeometry args={[R, 24, 24]} />
         <meshBasicMaterial color={sun ? '#fff2c4' : '#eef2ff'} />
       </mesh>
+      {!sun && phase.illum < 0.985 && (
+        <mesh position={[occluderX, 0, 0.6]} raycast={() => null}>
+          <sphereGeometry args={[R * 1.03, 24, 24]} />
+          <meshBasicMaterial color="#05060c" />
+        </mesh>
+      )}
       <sprite scale={sun ? [44, 44, 1] : [22, 22, 1]} raycast={() => null}>
-        <spriteMaterial map={halo} transparent depthWrite={false} blending={THREE.AdditiveBlending} opacity={sun ? 0.9 : 0.7} />
+        <spriteMaterial map={halo} transparent depthWrite={false} blending={THREE.AdditiveBlending} opacity={sun ? 0.9 : 0.55} />
       </sprite>
     </group>
   );
@@ -3355,9 +3382,17 @@ function BuildController({
   void world;
   const valid = isBuild && !!ghost && canPlaceBuilding(mode, ghost[0], ghost[1]);
 
+  // Walls (1.8 wide) snap to a 1.8 grid + 90° rotation so they tile edge-to-edge
+  // into continuous fences instead of leaving gaps; houses/tools stay on the 1-grid.
+  const WALL_GRID = 1.8;
+  const snapXZ = (px: number, pz: number): [number, number] =>
+    mode === 'wall'
+      ? [Math.round(px / WALL_GRID) * WALL_GRID, Math.round(pz / WALL_GRID) * WALL_GRID]
+      : [Math.round(px), Math.round(pz)];
+  const placeRot = mode === 'wall' ? Math.round(rot / (Math.PI / 2)) * (Math.PI / 2) : rot;
+
   const place = (px: number, pz: number) => {
-    const x = Math.round(px);
-    const z = Math.round(pz);
+    const [x, z] = snapXZ(px, pz);
     if (mode === 'demolish') {
       let bi = -1;
       let bd = Infinity;
@@ -3402,7 +3437,7 @@ function BuildController({
           return;
         }
       }
-      if (placeBuilding({ type: mode, x, z, rot }, buildCostAt(mode, x, z))) {
+      if (placeBuilding({ type: mode, x, z, rot: placeRot }, buildCostAt(mode, x, z))) {
         onDraftChange();
         if (rented) onToolFeedback({ text: `Built on rented land (-${PARCEL_BUILD_RENT_COIN} coin). Save World to publish.`, tone: 'info' });
       }
@@ -3414,7 +3449,7 @@ function BuildController({
       <mesh
         rotation={[-Math.PI / 2, 0, 0]}
         position={[0, 0.02, 0]}
-        onPointerMove={(e) => setGhost([Math.round(e.point.x), Math.round(e.point.z)])}
+        onPointerMove={(e) => setGhost(snapXZ(e.point.x, e.point.z))}
         onPointerOut={() => setGhost(null)}
         onClick={(e) => {
           e.stopPropagation();
@@ -3427,7 +3462,7 @@ function BuildController({
       {isBuild && ghost && (
         <mesh
           position={[ghost[0], getHeightAt(ghost[0], ghost[1]) + (mode === 'house' ? HOUSE_WALL_HEIGHT / 2 : 0.75), ghost[1]]}
-          rotation={[0, rot, 0]}
+          rotation={[0, placeRot, 0]}
         >
           {mode === 'house' ? <boxGeometry args={[2.4, 1.8, 2.0]} /> : <boxGeometry args={[1.8, 1.5, 0.3]} />}
           <meshStandardMaterial color={valid ? '#5fd06a' : '#d05a4a'} transparent opacity={0.4} depthWrite={false} />
@@ -4119,9 +4154,14 @@ export function computeDayNight(hour: number): DayNight {
     hemiSky: mixColor('#aebbd6', '#eaf2ff', visible),
     hemiGround: mixColor('#7c8868', '#a9b487', visible),
     hemiIntensity: mix(1.9, 2.2, visible),
-    dirPos: [sunX * 60, Math.max(18, sunY * 60), -40], // key light follows the sun; min height keeps moonlight
+    // Key light follows the SUN by day and the MOON by night, so the lit side of the
+    // world matches whichever disc is actually in the sky (no more light-from-one-way,
+    // moon-the-other). Min height keeps a soft fill when the source is low.
+    dirPos: sunY > 0
+      ? [sunX * 60, Math.max(18, sunY * 60), -40]
+      : [moonX * 60, Math.max(16, moonY * 55), -40],
     dirIntensity: mix(1.5, 2.6, visible),
-    dirColor: mixColor('#e6ecf8', '#fff3da', visible),
+    dirColor: sunY > 0 ? mixColor('#e6ecf8', '#fff3da', visible) : '#cfdcf2', // warm sun ↔ cool moonlight
     turbidity: mix(7.2, 10.8, visible),
     rayleigh: mix(0.8, 1.55, visible),
     skyVisible: skyVisible > 0.02,

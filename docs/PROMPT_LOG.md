@@ -1453,3 +1453,17 @@ reventa"); el correcto es **≥ reventa**.
 **Fix:** `miningCostFromQuote` ahora devuelve el **mid** (`max(sell+1, round(mid))`): sobre la
 reventa (sin arbitraje) y bajo el precio de compra de Aldric (minar sigue siendo más barato que
 comprar). `npx tsc --noEmit` limpio. **Commit:** _(este commit)_
+
+### 29 jun 2026 · Facing para gathering + luna (luz alineada + fase real) + snap de muros + créditos audio
+**Pedido (humano):** (1) talar/minar (y su hint) solo si el player MIRA al recurso (no de espaldas);
+(2) la luz nocturna y la luna están en lados distintos — alinear; + luna por fase lunar real (centro
+de México); (3) #4a muros que se toquen (continuos); (4) créditos de los audios Pixabay.
+**Prompt sintetizado:** (1) re-añadir gate de facing al scan FP (cono frontal ~155°, `dot(forward,
+dir) ≥ 0.2`); ya sin el bug de vibración (el intervalo es estable). (2) `dirPos`/`dirColor` siguen al
+SOL de día y a la LUNA de noche (alineados con `moonDiscPos`); `Celestial` (luna) calcula la fase con
+`moonPhase(now)` (mes sinódico desde luna nueva conocida) y oculta la parte no iluminada con una
+esfera negra desplazada → creciente/gibosa/llena real. (3) en `BuildController`, muros snapean a
+grilla de 1.8 (su ancho) + rotación a 90° (`snapXZ`/`placeRot`) en ghost y placement → tile continuo.
+(4) tabla de créditos en `AUDIO_ASSETS.md` (attack-hit/swing, player-hurt/mort). `npx tsc --noEmit`
+limpio.
+**Commit:** _(este commit)_
