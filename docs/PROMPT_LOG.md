@@ -1515,3 +1515,13 @@ escucha y al pulsarlo finaliza y vuelca el texto al input. En la barra de accion
 **Qué se hizo:** `beginDictation`/`Dictation` en speech.ts (continuo + stop + auto-silencio);
 `voiceOn` default true; mic toggle stop; Leave/Leave&save mutuamente excluyentes. `tsc` limpio.
 **Commit:** _(este commit)_
+
+### 2026-06-29 · El TTS leía los asteriscos en voz alta
+**Pedido (humano):** a veces los NPCs responden con asteriscos (markdown / *acotaciones*) y el
+sistema de audio los lee literalmente ("asterisco…"). Que no los diga.
+**Prompt sintetizado:** En `src/lib/speech.ts`, antes de sintetizar (`speakText`), sanea el texto
+con `forSpeech()`: elimina por completo las *acotaciones* entre asteriscos (asides no verbales) y
+quita cualquier marcador markdown suelto (`* _ \` # ~ >`), colapsando espacios. El texto en
+pantalla queda intacto; solo cambia lo que se pronuncia. Si tras sanear queda vacío, no habla.
+**Qué se hizo:** helper `forSpeech` aplicado al SSML de `speakText`. (tsc local con errores ajenos
+del WIP de Codex en world.ts/types.ts — `speech.ts` no toca esos tipos.) **Commit:** _(este commit)_

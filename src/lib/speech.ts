@@ -99,6 +99,19 @@ const NPC_VOICE: Record<NPCName, { name: string; rate?: string; pitch?: string }
   sable: { name: 'en-GB-RyanNeural', rate: '-14%', pitch: '-12%' }, // old wise wizard
 };
 
+// NPC replies sometimes contain markdown / roleplay markup (e.g. **bold**, *adjusts
+// hat*, `code`). The synthesizer would otherwise read the symbols out loud
+// ("asterisk adjusts hat asterisk"). Strip the markers — and drop *stage directions*
+// entirely, since they're non-verbal asides not meant to be spoken — keeping the
+// on-screen text untouched.
+function forSpeech(text: string): string {
+  return text
+    .replace(/\*[^*\n]+\*/g, ' ')      // *stage direction* / *italic aside* → gone
+    .replace(/[*_`#~>]/g, ' ')          // any stray markdown markers → space
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 function escapeXml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
@@ -108,15 +121,16 @@ let synth: import('microsoft-cognitiveservices-speech-sdk').SpeechSynthesizer | 
 /** Speak `text` in the NPC's voice (best-effort; silently no-ops if unavailable). */
 export async function speakText(text: string, npc?: NPCName): Promise<void> {
   const cred = await getCred();
-  if (!cred || !text.trim()) return;
+  const spoken = forSpeech(text);
+  if (!cred || !spoken) return;
   const SDK = await import('microsoft-cognitiveservices-speech-sdk');
   const speechConfig = SDK.SpeechConfig.fromAuthorizationToken(cred.token, cred.region);
   const voice = (npc && NPC_VOICE[npc]) || { name: 'en-US-DavisNeural' };
   speechConfig.speechSynthesisVoiceName = voice.name;
   const lang = voice.name.slice(0, 5); // e.g. "en-GB"
   const prosody = voice.rate || voice.pitch
-    ? `<prosody rate="${voice.rate ?? '0%'}" pitch="${voice.pitch ?? '0%'}">${escapeXml(text)}</prosody>`
-    : escapeXml(text);
+    ? `<prosody rate="${voice.rate ?? '0%'}" pitch="${voice.pitch ?? '0%'}">${escapeXml(spoken)}</prosody>`
+    : escapeXml(spoken);
   const ssml = `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="${lang}"><voice name="${voice.name}">${prosody}</voice></speak>`;
   try {
     synth?.close();
