@@ -306,10 +306,22 @@ const HOUSE_DOOR_WIDTH = 1.1; // player diameter is 0.9, so this is a comfortabl
 const HOUSE_DOOR_OFFSET_Z = HOUSE_DEPTH / 2 - HOUSE_WALL_THICKNESS / 2;
 const HOUSE_PORCH_DEPTH = 0.42;
 const HOUSE_ROOF_Y = 1.94;
-const HOUSE_RIDGE_Y = 2.5;
+const HOUSE_RIDGE_Y = 2.78; // raised so the wider/deeper house gets a properly pitched roof
 const HOUSE_GABLE_HEIGHT = HOUSE_RIDGE_Y - HOUSE_WALL_HEIGHT;
 const HOUSE_CEILING_Y = HOUSE_WALL_HEIGHT - 0.04;
 const HOUSE_GABLE_X = HOUSE_WIDTH / 2 - HOUSE_WALL_THICKNESS * 0.18;
+// Gable-roof geometry derived from the house footprint so the two slopes always
+// reach from the eaves up to the ridge (no gap) whatever the house size is.
+const HOUSE_EAVE_OVERHANG = 0.28;
+const HOUSE_EAVE_Z = HOUSE_DEPTH / 2 + HOUSE_EAVE_OVERHANG;
+const HOUSE_EAVE_Y = HOUSE_WALL_HEIGHT - 0.04;
+const HOUSE_ROOF_RISE = HOUSE_RIDGE_Y - HOUSE_EAVE_Y;
+const HOUSE_ROOF_ANGLE = Math.atan2(HOUSE_ROOF_RISE, HOUSE_EAVE_Z);
+const HOUSE_ROOF_SLOPE_LEN = Math.hypot(HOUSE_EAVE_Z, HOUSE_ROOF_RISE) + 0.22; // + ridge/eave overhang
+const HOUSE_ROOF_MID_Y = (HOUSE_RIDGE_Y + HOUSE_EAVE_Y) / 2;
+const HOUSE_ROOF_MID_Z = HOUSE_EAVE_Z / 2;
+const HOUSE_ROOF_WIDTH_X = HOUSE_WIDTH + 0.6; // overhang past the gable ends
+const HOUSE_ROOF_THICKNESS = 0.16;
 const HOUSE_INTERIOR_CAMERA_BOOST = 0.18;
 const HOUSE_CHIMNEY_X = 0.72;
 const HOUSE_CHIMNEY_Z = -0.22;
@@ -1442,16 +1454,16 @@ function Cottage({ def, seed }: { def: CottageDef; seed: number }) {
         <shapeGeometry args={[HOUSE_GABLE_SHAPE]} />
         <meshStandardMaterial color={def.body} map={getTextureVariant('cottage_wood', seed)} flatShading side={THREE.DoubleSide} />
       </mesh>
-      <mesh position={[0, HOUSE_ROOF_Y + 0.14, -0.78]} rotation={[-0.62, 0, 0]} castShadow>
-        <boxGeometry args={[3.6, 0.16, 1.95]} />
+      <mesh position={[0, HOUSE_ROOF_MID_Y, -HOUSE_ROOF_MID_Z]} rotation={[-HOUSE_ROOF_ANGLE, 0, 0]} castShadow>
+        <boxGeometry args={[HOUSE_ROOF_WIDTH_X, HOUSE_ROOF_THICKNESS, HOUSE_ROOF_SLOPE_LEN]} />
         <meshStandardMaterial color={def.roof} map={getTextureVariant('cottage_roof', seed)} flatShading />
       </mesh>
-      <mesh position={[0, HOUSE_ROOF_Y + 0.14, 0.78]} rotation={[0.62, 0, 0]} castShadow>
-        <boxGeometry args={[3.6, 0.16, 1.95]} />
+      <mesh position={[0, HOUSE_ROOF_MID_Y, HOUSE_ROOF_MID_Z]} rotation={[HOUSE_ROOF_ANGLE, 0, 0]} castShadow>
+        <boxGeometry args={[HOUSE_ROOF_WIDTH_X, HOUSE_ROOF_THICKNESS, HOUSE_ROOF_SLOPE_LEN]} />
         <meshStandardMaterial color={def.roof} map={getTextureVariant('cottage_roof', seed)} flatShading />
       </mesh>
-      <mesh position={[0, HOUSE_RIDGE_Y + 0.22, 0]}>
-        <boxGeometry args={[3.64, 0.13, 0.13]} />
+      <mesh position={[0, HOUSE_RIDGE_Y + 0.06, 0]}>
+        <boxGeometry args={[HOUSE_ROOF_WIDTH_X + 0.04, 0.13, 0.13]} />
         <meshStandardMaterial color="#3a2a1a" flatShading />
       </mesh>
       {/* door lintel + open doorway */}
@@ -2727,16 +2739,16 @@ function BuildingMesh({ b }: { b: Building }) {
           <shapeGeometry args={[HOUSE_GABLE_SHAPE]} />
           <meshStandardMaterial color={woodColor} map={getTextureVariant('cottage_wood', Math.round(b.x))} flatShading side={THREE.DoubleSide} />
         </mesh>
-        <mesh position={[0, HOUSE_ROOF_Y, -0.66]} rotation={[-0.62, 0, 0]} castShadow>
-          <boxGeometry args={[2.8, 0.14, 1.6]} />
+        <mesh position={[0, HOUSE_ROOF_MID_Y, -HOUSE_ROOF_MID_Z]} rotation={[-HOUSE_ROOF_ANGLE, 0, 0]} castShadow>
+          <boxGeometry args={[HOUSE_ROOF_WIDTH_X, HOUSE_ROOF_THICKNESS, HOUSE_ROOF_SLOPE_LEN]} />
           <meshStandardMaterial color={roofColor} map={getTextureVariant('cottage_roof', Math.round(b.z))} flatShading />
         </mesh>
-        <mesh position={[0, HOUSE_ROOF_Y, 0.66]} rotation={[0.62, 0, 0]} castShadow>
-          <boxGeometry args={[2.8, 0.14, 1.6]} />
+        <mesh position={[0, HOUSE_ROOF_MID_Y, HOUSE_ROOF_MID_Z]} rotation={[HOUSE_ROOF_ANGLE, 0, 0]} castShadow>
+          <boxGeometry args={[HOUSE_ROOF_WIDTH_X, HOUSE_ROOF_THICKNESS, HOUSE_ROOF_SLOPE_LEN]} />
           <meshStandardMaterial color={roofColor} map={getTextureVariant('cottage_roof', Math.round(b.z))} flatShading />
         </mesh>
-        <mesh position={[0, HOUSE_RIDGE_Y, 0]} castShadow>
-          <boxGeometry args={[2.84, 0.11, 0.11]} />
+        <mesh position={[0, HOUSE_RIDGE_Y + 0.06, 0]} castShadow>
+          <boxGeometry args={[HOUSE_ROOF_WIDTH_X + 0.04, 0.11, 0.11]} />
           <meshStandardMaterial color="#3a2a1a" flatShading />
         </mesh>
       </group>

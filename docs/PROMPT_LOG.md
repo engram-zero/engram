@@ -1674,3 +1674,15 @@ también más tokens de su Anthropic key (prompt de sistema + prompt del usuario
 nuestras instrucciones + el prompt del usuario a /api/build con su key; el presupuesto en $ ya lo
 contempla) — sin cambio. Crédito del río en `docs/AUDIO_ASSETS.md` (Pixabay 450696, recorte) y
 ASSET_AUDIT marcado como presente. `tsc` limpio. **Commit:** _(este commit)_
+
+### 2026-06-29 · Levantar el techo de la casa (quedó bajo tras agrandarla)
+**Pedido (humano):** al agrandar la casa, el techo quedó bajo y con un hueco (se veía el gable
+abierto). Levantarlo para que cubra bien.
+**Prompt sintetizado:** El techo de la casa estaba hardcodeado para el tamaño viejo (planos
+`[3.6,0.16,1.95]`/`[2.8,0.14,1.6]`, cumbrera 2.38) en los DOS renders (cottage + casa construida).
+Deriva la geometría del techo de la huella: sube `HOUSE_RIDGE_Y` a 2.78 y calcula
+`HOUSE_EAVE_Z/ROOF_ANGLE/SLOPE_LEN/MID_Y/MID_Z/WIDTH_X` desde HOUSE_WIDTH/DEPTH, de modo que las
+dos aguas vayan del alero a la cumbrera sin dejar hueco sea cual sea el tamaño. Aplícalo en ambos
+renders y al caballete.
+**Qué se hizo:** constantes de techo derivadas; ambos techos parametrizados; cumbrera más alta.
+`tsc` limpio; solo Scene3D.tsx. **Commit:** _(este commit)_
