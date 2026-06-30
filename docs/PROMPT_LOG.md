@@ -1863,3 +1863,11 @@ y se adopta; el combate baja la HP viva y se persiste (throttle ~900ms) → al r
 (falso mine) la detección de roca/árbol solo usaba distancia HORIZONTAL; en colinas detectaba recursos
 muy arriba/abajo → agregué compuerta vertical (`|terrenoY - pies| ≤ 2.2`). `tsc` limpio.
 **Commit:** _(este commit)_
+
+### 2026-06-30 · Parcela deja de verse como parche (mismo shader de biomas)
+**Pedido (humano):** la parcela parece un parche; la iluminación/terreno no se comparte (capturas).
+**Qué se hizo:** extraje el material de biomas del terreno a un singleton `getBiomeTerrainMaterial()`
+y lo uso TAMBIÉN en `ParcelGroundTile`. Antes la parcela usaba la textura de UN solo bioma (biomeAt
+del centro) mientras el terreno MEZCLA por posición → en bordes de bioma se veía un parche verde
+sobre nieve/desierto. Ahora la parcela mezcla por posición igual que el entorno (mismo shader, misma
+iluminación PBR) → sin parche. `tsc` limpio; solo Scene3D.tsx. **Commit:** _(este commit)_

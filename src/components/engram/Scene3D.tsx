@@ -106,7 +106,7 @@ import {
 import { useEngramAudio } from '@/context/AudioContext';
 import type { AudioCueId } from '@/lib/audio/manifest';
 import { getPublicWorldSnapshot, usePublicWorld } from '@/lib/public-world';
-import { biomeAt, BIOME_GROUND } from '@/lib/biome';
+import { biomeAt } from '@/lib/biome';
 import { claimParcelOnchain, getParcelRegistryAddress } from '@/lib/registry/parcels';
 import { saveParcelData } from '@/lib/parcel-data';
 
@@ -1393,6 +1393,47 @@ function makeRadialTexture(core: string, mid = 'rgba(255,255,255,0)') {
 // everywhere; the rare biomes fade IN smoothly near their centres (smoothstep), so
 // the terrain reads as broad regions with soft gradients instead of a tiled patch.
 const BIOME_TILE = 6.0; // world units per texture repeat
+// One shared biome-blend material for the terrain AND parcel ground, so a parcel's
+// soil blends by world position exactly like the surroundings (no green patch on
+// snow/desert at biome borders). Lazily built once.
+let _biomeMat: THREE.MeshStandardMaterial | null = null;
+function getBiomeTerrainMaterial(): THREE.MeshStandardMaterial {
+  if (_biomeMat) return _biomeMat;
+  const grass = getTexture('terrain_grass', {});
+  const sand = getTexture('terrain_sand', {});
+  const snow = getTexture('terrain_snow', {});
+  const dry = getTexture('terrain_dry', {});
+  for (const t of [grass, sand, snow, dry]) if (t) t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  const m = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 1, map: grass ?? undefined });
+  m.onBeforeCompile = (shader) => {
+    shader.uniforms.uSand = { value: sand };
+    shader.uniforms.uSnow = { value: snow };
+    shader.uniforms.uDry = { value: dry };
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 vBiomeXZ;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvBiomeXZ = (modelMatrix * vec4(transformed, 1.0)).xz;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        '#include <common>\nvarying vec2 vBiomeXZ;\nuniform sampler2D uSand;\nuniform sampler2D uSnow;\nuniform sampler2D uDry;',
+      )
+      .replace(
+        '#include <map_fragment>',
+        `vec2 buv = vBiomeXZ / ${BIOME_TILE.toFixed(1)};
+         float wSnow = smoothstep(0.0, 0.45, 1.0 - distance(vBiomeXZ, vec2(-128.0, -116.0)) / 118.0);
+         float wSand = smoothstep(0.0, 0.45, 1.0 - distance(vBiomeXZ, vec2(138.0, 122.0)) / 126.0);
+         float wDry  = smoothstep(0.0, 0.45, 1.0 - distance(vBiomeXZ, vec2(124.0, -112.0)) / 104.0);
+         float wsum = 1.0 + wSnow + wSand + wDry;
+         vec3 cBiome = (texture2D(map, buv).rgb
+           + texture2D(uSnow, buv).rgb * wSnow
+           + texture2D(uSand, buv).rgb * wSand
+           + texture2D(uDry,  buv).rgb * wDry) / wsum;
+         diffuseColor.rgb *= pow(cBiome, vec3(2.2));`,
+      );
+  };
+  _biomeMat = m;
+  return m;
+}
 function Terrain() {
   const geom = useMemo(() => {
     const size = GROUND_RADIUS * 2;
@@ -1407,43 +1448,7 @@ function Terrain() {
     return g;
   }, []);
 
-  const material = useMemo(() => {
-    const grass = getTexture('terrain_grass', {});
-    const sand = getTexture('terrain_sand', {});
-    const snow = getTexture('terrain_snow', {});
-    const dry = getTexture('terrain_dry', {});
-    for (const t of [grass, sand, snow, dry]) if (t) t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    const m = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 1, map: grass ?? undefined });
-    m.onBeforeCompile = (shader) => {
-      shader.uniforms.uSand = { value: sand };
-      shader.uniforms.uSnow = { value: snow };
-      shader.uniforms.uDry = { value: dry };
-      shader.vertexShader = shader.vertexShader
-        .replace('#include <common>', '#include <common>\nvarying vec2 vBiomeXZ;')
-        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvBiomeXZ = (modelMatrix * vec4(transformed, 1.0)).xz;');
-      shader.fragmentShader = shader.fragmentShader
-        .replace(
-          '#include <common>',
-          '#include <common>\nvarying vec2 vBiomeXZ;\nuniform sampler2D uSand;\nuniform sampler2D uSnow;\nuniform sampler2D uDry;',
-        )
-        .replace(
-          '#include <map_fragment>',
-          `vec2 buv = vBiomeXZ / ${BIOME_TILE.toFixed(1)};
-           float wSnow = smoothstep(0.0, 0.45, 1.0 - distance(vBiomeXZ, vec2(-128.0, -116.0)) / 118.0);
-           float wSand = smoothstep(0.0, 0.45, 1.0 - distance(vBiomeXZ, vec2(138.0, 122.0)) / 126.0);
-           float wDry  = smoothstep(0.0, 0.45, 1.0 - distance(vBiomeXZ, vec2(124.0, -112.0)) / 104.0);
-           float wsum = 1.0 + wSnow + wSand + wDry;
-           vec3 cBiome = (texture2D(map, buv).rgb
-             + texture2D(uSnow, buv).rgb * wSnow
-             + texture2D(uSand, buv).rgb * wSand
-             + texture2D(uDry,  buv).rgb * wDry) / wsum;
-           diffuseColor.rgb *= pow(cBiome, vec3(2.2));`,
-        );
-    };
-    return m;
-  }, []);
-
-  return <mesh geometry={geom} material={material} receiveShadow />;
+  return <mesh geometry={geom} material={getBiomeTerrainMaterial()} receiveShadow />;
 }
 
 // ── Moon ── emissive disc + an additive halo sprite.
@@ -3136,17 +3141,11 @@ function ParcelGroundTile({ claim, color }: { claim: { x: number; z: number; siz
     g.computeVertexNormals();
     return g;
   }, [claim.size, claim.x, claim.z]);
-  // Far parcels sit beyond the base terrain, so this IS their ground — texture it
-  // with the parcel's biome (matching the world's biome regions) instead of always
-  // grass. The ownership colour now lives only in the aerial overlay, so the ground
-  // itself stays a natural, untinted surface.
+  // Far parcels sit beyond the base terrain, so this IS their ground — paint it with
+  // the SAME biome-blend material as the terrain so it blends by world position and
+  // never looks like a patch (the ownership colour lives only in the aerial overlay).
   void color;
-  const slot = BIOME_GROUND[biomeAt(claim.x, claim.z)] as Parameters<typeof getTextureVariant>[0];
-  return (
-    <mesh geometry={geom} receiveShadow>
-      <meshStandardMaterial color="#ffffff" map={getTextureVariant(slot, Math.round(claim.x + claim.z), { repeat: 4 })} roughness={1} />
-    </mesh>
-  );
+  return <mesh geometry={geom} material={getBiomeTerrainMaterial()} receiveShadow />;
 }
 
 function ParcelResourceCluster({
