@@ -1543,3 +1543,14 @@ para que `Scene3D` renderice escala por árbol y documentar el seam en `COORDINA
 panel "0G Storage"; `client-page` avanza etapas con Tierra; docs actualizados. `npx tsc --noEmit`
 limpio.
 **Commit:** _(este commit)_
+
+### 2026-06-29 · Leave&save prematuro + zoom aéreo más amplio
+**Pedido (humano):** (1) aparece "Leave & save" aunque no haya dicho nada, debería ser solo
+"Leave"; (2) que el zoom out de la vista aérea se aleje un poquito más.
+**Prompt sintetizado:** En `client-page.tsx`, `runTurn` marcaba `dirty` también para el saludo de
+aproximación (`runTurn(npc, '')`), así que "Leave & save" salía antes de interactuar. Marca dirty
+solo cuando `message.trim()` (utterance/elección real). En `Scene3D.tsx`, baja el mínimo de zoom
+ortográfico de 12 a 9 en los dos clamps (rueda y pinch) para permitir alejar la cámara aérea un
+poco más sin que asome el horizonte.
+**Qué se hizo:** dirty gateado por mensaje no vacío; min zoom 12→9. `tsc` limpio.
+**Commit:** _(este commit)_

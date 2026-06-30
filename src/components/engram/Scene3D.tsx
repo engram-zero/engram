@@ -1074,7 +1074,7 @@ function AerialRig({
     const onWheel = (e: WheelEvent) => {
       // Min kept above the point where the bright sky horizon peeks in at the
       // bottom of the tilted view.
-      zoom.current = THREE.MathUtils.clamp(zoom.current - e.deltaY * 0.02, 12, 55);
+      zoom.current = THREE.MathUtils.clamp(zoom.current - e.deltaY * 0.02, 9, 55);
     };
     window.addEventListener('wheel', onWheel, { passive: true });
 
@@ -1089,7 +1089,7 @@ function AerialRig({
       if (e.touches.length !== 2) { pinchPrev = null; return; }
       const d = pinchDist(e);
       if (pinchPrev !== null) {
-        zoom.current = THREE.MathUtils.clamp(zoom.current + (d - pinchPrev) * 0.06, 12, 55);
+        zoom.current = THREE.MathUtils.clamp(zoom.current + (d - pinchPrev) * 0.06, 9, 55);
       }
       pinchPrev = d;
     };

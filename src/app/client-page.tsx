@@ -493,7 +493,10 @@ function Game() {
     try {
       const data = await chat(address, npc, message, memories[npc], crossFor(npc), world.enemiesKilled);
       setMemories((prev) => (prev ? { ...prev, [npc]: data.memory } : prev));
-      setDirty((d) => ({ ...d, [npc]: true }));
+      // The approach greeting (empty message) isn't something the player chose to
+      // do, so it shouldn't flip the conversation to "needs saving" — only a real
+      // utterance/choice should. Otherwise "Leave & save" shows before you speak.
+      if (message.trim()) setDirty((d) => ({ ...d, [npc]: true }));
       setScene({ dialogue: data.response, options: data.options, loading: false });
       if (voiceOn) void speakText(data.response, npc);
     } catch (e) {
