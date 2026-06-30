@@ -1501,3 +1501,17 @@ toggle dentro de la sesión. No persistas mute entre reloads.
 **Qué se hizo:** removí el `useEffect` que rehidrataba `readStoredMute()` en
 `src/context/AudioContext.tsx`; el default `false` ahora gana en cada carga. `tsc` limpio.
 **Commit:** _(este commit)_
+
+### 2026-06-29 · Voz NPC por defecto, stop manual del mic, y un solo botón Leave
+**Pedido (humano):** (1) la voz de los NPCs sale apagada al cargar — debería estar ON;
+(2) mostrar Leave o Leave & save, no ambos, según haya algo que guardar; (3) un botón para
+parar el micrófono ("ya dije mi frase"), conservando el auto-cierre por silencio si no se pulsa.
+**Prompt sintetizado:** En `client-page.tsx` arranca `voiceOn` en `true` (TTS audible de
+entrada para jueces). Reemplaza la dictado de un solo disparo por una sesión controlable:
+`beginDictation(onFinal)` en `src/lib/speech.ts` usa reconocimiento continuo, acumula segmentos,
+se auto-cierra tras una pausa natural y expone `stop()`; el botón 🎤 pasa a "■ Stop" mientras
+escucha y al pulsarlo finaliza y vuelca el texto al input. En la barra de acciones, muestra
+"Leave & save" cuando `dirty[active]`, si no "Leave" — nunca los dos.
+**Qué se hizo:** `beginDictation`/`Dictation` en speech.ts (continuo + stop + auto-silencio);
+`voiceOn` default true; mic toggle stop; Leave/Leave&save mutuamente excluyentes. `tsc` limpio.
+**Commit:** _(este commit)_

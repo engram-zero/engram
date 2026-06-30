@@ -43,7 +43,7 @@ import { startPublicWorldPolling } from '@/lib/public-world';
 import { Portrait } from '@/components/engram/Art';
 import dynamic from 'next/dynamic';
 import { useEngramAudio } from '@/context/AudioContext';
-import { transcribeOnce, speakText, isSpeechAvailable, stopSpeaking } from '@/lib/speech';
+import { beginDictation, speakText, isSpeechAvailable, stopSpeaking, type Dictation } from '@/lib/speech';
 
 // Three.js is client-only and heavy — load it without SSR.
 const Scene3D = dynamic(() => import('@/components/engram/Scene3D'), { ssr: false });
@@ -228,17 +228,23 @@ function Game() {
   // Voice: dictate into the chat (STT) and optional NPC speech (TTS) via Azure.
   const [speechOk, setSpeechOk] = useState(false);
   const [recording, setRecording] = useState(false);
-  const [voiceOn, setVoiceOn] = useState(false);
+  // NPC voice (TTS) on by default so judges hear the villagers speak right away.
+  const [voiceOn, setVoiceOn] = useState(true);
+  const dictationRef = useRef<Dictation | null>(null);
   useEffect(() => { isSpeechAvailable().then(setSpeechOk).catch(() => setSpeechOk(false)); }, []);
+  // Toggle dictation: first click starts listening; clicking again (or the natural
+  // silence timeout) stops it and drops the transcript into the chat box.
   const startDictation = useCallback(async () => {
+    if (dictationRef.current) { dictationRef.current.stop(); return; }
     setRecording(true);
     stopSpeaking();
-    try {
-      const text = await transcribeOnce();
+    const session = await beginDictation((text) => {
       if (text) setTyped((prev) => (prev ? `${prev} ${text}` : text));
-    } finally {
+      dictationRef.current = null;
       setRecording(false);
-    }
+    });
+    if (!session) { setRecording(false); return; }
+    dictationRef.current = session;
   }, []);
   // "Explore as guest" — roam Aldenmoor without a wallet (no dialogue/saving).
   // The best mobile fallback when there's no injected wallet / WalletConnect.
@@ -986,13 +992,13 @@ function Game() {
                 <>
                   <button
                     onClick={startDictation}
-                    disabled={scene.loading || recording}
-                    title="Speak your message (it fills the box; you confirm before sending)"
-                    aria-label="Dictate message"
+                    disabled={scene.loading}
+                    title={recording ? "Click when you're done talking" : 'Speak your message (it fills the box; you confirm before sending)'}
+                    aria-label={recording ? 'Stop dictation' : 'Dictate message'}
                     className={`rounded-md border px-3 py-2 text-sm disabled:opacity-60 ${recording ? '' : 'engram-attention'}`}
                     style={{ background: recording ? 'rgba(204,90,74,0.85)' : 'rgba(0,0,0,0.4)', borderColor: recording ? '#ff7a6a' : '#8fd06a' }}
                   >
-                    {recording ? '● Listening…' : '🎤'}
+                    {recording ? '■ Stop' : '🎤'}
                   </button>
                   <button
                     onClick={() => { setVoiceOn((v) => { if (v) stopSpeaking(); return !v; }); }}
@@ -1025,12 +1031,13 @@ function Game() {
                   Sell wood
                 </button>
               )}
-              <button onClick={leaveNoSave} title="Close without saving anything to 0G" className="bg-black/40 border border-[#5a4a28] hover:border-[#d6b84a] rounded-md px-3 py-2 text-sm text-[#f4e8d0]/80">
-                Leave
-              </button>
-              {active && dirty[active] && (
+              {active && dirty[active] ? (
                 <button onClick={leave} title="Save this conversation to 0G" className="bg-black/40 border border-[#5a4a28] hover:border-[#d6b84a] rounded-md px-3 py-2 text-sm text-[#d89]">
-                  Leave & save
+                  Leave &amp; save
+                </button>
+              ) : (
+                <button onClick={leaveNoSave} title="Close (nothing new to save to 0G)" className="bg-black/40 border border-[#5a4a28] hover:border-[#d6b84a] rounded-md px-3 py-2 text-sm text-[#f4e8d0]/80">
+                  Leave
                 </button>
               )}
             </div>

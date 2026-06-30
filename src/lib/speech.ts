@@ -35,12 +35,20 @@ function capWords(text: string): string {
   return words.length <= MAX_WORDS ? text.trim() : words.slice(0, MAX_WORDS).join(' ');
 }
 
+export type Dictation = { stop: () => void };
+
 /**
- * Record one utterance from the default mic and transcribe it. Auto-detects
- * Spanish/English, stops on natural silence. Returns the (word-capped) text, or
- * null on failure / no speech.
+ * Start dictating from the default mic. Auto-detects Spanish/English and
+ * accumulates each recognized segment. It closes on its own after a natural
+ * pause (so the player needn't do anything), but the returned `stop()` lets the
+ * UI end it immediately ("I'm done talking"). `onFinal` fires exactly once with
+ * the word-capped transcript (empty string if nothing was heard). Returns null
+ * if speech isn't available.
  */
-export async function transcribeOnce(): Promise<string | null> {
+export async function beginDictation(
+  onFinal: (text: string) => void,
+  autoSilenceMs = 2600,
+): Promise<Dictation | null> {
   const cred = await getCred();
   if (!cred) return null;
   const SDK = await import('microsoft-cognitiveservices-speech-sdk');
@@ -48,19 +56,38 @@ export async function transcribeOnce(): Promise<string | null> {
   const auto = SDK.AutoDetectSourceLanguageConfig.fromLanguages(['es-MX', 'en-US']);
   const audioConfig = SDK.AudioConfig.fromDefaultMicrophoneInput();
   const recognizer = SDK.SpeechRecognizer.FromConfig(speechConfig, auto, audioConfig);
-  return new Promise<string | null>((resolve) => {
-    recognizer.recognizeOnceAsync(
-      (result) => {
-        const text = result.reason === SDK.ResultReason.RecognizedSpeech ? result.text : '';
-        recognizer.close();
-        resolve(text ? capWords(text) : null);
-      },
-      () => {
-        recognizer.close();
-        resolve(null);
-      },
+
+  const parts: string[] = [];
+  let done = false;
+  let silenceTimer: ReturnType<typeof setTimeout> | undefined;
+
+  const finalize = () => {
+    if (done) return;
+    done = true;
+    if (silenceTimer) clearTimeout(silenceTimer);
+    const text = capWords(parts.join(' ').trim());
+    recognizer.stopContinuousRecognitionAsync(
+      () => { try { recognizer.close(); } catch { /* ignore */ } onFinal(text); },
+      () => { try { recognizer.close(); } catch { /* ignore */ } onFinal(text); },
     );
-  });
+  };
+
+  // Each finalized segment resets the "they've stopped talking" countdown.
+  recognizer.recognized = (_s, e) => {
+    if (e.result.reason === SDK.ResultReason.RecognizedSpeech && e.result.text) {
+      parts.push(e.result.text);
+      if (silenceTimer) clearTimeout(silenceTimer);
+      silenceTimer = setTimeout(finalize, autoSilenceMs);
+    }
+  };
+  recognizer.canceled = () => finalize();
+
+  await new Promise<void>((res) =>
+    recognizer.startContinuousRecognitionAsync(() => res(), () => res()),
+  );
+  // If the player never speaks, still close after a generous window.
+  silenceTimer = setTimeout(finalize, autoSilenceMs + 5000);
+  return { stop: finalize };
 }
 
 // A distinct neural voice + prosody per villager. Aldric uses Maren's old voice and
