@@ -1776,3 +1776,13 @@ jugador + botón **🌿 Medicinal herbs** (cura, vía `buyAldricMarketItem('medi
 y lista los **player listings** (`aldricMarketCatalog().playerListings`) con compra (`buyAiItemListing`).
 Cierra el loop del Prompt 30 (curarse importa porque perder HP cuesta). `tsc` limpio; solo client-page.tsx.
 **Commit:** _(este commit)_
+
+### 2026-06-30 · Audio por terreno: pasos/salto por bioma + ambiente desierto/nevada
+**Pedido (humano):** sonidos de pasos/salto distintos según el terreno; ambiente que difiera
+gradualmente de escena a escena (desierto, nevada); archivos provistos por el usuario.
+**Qué se hizo:** renombré los archivos a `foley/footstep-{sand,snow,stone}-*` + `jump-{sand,snow,stone}`
+y `ambient/{desert-ambience,snowfall}-loop`. Cues nuevos en el manifest (pasos a/b que alternan por
+rotación de array). En Scene3D: `footstepCueFor`/`jumpCueFor` eligen el cue por `biomeAt` (agua→
+splash, meadow→grass, sand→sand, snow→snow, dry→stone); emisores de ambiente `desert_ambience` y
+`snowfall` centrados en las regiones de bioma → el driver por distancia hace el crossfade gradual.
+Créditos en AUDIO_ASSETS. `tsc` limpio. **Commit:** _(este commit)_

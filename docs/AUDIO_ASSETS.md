@@ -42,6 +42,11 @@ all uploads use the Pixabay Content License, but confirm before shipping.
 | --- | --- | --- |
 | `ambient/day-ambience-loop.mp3` | https://pixabay.com/sound-effects/nature-birds-chirping-calm-173695/ | Pixabay Content License |
 | `ambient/river-water-loop.mp3` | https://pixabay.com/sound-effects/nature-forest-river-sammer-450696/ (recorte en loop) | Pixabay Content License |
+| `ambient/desert-ambience-loop.mp3` | https://pixabay.com/es/sound-effects/desert-sand-dunes-482890/ | Pixabay Content License |
+| `ambient/snowfall-loop.mp3` | https://pixabay.com/es/sound-effects/cold-snowfall-ambience-5-minutes-sound-effect-164512/ | Pixabay Content License |
+| `foley/footstep-sand-a/b.mp3`, `jump-sand.mp3` | https://pixabay.com/es/sound-effects/person-walking-through-sand-484078/ | Pixabay Content License |
+| `foley/footstep-snow-a/b.mp3`, `jump-snow.mp3` | https://pixabay.com/es/sound-effects/footsteps-in-snow-102043/ | Pixabay Content License |
+| `foley/footstep-stone.mp3`, `jump-stone.mp3` | https://pixabay.com/es/sound-effects/steps-on-stones-and-sand-stones-9811/ | Pixabay Content License |
 | `sfx/attack-hit.mp3` | https://pixabay.com/sound-effects/film-special-effects-sword-hit-7160/ | Pixabay Content License |
 | `sfx/attack-swing.mp3` | https://pixabay.com/sound-effects/film-special-effects-slash-21834/ | Pixabay Content License |
 | `sfx/player-hurt-1..5.mp3`, `player-mort.mp3` | https://pixabay.com/sound-effects/people-grunts-33249/ (1-min clip; individual grunts cut out) | Pixabay Content License |

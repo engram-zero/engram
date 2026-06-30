@@ -3,6 +3,14 @@ export type AudioCueId =
   | 'day_ambience'
   | 'campfire_crackle'
   | 'river_water'
+  | 'desert_ambience'
+  | 'snowfall'
+  | 'footstep_sand'
+  | 'footstep_snow'
+  | 'footstep_stone'
+  | 'jump_sand'
+  | 'jump_snow'
+  | 'jump_stone'
   | 'footstep_grass'
   | 'footstep_water'
   | 'jump'
@@ -52,6 +60,37 @@ export const AUDIO_CUES: Record<AudioCueId, AudioCue> = {
     loop: true,
     volume: 0.5,
   },
+  desert_ambience: {
+    label: 'Desert wind/dunes ambience (spatial — the sand biome)',
+    src: '/audio/ambient/desert-ambience-loop.mp3',
+    loop: true,
+    volume: 0.5,
+  },
+  snowfall: {
+    label: 'Cold snowfall ambience (spatial — the snow biome)',
+    src: '/audio/ambient/snowfall-loop.mp3',
+    loop: true,
+    volume: 0.55,
+  },
+  // Footsteps alternate a→b for a natural cadence (the cue rotates array variants).
+  footstep_sand: {
+    label: 'Footsteps on sand (alternating a/b)',
+    src: ['/audio/foley/footstep-sand-a.mp3', '/audio/foley/footstep-sand-b.mp3'],
+    volume: 0.4,
+  },
+  footstep_snow: {
+    label: 'Footsteps on snow (alternating a/b)',
+    src: ['/audio/foley/footstep-snow-a.mp3', '/audio/foley/footstep-snow-b.mp3'],
+    volume: 0.42,
+  },
+  footstep_stone: {
+    label: 'Footsteps on stone/cracked earth (kept low — it is sharp)',
+    src: '/audio/foley/footstep-stone.mp3',
+    volume: 0.22,
+  },
+  jump_sand: { label: 'Jump take-off on sand', src: '/audio/foley/jump-sand.mp3', volume: 0.32 },
+  jump_snow: { label: 'Jump take-off on snow', src: '/audio/foley/jump-snow.mp3', volume: 0.32 },
+  jump_stone: { label: 'Jump take-off on stone', src: '/audio/foley/jump-stone.mp3', volume: 0.26 },
   footstep_grass: {
     label: 'Footsteps on grass/dirt',
     // Only list files that actually exist — a missing variant 404s and would stall

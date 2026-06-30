@@ -194,6 +194,26 @@ export function isWarehouseLabel(label?: string | null): boolean {
   const l = label.toLowerCase();
   return WAREHOUSE_WORDS.some((w) => l.includes(w));
 }
+
+// Foley varies with the ground underfoot: water splashes, then by biome —
+// grass / sand / snow / cracked-earth(stone). Keeps the world tactile.
+function footstepCueFor(x: number, z: number): AudioCueId {
+  if (isOverWater(x, z)) return 'footstep_water';
+  switch (biomeAt(x, z)) {
+    case 'sand': return 'footstep_sand';
+    case 'snow': return 'footstep_snow';
+    case 'dry': return 'footstep_stone';
+    default: return 'footstep_grass';
+  }
+}
+function jumpCueFor(x: number, z: number): AudioCueId {
+  switch (biomeAt(x, z)) {
+    case 'sand': return 'jump_sand';
+    case 'snow': return 'jump_snow';
+    case 'dry': return 'jump_stone';
+    default: return 'jump';
+  }
+}
 const RESOURCE_LABEL: Record<StoredResourceType, string> = { wood: 'Wood', stone: 'Stone', silver: 'Silver', gold: 'Gold' };
 
 // True when (x,z) sits over the creek's water ribbon (half-width matches the River
@@ -292,6 +312,11 @@ const AUDIO_EMITTERS: AudioEmitter[] = [
   { cue: 'campfire_crackle', x: CAMPFIRE.x, z: CAMPFIRE.z, radius: 12, volume: 0.5 },
   // Flowing water along the creek (heard near the banks, day and night).
   ...makeRiverEmitters(),
+  // Per-biome ambience, centred on the biome regions (see src/lib/biome.ts). The
+  // distance driver fades these in/out as you move, so the soundscape changes
+  // gradually from scene to scene (desert wind ↔ snowfall ↔ the meadow bed).
+  { cue: 'desert_ambience', x: 138, z: 122, radius: 122, volume: 0.85 },
+  { cue: 'snowfall', x: -128, z: -116, radius: 116, volume: 0.9 },
   // Daytime ambience bed (birds/breeze) — a single huge emitter so it plays
   // everywhere while the sun is up, replacing the night crickets during the day.
   { cue: 'day_ambience', x: 0, z: 0, radius: 1000, volume: 0.22, dayOnly: true },
@@ -5587,8 +5612,8 @@ export default function Scene3D({ memories = null, active = null, talking = fals
               onNearbyTreeChange={setNearbyTree}
               onNearbyRockChange={setNearbyRock}
               onNearbyEnemyChange={setNearbyEnemy}
-              onFootstep={() => void play(isOverWater(posRef.current.x, posRef.current.z) ? 'footstep_water' : 'footstep_grass')}
-              onJump={() => void play('jump')}
+              onFootstep={() => void play(footstepCueFor(posRef.current.x, posRef.current.z))}
+              onJump={() => void play(jumpCueFor(posRef.current.x, posRef.current.z))}
               onLand={() => void play('land')}
               memories={memories}
             />
