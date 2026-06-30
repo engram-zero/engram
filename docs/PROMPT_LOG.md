@@ -1786,3 +1786,18 @@ rotación de array). En Scene3D: `footstepCueFor`/`jumpCueFor` eligen el cue por
 splash, meadow→grass, sand→sand, snow→snow, dry→stone); emisores de ambiente `desert_ambience` y
 `snowfall` centrados en las regiones de bioma → el driver por distancia hace el crossfade gradual.
 Créditos en AUDIO_ASSETS. `tsc` limpio. **Commit:** _(este commit)_
+
+### 2026-06-30 · Prompt 35: frontera caminable conexa
+**Pedido (humano):** implementar el Prompt 35: una parcela proclamada puede quedar separada del
+círculo base por un hueco entre `WORLD_RADIUS=132` y el grid de `PARCEL_SIZE=18`; arreglar
+`parcelCellIntersectsBase` / `frontierClaimableCells` / `parcelIsClaimable` sin tocar `Scene3D.tsx`.
+**Prompt sintetizado:** Cambia la arquitectura de claim de frontera para que una celda solo sea
+reclamable si toca/intersecta tierra ya caminable — el círculo base o una parcela reclamada — y no
+solo si es vecina en grilla de una celda que toca la base. Permite celdas que cruzan el borde del
+círculo para que la primera parcela sea alcanzable, pero no celdas completamente dentro del mundo
+base. Expón una regla compartida para futuros consumidores y mantén `tsc` limpio.
+**Qué se hizo:** `parcelIsClaimable` ahora rechaza solo celdas completamente dentro de la base y exige
+`parcelOverlapsWalkable(...)`; `frontierClaimableCells` escanea la frontera con esa misma regla, de
+modo que las parcelas nuevas siempre se pegan físicamente a tierra caminable. `parcelCellsOverlap`
+acepta contacto por borde y evita contacto diagonal de esquina. Sin cambios en `Scene3D.tsx`.
+**Commit:** _(este commit)_

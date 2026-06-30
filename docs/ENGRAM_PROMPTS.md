@@ -1451,6 +1451,12 @@ documentar alcance y viabilidad antes de comprometer.
 
 ## Prompt 35 — Arreglar la arquitectura de caminabilidad de la frontera (URGENTE)
 
+> **✅ Done — 30 jun 2026.** La frontera ya no se calcula por vecindad de grilla sino por
+> contacto físico con tierra caminable: una celda reclamable debe tocar/intersectar el círculo base
+> o una parcela reclamada. Se permite reclamar celdas que cruzan el borde de la base, pero no las que
+> están completamente dentro del círculo base. `frontierClaimableCells` usa la misma regla que
+> `parcelIsClaimable`, y `parcelOverlapsWalkable(...)` queda expuesto para consumidores futuros.
+
 **Para:** Codex (world.ts / frontier). Backend, sin tocar Scene3D.tsx.
 
 ### El bug

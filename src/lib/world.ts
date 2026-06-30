@@ -495,6 +495,28 @@ export function parcelCellIntersectsBase(gx: number, gz: number): boolean {
   return Math.hypot(nearestX, nearestZ) <= PARCEL_BASE_WORLD_RADIUS;
 }
 
+function parcelCellFullyInsideBase(gx: number, gz: number): boolean {
+  const { x, z } = parcelGridCenter(gx, gz);
+  const half = PARCEL_SIZE / 2;
+  return [
+    [x - half, z - half],
+    [x + half, z - half],
+    [x - half, z + half],
+    [x + half, z + half],
+  ].every(([cx, cz]) => Math.hypot(cx, cz) <= PARCEL_BASE_WORLD_RADIUS);
+}
+
+function parcelCellsOverlap(a: { gx: number; gz: number }, b: { gx: number; gz: number }): boolean {
+  const ax = a.gx * PARCEL_SIZE;
+  const az = a.gz * PARCEL_SIZE;
+  const bx = b.gx * PARCEL_SIZE;
+  const bz = b.gz * PARCEL_SIZE;
+  const dx = Math.abs(ax - bx);
+  const dz = Math.abs(az - bz);
+  // Edge contact is walkable; diagonal corner-only contact is too narrow.
+  return (dx <= PARCEL_SIZE && dz < PARCEL_SIZE) || (dz <= PARCEL_SIZE && dx < PARCEL_SIZE);
+}
+
 function parcelWithinHardLimit(gx: number, gz: number): boolean {
   const { x, z } = parcelGridCenter(gx, gz);
   return Math.hypot(x, z) <= PARCEL_HARD_WORLD_RADIUS;
@@ -513,16 +535,18 @@ export function parcelIsClaimable(gx: number, gz: number, claimedIds: Iterable<s
   const id = parcelIdFromGrid(gx, gz);
   const claimed = normalizedClaimedIds(claimedIds);
   if (claimed.has(id)) return false;
-  if (parcelCellIntersectsBase(gx, gz)) return false;
+  if (parcelCellFullyInsideBase(gx, gz)) return false;
   if (!parcelWithinHardLimit(gx, gz)) return false;
+  return parcelOverlapsWalkable(gx, gz, claimed);
+}
 
-  const neighbors = [
-    [gx + 1, gz],
-    [gx - 1, gz],
-    [gx, gz + 1],
-    [gx, gz - 1],
-  ] as const;
-  return neighbors.some(([nx, nz]) => parcelCellIntersectsBase(nx, nz) || claimed.has(parcelIdFromGrid(nx, nz)));
+export function parcelOverlapsWalkable(gx: number, gz: number, claimedIds: Iterable<string> = []): boolean {
+  if (parcelCellIntersectsBase(gx, gz)) return true;
+  for (const id of normalizedClaimedIds(claimedIds)) {
+    const parsed = parseParcelId(id);
+    if (parsed && parcelCellsOverlap({ gx, gz }, parsed)) return true;
+  }
+  return false;
 }
 
 export function frontierClaimableCells(claimedIds: Iterable<string> = []): { gx: number; gz: number }[] {
@@ -532,20 +556,7 @@ export function frontierClaimableCells(claimedIds: Iterable<string> = []): { gx:
 
   for (let gx = -maxGrid; gx <= maxGrid; gx++) {
     for (let gz = -maxGrid; gz <= maxGrid; gz++) {
-      if (!parcelCellIntersectsBase(gx, gz)) continue;
-      for (const [nx, nz] of [[gx + 1, gz], [gx - 1, gz], [gx, gz + 1], [gx, gz - 1]] as const) {
-        const id = parcelIdFromGrid(nx, nz);
-        if (!claimed.has(id)) candidates.add(id);
-      }
-    }
-  }
-
-  for (const id of claimed) {
-    const parsed = parseParcelId(id);
-    if (!parsed) continue;
-    for (const [nx, nz] of [[parsed.gx + 1, parsed.gz], [parsed.gx - 1, parsed.gz], [parsed.gx, parsed.gz + 1], [parsed.gx, parsed.gz - 1]] as const) {
-      const nextId = parcelIdFromGrid(nx, nz);
-      if (!claimed.has(nextId)) candidates.add(nextId);
+      if (parcelIsClaimable(gx, gz, claimed)) candidates.add(parcelIdFromGrid(gx, gz));
     }
   }
 
