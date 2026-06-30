@@ -1841,3 +1841,14 @@ al volver la pestaña visible. `debug-log.ts` centraliza `debugLog/debugInfo/deb
 logs informativos/repetitivos de `/api/save`, `/api/parcel-save`, `/api/mine`, `memory`,
 `parcel-data`, `public-world` y `0g/downloader` quedan silenciosos por defecto.
 `tsc` limpio. **Commit:** _(este commit)_
+
+### 2026-06-30 · Perf pass de Scene3D (índice de obstáculos memoizado + mapas de eventos)
+**Pedido (humano):** atender la auditoría de Codex — colisión reconstruye listas de obstáculos por
+frame, y el render filtra eventos por edificio (buildings × events).
+**Qué se hizo:** (1) `obstacleIndex()` memoizado por IDENTIDAD DE REFERENCIA de los arrays de estado
+(buildings/choppedTrees/treeGrowth/minedRocks/parcelClaims + públicos), porque el estado es inmutable
+→ las listas (campfire+árboles+rocas+nodos de parcela, muros, casas, voxels) se reconstruyen solo al
+commitear, no cada frame. `resolveCollision`, `blockSupportTop` y `resolveBlockWalls` lo consumen.
+(2) En `Buildings`, mapas `useMemo` `local/publicRaid|RepairByBuilding` agrupan eventos por buildingId
+→ cada edificio hace lookup en vez de filtrar todos los eventos (era buildings × events). `tsc`
+limpio; solo Scene3D.tsx. **Commit:** _(este commit)_

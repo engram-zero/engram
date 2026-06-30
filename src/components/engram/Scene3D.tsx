@@ -588,6 +588,54 @@ function clampToFrontier(x: number, z: number): [number, number] {
   return [bx, bz];
 }
 
+// ── Obstacle index (perf) ──
+// Collision/placement obstacles are derived from immutable world/public-world state,
+// so we rebuild the lists ONLY when the relevant arrays change identity (a commit),
+// not on every collision call/frame. Trees/rocks/parcel-nodes/walls/houses/voxels
+// are memoized; the few moving actors (NPCs/enemies) are added per call by callers.
+type Collider = { x: number; z: number; r: number };
+type VoxelBox = { x: number; z: number; base: number; top: number; half: number };
+type ObstacleIndex = { statics: Collider[]; walls: Collider[]; houses: Building[]; voxels: VoxelBox[] };
+let _obsKeys: readonly unknown[] | null = null;
+let _obsIdx: ObstacleIndex | null = null;
+function obstacleIndex(): ObstacleIndex {
+  const w = getWorld();
+  const pub = getPublicWorldSnapshot();
+  const keys = [w.buildings, w.choppedTrees, w.treeGrowth, w.minedRocks, w.parcelClaims, pub.buildings, pub.parcels] as const;
+  if (_obsIdx && _obsKeys && _obsKeys.length === keys.length && keys.every((k, i) => _obsKeys![i] === k)) return _obsIdx;
+  const statics: Collider[] = [{ x: CAMPFIRE.x, z: CAMPFIRE.z, r: 1.0 }];
+  for (let i = 0; i < TREES.length; i++) {
+    if (!treeIsVisible(w, i)) continue;
+    const t = TREES[i];
+    statics.push({ x: t.x, z: t.z, r: 0.45 * t.scale * TREE_STAGE_SCALE[treeStageFor(w, i)] });
+  }
+  for (let i = 0; i < ROCKS.length; i++) {
+    if (isMined(i)) continue;
+    const r = ROCKS[i];
+    statics.push({ x: r.x, z: r.z, r: 0.6 * r.scale });
+  }
+  for (const claim of allClaimedParcels()) for (const node of parcelResourceNodes(claim)) statics.push({ x: node.x, z: node.z, r: node.r });
+  const walls: Collider[] = [];
+  const houses: Building[] = [];
+  const voxels: VoxelBox[] = [];
+  const add = (b: Building, own: boolean) => {
+    if (b.type === 'house') { houses.push(b); return; }
+    if (b.type === 'block') {
+      if (!own) return; // you climb your own structures
+      const s = b.scale ?? BLOCK_UNIT;
+      const base = getHeightAt(b.x, b.z) + (b.y ?? 0);
+      voxels.push({ x: b.x, z: b.z, base, top: base + s, half: s / 2 });
+      return;
+    }
+    walls.push({ x: b.x, z: b.z, r: BUILD_RADIUS[b.type] ?? BUILD_RADIUS.wall });
+  };
+  for (const b of w.buildings) add(b, true);
+  for (const b of pub.buildings) add(b, false);
+  _obsKeys = keys;
+  _obsIdx = { statics, walls, houses, voxels };
+  return _obsIdx;
+}
+
 // Pillar 8 (verticality): AI-built voxel structures are real — you can stand and
 // climb on them. A step you can walk up is ≤ STEP_UP; anything taller is a wall.
 const STEP_UP = 0.62;
@@ -596,13 +644,10 @@ const STEP_UP = 0.62;
  *  height (so they can step UP onto it). -Infinity when nothing supports them. */
 function blockSupportTop(x: number, z: number, refY: number): number {
   let top = -Infinity;
-  for (const b of getWorld().buildings) {
-    if (b.type !== 'block') continue;
-    const s = b.scale ?? BLOCK_UNIT;
-    const half = s / 2 + PLAYER_RADIUS;
-    if (Math.abs(x - b.x) > half || Math.abs(z - b.z) > half) continue;
-    const t = getHeightAt(b.x, b.z) + (b.y ?? 0) + s;
-    if (t <= refY + STEP_UP + 1e-3 && t > top) top = t;
+  for (const v of obstacleIndex().voxels) {
+    const half = v.half + PLAYER_RADIUS;
+    if (Math.abs(x - v.x) > half || Math.abs(z - v.z) > half) continue;
+    if (v.top <= refY + STEP_UP + 1e-3 && v.top > top) top = v.top;
   }
   return top;
 }
@@ -612,18 +657,15 @@ function blockSupportTop(x: number, z: number, refY: number): number {
  *  stairs but not walk through a tower's walls. */
 function resolveBlockWalls(x: number, z: number, feetY: number): [number, number] {
   const headY = feetY + EYE_HEIGHT;
-  for (const b of getWorld().buildings) {
-    if (b.type !== 'block') continue;
-    const s = b.scale ?? BLOCK_UNIT;
-    const base = getHeightAt(b.x, b.z) + (b.y ?? 0);
-    if (base + s <= feetY + STEP_UP + 1e-3) continue; // low enough to step onto
-    if (base >= headY) continue; // above your head
-    const half = s / 2 + PLAYER_RADIUS;
-    const dx = x - b.x;
-    const dz = z - b.z;
+  for (const v of obstacleIndex().voxels) {
+    if (v.top <= feetY + STEP_UP + 1e-3) continue; // low enough to step onto
+    if (v.base >= headY) continue; // above your head
+    const half = v.half + PLAYER_RADIUS;
+    const dx = x - v.x;
+    const dz = z - v.z;
     if (Math.abs(dx) < half && Math.abs(dz) < half) {
-      if (half - Math.abs(dx) < half - Math.abs(dz)) x = b.x + (dx >= 0 ? half : -half);
-      else z = b.z + (dz >= 0 ? half : -half);
+      if (half - Math.abs(dx) < half - Math.abs(dz)) x = v.x + (dx >= 0 ? half : -half);
+      else z = v.z + (dz >= 0 ? half : -half);
     }
   }
   return [x, z];
@@ -632,62 +674,24 @@ function resolveBlockWalls(x: number, z: number, feetY: number): [number, number
 // Slide the player out of the boundary and any prop/NPC they overlap.
 function resolveCollision(x: number, z: number): [number, number] {
   if (!isFrontierWalkable(x, z)) [x, z] = clampToFrontier(x, z);
-  const obstacles = [
-    { x: CAMPFIRE.x, z: CAMPFIRE.z, r: 1.0 },
-    ...TREES.map((t, i) => ({ t, i }))
-      .filter(({ i }) => treeIsVisible(getWorld(), i))
-      .map(({ t, i }) => ({ x: t.x, z: t.z, r: 0.45 * t.scale * TREE_STAGE_SCALE[treeStageFor(getWorld(), i)] })),
-    ...ROCKS.map((r, i) => ({ r, i })).filter(({ i }) => !isMined(i)).map(({ r }) => ({ x: r.x, z: r.z, r: 0.6 * r.scale })),
-    ...allClaimedParcels().flatMap((claim) => parcelResourceNodes(claim).map((node) => ({ x: node.x, z: node.z, r: node.r }))),
-    ...(Object.values(dynamicNpcState)).map((state) => ({ x: state.x, z: state.z, r: 0.6 })),
-    ...(Object.values(dynamicEnemyState)).filter((s) => !s.dead).map((s) => ({ x: s.x, z: s.z, r: 0.5 })),
-  ];
-  for (const c of obstacles) {
-    const dx = x - c.x;
-    const dz = z - c.z;
+  const idx = obstacleIndex();
+  const pushOut = (cx: number, cz: number, r: number) => {
+    const dx = x - cx, dz = z - cz;
     const dist = Math.hypot(dx, dz);
-    const min = c.r + PLAYER_RADIUS;
+    const min = r + PLAYER_RADIUS;
     if (dist < min && dist > 1e-4) {
       const push = min - dist;
       x += (dx / dist) * push;
       z += (dz / dist) * push;
     }
-  }
+  };
+  for (const c of idx.statics) pushOut(c.x, c.z, c.r);
+  // Moving actors aren't memoized (they change every frame), but there are only a few.
+  for (const s of Object.values(dynamicNpcState)) pushOut(s.x, s.z, 0.6);
+  for (const s of Object.values(dynamicEnemyState)) if (!s.dead) pushOut(s.x, s.z, 0.5);
   [x, z] = resolveStaticCottageCollision(x, z);
-  for (const b of getWorld().buildings) {
-    if (b.type === 'block') continue;
-    if (b.type === 'house') {
-      [x, z] = resolveHouseCollision(x, z, b, PLAYER_RADIUS);
-      continue;
-    }
-    const dx = x - b.x;
-    const dz = z - b.z;
-    const dist = Math.hypot(dx, dz);
-    const min = BUILD_RADIUS[b.type] + PLAYER_RADIUS;
-    if (dist < min && dist > 1e-4) {
-      const push = min - dist;
-      x += (dx / dist) * push;
-      z += (dz / dist) * push;
-    }
-  }
-  // Other players' buildings (discovered public world) are solid too — you couldn't
-  // walk through them before because only your OWN buildings were collided.
-  for (const b of getPublicWorldSnapshot().buildings) {
-    if (b.type === 'block') continue;
-    if (b.type === 'house') {
-      [x, z] = resolveHouseCollision(x, z, b, PLAYER_RADIUS);
-      continue;
-    }
-    const dx = x - b.x;
-    const dz = z - b.z;
-    const dist = Math.hypot(dx, dz);
-    const min = (BUILD_RADIUS[b.type] ?? BUILD_RADIUS.wall) + PLAYER_RADIUS;
-    if (dist < min && dist > 1e-4) {
-      const push = min - dist;
-      x += (dx / dist) * push;
-      z += (dz / dist) * push;
-    }
-  }
+  for (const b of idx.houses) [x, z] = resolveHouseCollision(x, z, b, PLAYER_RADIUS);
+  for (const c of idx.walls) pushOut(c.x, c.z, c.r);
   return [x, z];
 }
 
@@ -3319,6 +3323,29 @@ function Buildings({
   const world = useWorld();
   const publicWorld = usePublicWorld();
 
+  // Group local raid/repair events by buildingId ONCE per change, so each building
+  // does a map lookup instead of scanning every event (was O(buildings × events)).
+  const localRaidByBuilding = useMemo(() => {
+    const m = new Map<string, typeof world.raidEvents>();
+    for (const e of world.raidEvents) { const a = m.get(e.buildingId) ?? []; a.push(e); m.set(e.buildingId, a); }
+    return m;
+  }, [world.raidEvents]);
+  const localRepairByBuilding = useMemo(() => {
+    const m = new Map<string, typeof world.repairEvents>();
+    for (const e of world.repairEvents) { const a = m.get(e.buildingId) ?? []; a.push(e); m.set(e.buildingId, a); }
+    return m;
+  }, [world.repairEvents]);
+  const publicRaidByBuilding = useMemo(() => {
+    const m = new Map<string, typeof publicWorld.raidEvents>();
+    for (const e of publicWorld.raidEvents) { const a = m.get(e.buildingId) ?? []; a.push(e); m.set(e.buildingId, a); }
+    return m;
+  }, [publicWorld.raidEvents]);
+  const publicRepairByBuilding = useMemo(() => {
+    const m = new Map<string, typeof publicWorld.repairEvents>();
+    for (const e of publicWorld.repairEvents) { const a = m.get(e.buildingId) ?? []; a.push(e); m.set(e.buildingId, a); }
+    return m;
+  }, [publicWorld.repairEvents]);
+
   const handleOwnBuildingClick = (index: number, displayBuilding?: Building) => {
     if (tool === 'demolish') {
       removeBuilding(index);
@@ -3372,12 +3399,12 @@ function Buildings({
       {publicWorld.buildings.map((b, i) => {
         const relation = world.relations[b.owner.toLowerCase()] ?? 'neutral';
         const publicEventIds = new Set((b.raidEvents ?? []).map((event) => event.id));
-        const localRaidDamage = world.raidEvents
-          .filter((event) => event.defender === b.owner && event.buildingId === b.id && !publicEventIds.has(event.id))
+        const localRaidDamage = (localRaidByBuilding.get(b.id ?? '') ?? [])
+          .filter((event) => event.defender === b.owner && !publicEventIds.has(event.id))
           .reduce((sum, event) => sum + event.damage, 0);
         const publicRepairEventIds = new Set((b.repairEvents ?? []).map((event) => event.id));
-        const localRepairHealing = world.repairEvents
-          .filter((event) => event.owner === b.owner && event.buildingId === b.id && !publicRepairEventIds.has(event.id))
+        const localRepairHealing = (localRepairByBuilding.get(b.id ?? '') ?? [])
+          .filter((event) => event.owner === b.owner && !publicRepairEventIds.has(event.id))
           .reduce((sum, event) => sum + event.heal, 0);
         const displayBuilding = localRaidDamage > 0 || localRepairHealing > 0
           ? {
@@ -3405,26 +3432,14 @@ function Buildings({
       })}
       {world.buildings.map((b, i) => {
         const owner = getWorldWallet()?.toLowerCase();
-        const incomingRaidDamage = owner && b.id
-          ? publicWorld.raidEvents
-            .filter((event) => event.defender === owner && event.buildingId === b.id)
-            .reduce((sum, event) => sum + event.damage, 0)
-          : 0;
-        const publicRepairEventIds = new Set(
-          owner && b.id
-            ? publicWorld.repairEvents
-              .filter((event) => event.owner === owner && event.buildingId === b.id)
-              .map((event) => event.id)
-            : []
-        );
-        const incomingRepairHealing = owner && b.id
-          ? publicWorld.repairEvents
-            .filter((event) => event.owner === owner && event.buildingId === b.id)
-            .reduce((sum, event) => sum + event.heal, 0)
-          : 0;
+        const incomingRaids = owner && b.id ? (publicRaidByBuilding.get(b.id) ?? []).filter((event) => event.defender === owner) : [];
+        const incomingRaidDamage = incomingRaids.reduce((sum, event) => sum + event.damage, 0);
+        const incomingRepairs = owner && b.id ? (publicRepairByBuilding.get(b.id) ?? []).filter((event) => event.owner === owner) : [];
+        const publicRepairEventIds = new Set(incomingRepairs.map((event) => event.id));
+        const incomingRepairHealing = incomingRepairs.reduce((sum, event) => sum + event.heal, 0);
         const localRepairHealing = owner && b.id
-          ? world.repairEvents
-            .filter((event) => event.owner === owner && event.buildingId === b.id && !publicRepairEventIds.has(event.id))
+          ? (localRepairByBuilding.get(b.id) ?? [])
+            .filter((event) => event.owner === owner && !publicRepairEventIds.has(event.id))
             .reduce((sum, event) => sum + event.heal, 0)
           : 0;
         const totalRepairHealing = incomingRepairHealing + localRepairHealing;
