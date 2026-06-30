@@ -1,6 +1,7 @@
 import { TREES, ROCKS, riverCenterZ } from '@/components/engram/map';
 import type {
   EarthAgentState,
+  EcosystemActivityState,
   FaunaAgentState,
   NatureZoneId,
   NatureZoneSnapshot,
@@ -67,9 +68,15 @@ export function computeNatureSnapshot(world: WorldState): NatureZoneSnapshot[] {
   return NATURE_ZONES.map((zone) => byZone.get(zone.id)!);
 }
 
+function earthRegrowthScore(earth: EarthAgentState, zoneId: NatureZoneId): number {
+  const directive = earth.zones.find((zone) => zone.id === zoneId);
+  if (!directive) return 50;
+  const shareBoost = 0.35 + directive.regrowthShare * 0.65;
+  return directive.fertility * shareBoost;
+}
+
 export function pickTreeToRegrow(choppedTrees: number[], earth?: EarthAgentState | null): number | null {
   if (!earth || choppedTrees.length === 0) return null;
-  const fertility = new Map(earth.zones.map((zone) => [zone.id, zone.fertility]));
   let bestIndex: number | null = null;
   let bestScore = -Infinity;
 
@@ -77,7 +84,7 @@ export function pickTreeToRegrow(choppedTrees: number[], earth?: EarthAgentState
     const tree = TREES[treeIndex];
     if (!tree) continue;
     const zoneId = zoneOfPoint(tree.x, tree.z);
-    const score = fertility.get(zoneId) ?? 50;
+    const score = earthRegrowthScore(earth, zoneId);
     if (score > bestScore) {
       bestScore = score;
       bestIndex = treeIndex;
@@ -85,6 +92,79 @@ export function pickTreeToRegrow(choppedTrees: number[], earth?: EarthAgentState
   }
 
   return bestIndex;
+}
+
+export function pickRockToRespawn(minedRocks: number[], earth?: EarthAgentState | null): number | null {
+  if (!earth || minedRocks.length === 0) return null;
+  let bestIndex: number | null = null;
+  let bestScore = -Infinity;
+
+  for (const rockIndex of minedRocks) {
+    const rock = ROCKS[rockIndex];
+    if (!rock) continue;
+    const zoneId = zoneOfPoint(rock.x, rock.z);
+    const score = earthRegrowthScore(earth, zoneId);
+    if (score > bestScore) {
+      bestScore = score;
+      bestIndex = rockIndex;
+    }
+  }
+
+  return bestIndex;
+}
+
+const ACTIVITY_COIN_REF = 200;
+const RECENT_EXTRACTION_REF = 6;
+const MIN_RESTOCK_CADENCE_MS = 1000 * 45;
+const MAX_RESTOCK_CADENCE_MS = 1000 * 60 * 12;
+export const ECOSYSTEM_ACTIVITY_FORMULA =
+  'activityScore = clamp01(0.45*coin/200 + 0.35*recentExtraction/6 + 0.20*depletedStock); cadence = base*(1.25 - 0.45*depletedStock)*(1 - 0.45*activityScore)';
+
+function clamp01(value: number): number {
+  return clampFloat(value, 0, 1);
+}
+
+function validIndexCount(indexes: number[], total: number): number {
+  return new Set(indexes.filter((index) => Number.isInteger(index) && index >= 0 && index < total)).size;
+}
+
+function restockCadenceMs(baseCadenceMs: number, stockPressure: number, activityScore: number, multiplier = 1): number {
+  const safeBase = Number.isFinite(baseCadenceMs) && baseCadenceMs > 0 ? baseCadenceMs : 1000 * 60 * 4;
+  const stockBrake = 1.25 - 0.45 * stockPressure;
+  const activityBoost = 1 - 0.45 * activityScore;
+  return clampInt(safeBase * stockBrake * activityBoost * multiplier, MIN_RESTOCK_CADENCE_MS, MAX_RESTOCK_CADENCE_MS);
+}
+
+export function computeEcosystemActivity(
+  world: WorldState,
+  previous?: EcosystemActivityState | null,
+  baseCadenceMs = 1000 * 60 * 4
+): EcosystemActivityState {
+  const depletedTrees = validIndexCount(world.choppedTrees, TREES.length);
+  const depletedRocks = validIndexCount(world.minedRocks, ROCKS.length);
+  const treePressure = TREES.length > 0 ? depletedTrees / TREES.length : 0;
+  const rockPressure = ROCKS.length > 0 ? depletedRocks / ROCKS.length : 0;
+  const stockPressure = clamp01((treePressure + rockPressure) / 2);
+  const previousTrees = previous?.depletedTrees ?? depletedTrees;
+  const previousRocks = previous?.depletedRocks ?? depletedRocks;
+  const recentExtraction = Math.max(0, depletedTrees - previousTrees) + Math.max(0, depletedRocks - previousRocks);
+  const tokenSignal = clamp01(world.inventory.coin / ACTIVITY_COIN_REF);
+  const recentSignal = clamp01(recentExtraction / RECENT_EXTRACTION_REF);
+  const activityScore = clamp01(tokenSignal * 0.45 + recentSignal * 0.35 + stockPressure * 0.2);
+  const treeCadenceMs = restockCadenceMs(baseCadenceMs, stockPressure, activityScore);
+
+  return {
+    updatedAt: Date.now(),
+    formulaVersion: 'prompt23-f2f3-v1',
+    tokensInCirculation: Math.max(0, Math.round(world.inventory.coin)),
+    depletedTrees,
+    depletedRocks,
+    recentExtraction,
+    stockPressure,
+    activityScore,
+    treeCadenceMs,
+    rockCadenceMs: restockCadenceMs(baseCadenceMs, stockPressure, activityScore, 1.35),
+  };
 }
 
 export function fingerprintNature(world: WorldState): string {

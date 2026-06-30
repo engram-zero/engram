@@ -582,6 +582,7 @@ function normalizeEcosystem(raw: unknown): EcosystemState | undefined {
         updatedAt: Math.max(0, Math.round(Number(earthRaw.updatedAt ?? baseUpdatedAt))) || baseUpdatedAt,
         cadenceMs: Math.max(15000, Math.min(1000 * 60 * 30, Math.round(Number(earthRaw.cadenceMs ?? 1000 * 60 * 4)))),
         nextGrowthAt: Math.max(0, Math.round(Number(earthRaw.nextGrowthAt ?? 0))),
+        nextRockAt: Math.max(0, Math.round(Number(earthRaw.nextRockAt ?? 0))) || undefined,
         dominantZone: cleanNatureZoneId(earthRaw.dominantZone),
         zones: normalizeEarthZones(earthRaw.zones),
         summary: typeof earthRaw.summary === 'string' ? earthRaw.summary : 'The soil shifts quietly beneath Aldenmoor.',
@@ -603,8 +604,24 @@ function normalizeEcosystem(raw: unknown): EcosystemState | undefined {
       }
     : undefined;
 
-  if (!earth && !fauna) return undefined;
-  return { updatedAt: baseUpdatedAt, sourceFingerprint, earth, fauna };
+  const activityRaw = p.activity && typeof p.activity === 'object' ? p.activity : undefined;
+  const activity = activityRaw
+    ? {
+        updatedAt: Math.max(0, Math.round(Number(activityRaw.updatedAt ?? baseUpdatedAt))) || baseUpdatedAt,
+        formulaVersion: typeof activityRaw.formulaVersion === 'string' ? activityRaw.formulaVersion : 'prompt23-f2f3-v1',
+        tokensInCirculation: Math.max(0, Math.round(Number(activityRaw.tokensInCirculation ?? 0))),
+        depletedTrees: Math.max(0, Math.round(Number(activityRaw.depletedTrees ?? 0))),
+        depletedRocks: Math.max(0, Math.round(Number(activityRaw.depletedRocks ?? 0))),
+        recentExtraction: Math.max(0, Math.round(Number(activityRaw.recentExtraction ?? 0))),
+        stockPressure: Math.max(0, Math.min(1, Number(activityRaw.stockPressure ?? 0))),
+        activityScore: Math.max(0, Math.min(1, Number(activityRaw.activityScore ?? 0))),
+        treeCadenceMs: Math.max(1000 * 45, Math.min(1000 * 60 * 12, Math.round(Number(activityRaw.treeCadenceMs ?? 1000 * 60 * 4)))),
+        rockCadenceMs: Math.max(1000 * 45, Math.min(1000 * 60 * 12, Math.round(Number(activityRaw.rockCadenceMs ?? 1000 * 60 * 6)))),
+      }
+    : undefined;
+
+  if (!earth && !fauna && !activity) return undefined;
+  return { updatedAt: baseUpdatedAt, sourceFingerprint, earth, fauna, activity };
 }
 
 function cleanNatureZoneId(raw: unknown): 'north_forest' | 'riverlands' | 'east_hills' | 'south_fields' | 'west_grove' {
@@ -708,6 +725,7 @@ export function cloneWorldState(value: WorldState = EMPTY_WORLD): WorldState {
                 zones: value.ecosystem.fauna.zones.map((zone) => ({ ...zone })),
               }
             : undefined,
+          activity: value.ecosystem.activity ? { ...value.ecosystem.activity } : undefined,
         }
       : undefined,
     relations: { ...value.relations },

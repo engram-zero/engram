@@ -36,7 +36,7 @@ import {
   REPAIR_KIT_COST,
   SAPLING_COST,
 } from '@/lib/world';
-import { computeNatureSnapshot, fingerprintNature, pickTreeToRegrow } from '@/lib/ecosystem';
+import { computeEcosystemActivity, computeNatureSnapshot, fingerprintNature, pickRockToRespawn, pickTreeToRegrow } from '@/lib/ecosystem';
 import { TREES, ROCKS } from '@/components/engram/map';
 import { createBundleWorldPersistence } from '@/lib/world-0g';
 import { startPublicWorldPolling } from '@/lib/public-world';
@@ -147,6 +147,21 @@ function aldricSaleDialogue(trustLevel: number, quantity: number, totalCoins: nu
   return `Aldric takes the ${quantity} wood, stacks ${totalCoins} coin into your palm, and squints at you over the ledger. "A straight trade. Keep it that way, and we'll get along."`;
 }
 
+function zoneLabel(zone?: string) {
+  return zone ? zone.replace(/_/g, ' ') : 'unread';
+}
+
+function midLabel(value: number) {
+  return value >= 10 ? value.toFixed(0) : value.toFixed(1);
+}
+
+function etaLabel(at?: number) {
+  if (!at) return '--';
+  const seconds = Math.max(0, Math.ceil((at - Date.now()) / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  return `${Math.ceil(seconds / 60)}m`;
+}
+
 // ─── Game ─────────────────────────────────────────────────────────────────────
 
 function Game() {
@@ -163,15 +178,36 @@ function Game() {
     for (const r of ROCKS) t[r.ore] += 1;
     return t;
   }, []);
+  const minedByOre = useMemo(() => {
+    const mined = { stone: 0, silver: 0, gold: 0 } as Record<OreType, number>;
+    for (const i of world.minedRocks) { const r = ROCKS[i]; if (r) mined[r.ore] += 1; }
+    return mined;
+  }, [world.minedRocks]);
   const oreQuotes = useMemo(() => {
-    const minedByOre = { stone: 0, silver: 0, gold: 0 } as Record<OreType, number>;
-    for (const i of world.minedRocks) { const r = ROCKS[i]; if (r) minedByOre[r.ore] += 1; }
     return {
       stone: oreQuote(world, 'stone', oreTotals.stone, minedByOre.stone),
       silver: oreQuote(world, 'silver', oreTotals.silver, minedByOre.silver),
       gold: oreQuote(world, 'gold', oreTotals.gold, minedByOre.gold),
     } as Record<OreType, ReturnType<typeof oreQuote>>;
-  }, [world, oreTotals]);
+  }, [world, oreTotals, minedByOre]);
+  const treasury = useMemo(
+    () => ({
+      woodRemaining: Math.max(0, TREES.length - world.choppedTrees.length),
+      woodTotal: TREES.length,
+      woodMid: quote.mid,
+      ores: (['stone', 'silver', 'gold'] as OreType[]).map((ore) => ({
+        ore,
+        remaining: Math.max(0, oreTotals[ore] - minedByOre[ore]),
+        total: oreTotals[ore],
+        mid: oreQuotes[ore].mid,
+      })),
+      dominantZone: zoneLabel(world.ecosystem?.earth?.dominantZone),
+      activityScore: world.ecosystem?.activity?.activityScore,
+      nextGrowthAt: world.ecosystem?.earth?.nextGrowthAt,
+      nextRockAt: world.ecosystem?.earth?.nextRockAt,
+    }),
+    [world.choppedTrees.length, world.ecosystem, quote.mid, oreTotals, minedByOre, oreQuotes]
+  );
 
   const [memories, setMemories] = useState<Record<NPCName, NPCMemory> | null>(null);
   const [active, setActive] = useState<NPCName | null>(null);
@@ -313,14 +349,23 @@ function Game() {
 
         const current = getWorld();
         if (fingerprintNature(current) !== natureFingerprint) return;
+        const now = Date.now();
+        const activity = computeEcosystemActivity(current, current.ecosystem?.activity, earthData.earth.cadenceMs);
 
         await replaceWorldState({
           ...current,
           ecosystem: {
-            updatedAt: Date.now(),
+            updatedAt: now,
             sourceFingerprint: natureFingerprint,
-            earth: earthData.earth,
+            earth: {
+              ...earthData.earth,
+              updatedAt: now,
+              cadenceMs: activity.treeCadenceMs,
+              nextGrowthAt: now + activity.treeCadenceMs,
+              nextRockAt: now + activity.rockCadenceMs,
+            },
             fauna: faunaData.fauna,
+            activity,
           },
         });
       } catch (error) {
@@ -344,17 +389,23 @@ function Game() {
       if (!liveEarth || current.choppedTrees.length === 0 || liveEarth.nextGrowthAt > Date.now()) return;
       const treeIndex = pickTreeToRegrow(current.choppedTrees, liveEarth);
       if (treeIndex === null) return;
+      const now = Date.now();
+      const choppedTrees = current.choppedTrees.filter((id) => id !== treeIndex);
+      const nextWorld = { ...current, choppedTrees };
+      const activity = computeEcosystemActivity(nextWorld, current.ecosystem?.activity, liveEarth.cadenceMs);
       void replaceWorldState({
-        ...current,
-        choppedTrees: current.choppedTrees.filter((id) => id !== treeIndex),
+        ...nextWorld,
         ecosystem: {
           ...current.ecosystem,
-          updatedAt: Date.now(),
+          updatedAt: now,
+          activity,
           earth: {
             ...liveEarth,
-            updatedAt: Date.now(),
-            nextGrowthAt: Date.now() + liveEarth.cadenceMs,
-            summary: `${liveEarth.summary} One sapling stirs back to life in ${liveEarth.dominantZone.replace('_', ' ')}.`,
+            updatedAt: now,
+            cadenceMs: activity.treeCadenceMs,
+            nextGrowthAt: now + activity.treeCadenceMs,
+            nextRockAt: liveEarth.nextRockAt ?? now + activity.rockCadenceMs,
+            summary: `${liveEarth.summary} One sapling stirs back to life in ${zoneLabel(liveEarth.dominantZone)}.`,
           },
         },
       });
@@ -362,6 +413,43 @@ function Game() {
 
     return () => window.clearTimeout(timer);
   }, [world.choppedTrees, world.ecosystem?.earth]);
+
+  useEffect(() => {
+    const earth = world.ecosystem?.earth;
+    const nextRockAt = earth?.nextRockAt ?? earth?.nextGrowthAt;
+    if (!earth || !nextRockAt || world.minedRocks.length === 0) return;
+    const delay = Math.max(1000, nextRockAt - Date.now());
+    const timer = window.setTimeout(() => {
+      const current = getWorld();
+      const liveEarth = current.ecosystem?.earth;
+      const dueAt = liveEarth?.nextRockAt ?? liveEarth?.nextGrowthAt;
+      if (!liveEarth || !dueAt || current.minedRocks.length === 0 || dueAt > Date.now()) return;
+      const rockIndex = pickRockToRespawn(current.minedRocks, liveEarth);
+      if (rockIndex === null) return;
+      const now = Date.now();
+      const minedRocks = current.minedRocks.filter((id) => id !== rockIndex);
+      const nextWorld = { ...current, minedRocks };
+      const activity = computeEcosystemActivity(nextWorld, current.ecosystem?.activity, liveEarth.cadenceMs);
+      void replaceWorldState({
+        ...nextWorld,
+        ecosystem: {
+          ...current.ecosystem,
+          updatedAt: now,
+          activity,
+          earth: {
+            ...liveEarth,
+            updatedAt: now,
+            cadenceMs: activity.treeCadenceMs,
+            nextGrowthAt: liveEarth.nextGrowthAt || now + activity.treeCadenceMs,
+            nextRockAt: now + activity.rockCadenceMs,
+            summary: `${liveEarth.summary} One outcrop seals over again in ${zoneLabel(liveEarth.dominantZone)}.`,
+          },
+        },
+      });
+    }, delay);
+
+    return () => window.clearTimeout(timer);
+  }, [world.minedRocks, world.ecosystem?.earth]);
 
   // Auto-dismiss the "✓ Saved to 0G" banner after a while so it doesn't linger.
   useEffect(() => {
@@ -557,8 +645,7 @@ function Game() {
     setMerchantMsg(`Sharper axe acquired — you now gather 2× wood per chop. (−${AXE_UPGRADE_COST} coin)`);
   }
 
-  // Stone trade (static price, house edge: buy > sell). Mirrors the wood flow.
-  // Generic ore trade (stone / silver / gold), all with the house-edge spread.
+  // Generic ore trade (stone / silver / gold), all scarcity-priced with the house-edge spread.
   async function sellOreToAldric(ore: OreType) {
     if (!memories || active !== 'aldric' || scene.loading) return;
     const avail = Math.max(0, world.inventory[ore]);
@@ -781,6 +868,36 @@ function Game() {
         </div>
       )}
 
+      {!photoMode && address && (
+        <div className="pointer-events-none absolute top-16 left-4 z-20 hidden w-[292px] max-w-[calc(100vw-2rem)] rounded-md border border-[#5a4a28]/85 bg-[rgba(12,10,7,0.72)] px-3 py-2 text-[11px] leading-snug text-[#f4e8d0]/82 shadow-[0_8px_28px_rgba(0,0,0,0.35)] backdrop-blur-sm sm:block">
+          <div className="mb-1 flex items-center justify-between text-[#d6b84a]">
+            <span className="font-semibold tracking-[0.08em]">World Treasury</span>
+            <span className="font-mono text-[10px] text-[#f4e8d0]/55">0G state</span>
+          </div>
+          <div className="mb-1 text-[#f4e8d0]/68">
+            Earth: <span className="capitalize text-[#f4e8d0]">{treasury.dominantZone}</span>
+            {typeof treasury.activityScore === 'number' && (
+              <span> · activity {Math.round(treasury.activityScore * 100)}%</span>
+            )}
+          </div>
+          <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 gap-y-0.5">
+            <span>wood</span>
+            <span>{treasury.woodRemaining}/{treasury.woodTotal}</span>
+            <span>mid {midLabel(treasury.woodMid)}</span>
+            {treasury.ores.map((row) => (
+              <React.Fragment key={row.ore}>
+                <span className="capitalize">{row.ore}</span>
+                <span>{row.remaining}/{row.total}</span>
+                <span>mid {midLabel(row.mid)}</span>
+              </React.Fragment>
+            ))}
+          </div>
+          <div className="mt-1 border-t border-[#5a4a28]/55 pt-1 text-[#f4e8d0]/58">
+            next tree {etaLabel(treasury.nextGrowthAt)} · rock {etaLabel(treasury.nextRockAt)}
+          </div>
+        </div>
+      )}
+
       {/* Loading memories (only when a wallet is connected; guests have none). */}
       {address && !memories && (
         <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
@@ -996,7 +1113,7 @@ function Game() {
                   </div>
                 </div>
 
-                {/* Ores — gathered by mining rock veins; static price, house edge.
+                {/* Ores — gathered by mining rock veins; scarcity price, house edge.
                     Silver/gold rows appear once you've mined some (less clutter). */}
                 <div className="mt-3 border-t border-[#6a5832]/60 pt-2.5 space-y-1.5">
                   <div className="flex items-center gap-2 text-xs text-[#f4e8d0]/70">

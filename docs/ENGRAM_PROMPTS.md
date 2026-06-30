@@ -34,7 +34,7 @@
 20. [Minar = trabajo real en 0G Compute (proof-of-useful-work)](#prompt-20--minar--trabajo-real-en-0g-compute) — 🟡 construido, **gateado OFF + sin verificar en vivo** (falta fondear el ledger y probar)
 21. [Mapa que crece: parcelas de tierra propiedad del jugador + renta (en 0G)](#prompt-21--mapa-que-crece-parcelas-de-tierra-en-0g) — 🟢 implemented core: ParcelRegistry on 0G Chain + 0G bundle parcel data + rent/commission loop + data-driven parcel resources
 22. [Frontera expandible: el mapa crece casilla a casilla](#prompt-22--frontera-expandible-el-mapa-crece-casilla-a-casilla) — 🟢 implemented core: frontier adjacency + walkable claimed cells + per-parcel 0G dataRoot anchored in ParcelRegistry
-23. [Economía respaldada en 0G: precios por escasez + tesorería + IA de naturaleza](#prompt-23--economía-respaldada-en-0g) — 🟡 Fase 1 en curso (precios dinámicos de mena por escasez); tesorería/tokens reales/IA de naturaleza pendientes
+23. [Economía respaldada en 0G: precios por escasez + tesorería + IA de naturaleza](#prompt-23--economía-respaldada-en-0g) — 🟡 F1 + F2/F3 core: precios por escasez, tesorería leída del bundle 0G, y Tierra repone árboles/rocas según actividad económica
 
 > **Tareas no-código (ADMIN):** ✅ deploy a Vercel + env vars · ✅ save a 0G end-to-end ·
 > ✅ **Group Stage ENVIADO y ACEPTADO** · ✅ **Round of 32 CLASIFICADO (top 32)** · ✅ video demo
@@ -1130,17 +1130,22 @@ redespliega. Refuerza "own your world".
 `inflación = f(tokens en circulación)`. Spread de casa (`HOUSE_SPREAD`) en ambos sentidos.
 
 ### Fases
-1. **🟡 EN CURSO — precios por escasez para todos los recursos.** `quoteFromScarcity(base,
+1. **🟢 CORE DONE — precios por escasez para todos los recursos.** `quoteFromScarcity(base,
    fracciónRestante, coin)` en `world.ts` (generaliza `woodQuote`); `oreQuote(...)` precia
    stone/silver/gold por la fracción de rocas aún sin minar (la "tesorería" = supply en el
    bundle 0G). El mercado de Aldric ya usa estos precios dinámicos (sube si el mundo se agota).
-2. **Tesorería explícita en 0G.** Mover `MARKET`/`BUILD_COST` a una **tabla de economía**
-   (`{ stock, tokensInCirculation, basePrices }`) persistida en 0G (bundle/contrato), no a
-   constantes. Auditable y descubrible. *(Ángulo fuerte de torneo: "la economía vive en 0G".)*
-3. **IA de naturaleza (Prompt 8c — crear).** Endpoint server (patrón `/api/npc`) que actúa de
-   "agente Tierra/Fauna": según el valor/tokens que entran al juego, **repone stock y spawnea**
-   nuevos árboles/rocas/vetas (data-driven, sin redeploy). Mantiene viva la oferta y modera la
-   inflación. Su estado (fertilidad por zona) también puede vivir en 0G.
+2. **🟡 F2 CORE DONE — tesorería derivada del bundle 0G.** El stock restante se lee de
+   `WorldState.choppedTrees/minedRocks` y los precios mid se derivan de `woodQuote`/`oreQuote`;
+   `world.ecosystem.activity` persiste `tokensInCirculation`, `stockPressure`, `activityScore`
+   y cadencias de reposición. El HUD "World Treasury" muestra stock + precio + zona dominante
+   desde ese estado. Pendiente full: mover toda la tabla `MARKET`/`BUILD_COST` a una tabla de
+   economía versionada si se decide que valga el riesgo antes del torneo.
+3. **🟢 F3 CORE DONE — IA de naturaleza repone oferta.** Prompt 8c ya creó los endpoints
+   Tierra/Fauna; ahora Tierra gobierna árboles y rocas. La fórmula persistida es:
+   `activityScore = clamp01(0.45*coin/200 + 0.35*recentExtraction/6 + 0.20*depletedStock)`;
+   `cadence = base*(1.25 - 0.45*depletedStock)*(1 - 0.45*activityScore)`. Más coin/actividad
+   acelera reposición; stock alto la frena. Las rocas reaparecen con `nextRockAt` y fertilidad
+   por zona (`regrowthShare`/`fertility`), sin redeploy.
 4. **Minar = pagar por el metal.** Invertir el gathering: minar **descuenta del stock del banco
    y cuesta coin/tokens** → el metal in-game queda **respaldado**. Cambio de gameplay; va tras
    2 y 3.
@@ -1151,8 +1156,10 @@ redespliega. Refuerza "own your world".
 ### Criterios de aceptación (por fase)
 1. (F1) Los precios de mena **suben** cuando el mundo se agota y **bajan** cuando es abundante;
    derivados de estado 0G, no hardcodeados. `npx tsc --noEmit` limpio.
-2. (F2) `MARKET`/`BUILD_COST` ya no son constantes: la tabla de economía se lee de 0G.
-3. (F3) Al entrar valor/tokens, la IA repone oferta sin redeploy; auditable.
+2. (F2 core) La tesorería muestra stock restante, precio mid y zona dominante leídos del
+   `WorldState`/`ecosystem` persistido en 0G.
+3. (F3 core) Al entrar valor/tokens o aumentar la extracción reciente, la IA repone oferta
+   más rápido; con stock alto, frena. Árboles y rocas reaparecen sin redeploy.
 4. (F4) Minar descuenta stock del banco y cuesta tokens; el balance no se mintea de la nada.
 
 ---

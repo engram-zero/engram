@@ -43,6 +43,7 @@ export interface EarthAgentState {
   updatedAt: number;
   cadenceMs: number;
   nextGrowthAt: number;
+  nextRockAt?: number;
   dominantZone: NatureZoneId;
   zones: EarthZoneDirective[];
   summary: string;
@@ -65,6 +66,20 @@ export interface EcosystemState {
   sourceFingerprint?: string;
   earth?: EarthAgentState;
   fauna?: FaunaAgentState;
+  activity?: EcosystemActivityState;
+}
+
+export interface EcosystemActivityState {
+  updatedAt: number;
+  formulaVersion: string;
+  tokensInCirculation: number;
+  depletedTrees: number;
+  depletedRocks: number;
+  recentExtraction: number;
+  stockPressure: number;
+  activityScore: number;
+  treeCadenceMs: number;
+  rockCadenceMs: number;
 }
 
 export type BuildingType = 'wall' | 'house' | 'block';

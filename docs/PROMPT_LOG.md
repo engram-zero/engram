@@ -1384,3 +1384,22 @@ reembolsa ½). (4) Scene3D: click en bloque con `clusterId` selecciona el **cúm
 la tarjeta muestra la etiqueta y repair/demolish actúan por cúmulo; `SelectionRing` en todos los
 bloques del cúmulo. `npx tsc --noEmit` limpio.
 **Commit:** _(este commit)_
+
+### 29 jun 2026 · Prompt 23 F2/F3 — loop economía ↔ ecosistema
+**Pedido (humano):** cerrar el loop "el mundo se agota → la IA repone → los precios responden",
+extendiendo Prompt 8c/Fase 1 a rocas, tesorería en 0G y cadencia ligada a actividad económica.
+**Prompt sintetizado:** Extender, sin rehacer agentes ni pricing Fase 1: (1) añadir
+`pickRockToRespawn(minedRocks, earth)` en `ecosystem.ts`, ponderado por zona con
+`zoneOfPoint(ROCKS[i].x, ROCKS[i].z)` + `EarthAgentState.zones[].fertility/regrowthShare`; (2)
+añadir `EarthAgentState.nextRockAt` y `world.ecosystem.activity` persistido en `WorldState`, con
+fórmula auditable `activityScore = clamp01(0.45*coin/200 + 0.35*recentExtraction/6 +
+0.20*depletedStock)` y `cadence = base*(1.25 - 0.45*depletedStock)*(1 - 0.45*activityScore)`, para
+que más coin/extracción acelere reposición y stock alto la frene; (3) en `client-page.tsx`, añadir
+efecto de respawn de rocas que quita índices de `world.minedRocks`, actualiza `nextRockAt` y deja
+que `oreQuote` baje precios al volver la oferta; (4) añadir HUD discreto "World Treasury" con stock
+restante, precio mid y zona dominante de Tierra; (5) actualizar docs de Prompt 23 F2/F3.
+**Qué se hizo:** `ecosystem.ts` comparte el score de Tierra para árboles/rocas y calcula
+`ecosystem.activity`; `WorldState` normaliza y clona `nextRockAt`/`activity`; el cliente persiste
+cadencias económicas, repone rocas, conserva el regrowth de árboles y muestra la tesorería derivada
+del bundle 0G. `npx tsc --noEmit` limpio.
+**Commit:** _(este commit)_
