@@ -130,6 +130,9 @@ export const PARCEL_MIN_RADIUS = 26;
 export const PARCEL_BUILD_RENT_COIN = 2;
 export const PARCEL_GATHER_RENT_COIN = 1;
 export const PARCEL_COMMISSION_BPS = 1200;
+/** Walkable base before claims: square half-extent from Scene3D/map ground (GROUND_RADIUS - 3). */
+export const BASE_HALF_EXTENT = 137;
+/** Legacy circular radius kept for older callers; parcel frontier now uses BASE_HALF_EXTENT. */
 export const PARCEL_BASE_WORLD_RADIUS = 132;
 export const PARCEL_HARD_WORLD_RADIUS = 260;
 
@@ -492,20 +495,19 @@ function parseParcelId(id: string): { gx: number; gz: number } | null {
 export function parcelCellIntersectsBase(gx: number, gz: number): boolean {
   const { x, z } = parcelGridCenter(gx, gz);
   const half = PARCEL_SIZE / 2;
-  const nearestX = Math.max(x - half, Math.min(0, x + half));
-  const nearestZ = Math.max(z - half, Math.min(0, z + half));
-  return Math.hypot(nearestX, nearestZ) <= PARCEL_BASE_WORLD_RADIUS;
+  return x + half >= -BASE_HALF_EXTENT &&
+    x - half <= BASE_HALF_EXTENT &&
+    z + half >= -BASE_HALF_EXTENT &&
+    z - half <= BASE_HALF_EXTENT;
 }
 
 function parcelCellFullyInsideBase(gx: number, gz: number): boolean {
   const { x, z } = parcelGridCenter(gx, gz);
   const half = PARCEL_SIZE / 2;
-  return [
-    [x - half, z - half],
-    [x + half, z - half],
-    [x - half, z + half],
-    [x + half, z + half],
-  ].every(([cx, cz]) => Math.hypot(cx, cz) <= PARCEL_BASE_WORLD_RADIUS);
+  return x - half >= -BASE_HALF_EXTENT &&
+    x + half <= BASE_HALF_EXTENT &&
+    z - half >= -BASE_HALF_EXTENT &&
+    z + half <= BASE_HALF_EXTENT;
 }
 
 function parcelCellsOverlap(a: { gx: number; gz: number }, b: { gx: number; gz: number }): boolean {
@@ -569,11 +571,11 @@ export function frontierClaimableCells(claimedIds: Iterable<string> = []): { gx:
 }
 
 export function worldExtentForClaims(claims: Pick<ParcelClaim, 'x' | 'z' | 'size'>[] = []): { minX: number; maxX: number; minZ: number; maxZ: number; radius: number } {
-  let minX = -PARCEL_BASE_WORLD_RADIUS;
-  let maxX = PARCEL_BASE_WORLD_RADIUS;
-  let minZ = -PARCEL_BASE_WORLD_RADIUS;
-  let maxZ = PARCEL_BASE_WORLD_RADIUS;
-  let radius = PARCEL_BASE_WORLD_RADIUS;
+  let minX = -BASE_HALF_EXTENT;
+  let maxX = BASE_HALF_EXTENT;
+  let minZ = -BASE_HALF_EXTENT;
+  let maxZ = BASE_HALF_EXTENT;
+  let radius = Math.hypot(BASE_HALF_EXTENT, BASE_HALF_EXTENT);
   for (const claim of claims) {
     const half = claim.size / 2;
     minX = Math.min(minX, claim.x - half);
@@ -586,7 +588,7 @@ export function worldExtentForClaims(claims: Pick<ParcelClaim, 'x' | 'z' | 'size
 }
 
 export function cellLabel(gx: number, gz: number): string {
-  const offset = Math.ceil(PARCEL_BASE_WORLD_RADIUS / PARCEL_SIZE);
+  const offset = Math.ceil(BASE_HALF_EXTENT / PARCEL_SIZE);
   let col = gx + offset;
   let label = '';
   do {

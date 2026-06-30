@@ -1886,6 +1886,21 @@ ahora persiste `resources`; `world.ts`, `parcel-save` y `public-world` normaliza
 `harvestParcelResource(node.id, node.type, node.amount)` soporta madera, piedra, plata y oro con
 caps. Esquema documentado en `docs/PARCEL_LOOT_SCHEMA.md`. `tsc` limpio. **Commit:** _(este commit)_
 
+### 2026-06-30 · Frontera de parcelas sobre base cuadrada
+**Pedido (humano):** la base caminable ya no es el círculo `PARCEL_BASE_WORLD_RADIUS`, sino un
+cuadrado de medio-lado 137 (`GROUND_RADIUS - 3`) sin importar `map.ts`; una celda dentro del mapa
+original no debe ser reclamable, solo la frontera que extiende el cuadrado. No tocar `Scene3D.tsx`
+ni `client-page.tsx`.
+**Prompt sintetizado:** Introduce `BASE_HALF_EXTENT = 137` en `world.ts` y cambia
+`parcelCellIntersectsBase` / `parcelCellFullyInsideBase` para usar intersección/contención de
+rectángulo-celda contra cuadrado base. Mantén `parcelIsClaimable`: no claimed, no fully-inside,
+dentro del hard limit y solapa tierra caminable. Actualiza helpers de extensión/labels para que la
+geometría de datos use la misma base cuadrada.
+**Qué se hizo:** `parcelCellIntersectsBase` ahora detecta solape con `[-137,137]^2`; `fullyInside`
+usa contención total en ese cuadrado; `worldExtentForClaims` y `cellLabel` parten de
+`BASE_HALF_EXTENT`. Sanity check: `7,7` no reclamable; `8,0`/`8,8` sí cruzan frontera; `9,0` no toca
+base y no es primer claim. `tsc` limpio. **Commit:** _(este commit)_
+
 ### 2026-06-30 · GUI de Aldric: vender madera dentro del panel (no separado)
 **Pedido (humano):** la venta de madera está separada del resto (traslape de forma vieja/nueva).
 **Qué se hizo:** quité el botón "Sell wood" de la fila de acciones (junto a Say/Leave) y puse un
