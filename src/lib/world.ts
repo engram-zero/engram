@@ -138,6 +138,16 @@ export const TREE_STAGE_YIELD: Record<TreeGrowthStage, number> = { sapling: 8, y
 export const TREE_STAGE_SCALE: Record<TreeGrowthStage, number> = { sapling: 0.34, young: 0.68, mature: 1 };
 export const TREE_GROWTH_FORMULA =
   'nextStageAt = now + clamp(earth.treeCadenceMs / 2, 45s, 12m); sapling -> young -> mature; mature removes treeGrowth and choppedTrees';
+
+// An AI-built structure the player described as reinforced gets much tougher walls.
+const REINFORCED_WORDS = ['reinforced', 'resistant', 'fortified', 'sturdy', 'armored', 'armoured', 'hardened', 'reforzad', 'resistent', 'fortificad', 'blindad', 'robust'];
+/** Multiplier applied to a reinforced structure's HP (Prompt 11). */
+export const REINFORCED_HP_MULT = 2.5;
+export function isReinforcedLabel(label?: string | null): boolean {
+  if (!label) return false;
+  const l = label.toLowerCase();
+  return REINFORCED_WORDS.some((w) => l.includes(w));
+}
 export const STORAGE_RESOURCES: StoredResourceType[] = ['wood', 'stone', 'silver', 'gold'];
 
 export interface WoodQuote {
@@ -1159,6 +1169,15 @@ export function harvestTree(index: number): { depleted: boolean; gained: boolean
   return { depleted, gained: true };
 }
 
+/** 0→1 progress of the current chop session on a standing tree (transient, resets
+ * on reload / when the tree is felled). The renderer uses it to visibly shrink a
+ * tree as its wood is extracted. */
+export function treeHarvestFraction(index: number): number {
+  if (!treeIsVisible(state, index)) return 0;
+  const total = TREE_STAGE_YIELD[treeStageFor(state, index)] || 1;
+  return Math.max(0, Math.min(1, (harvested[index] ?? 0) / total));
+}
+
 export function treeGrowthDueIndexes(value: WorldState = state, now = Date.now()): number[] {
   return Object.entries(value.treeGrowth)
     .filter(([, growth]) => growth.nextStageAt > 0 && growth.nextStageAt <= now)
@@ -1540,6 +1559,9 @@ export function placeBuilding(b: Building, cost: number = BUILD_COST[b.type]): b
   let maxHp = 50;
   if (b.type === 'house') maxHp = 150;
   if (b.type === 'wall') maxHp = 80;
+  // Reinforced AI builds (the player asked for a "resistant"/"reinforced" structure)
+  // get a much tougher shell so they survive sieges/raids longer.
+  if (isReinforcedLabel(b.clusterLabel)) maxHp = Math.round(maxHp * REINFORCED_HP_MULT);
 
   const nextBuilding: Building = { ...b, id: b.id ?? createId('build'), woodCost: freeBuild ? 0 : cost, hp: maxHp, maxHp };
   commit({

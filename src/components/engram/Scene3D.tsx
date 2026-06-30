@@ -38,6 +38,8 @@ import {
   isChopped,
   treeIsVisible,
   treeStageFor,
+  treeHarvestFraction,
+  isReinforcedLabel,
   TREE_STAGE_SCALE,
   TREE_STAGE_YIELD,
   woodIsFull,
@@ -1505,7 +1507,9 @@ function TreePart({
         dummy.position.set(t.x, -1000, t.z);
         dummy.scale.setScalar(0);
       } else {
-        const scale = t.scale * stageScale;
+        // Shrink the tree as its wood is chopped out this session (up to ~45%),
+        // so a half-harvested tree visibly reads as smaller before it's felled.
+        const scale = t.scale * stageScale * (1 - treeHarvestFraction(t.idx) * 0.45);
         dummy.position.set(t.x, getHeightAt(t.x, t.z) + localY * scale, t.z);
         dummy.scale.setScalar(scale);
       }
@@ -1530,7 +1534,7 @@ function TreePart({
       const slot = items.findIndex((it) => it.idx === idx);
       if (slot < 0 || !treeIsVisible(world, idx)) continue;
       const tree = items[slot];
-      const scale = tree.scale * TREE_STAGE_SCALE[treeStageFor(world, idx)];
+      const scale = tree.scale * TREE_STAGE_SCALE[treeStageFor(world, idx)] * (1 - treeHarvestFraction(idx) * 0.45);
       dummy.position.set(tree.x, getHeightAt(tree.x, tree.z) + localY * scale, tree.z);
       dummy.scale.setScalar(scale);
       dummy.rotation.set(
@@ -4884,6 +4888,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
   const [aiBusy, setAiBusy] = useState(false);
   const [aiMsg, setAiMsg] = useState<string | null>(null);
   const [aiPreview, setAiPreview] = useState<AIPiece[] | null>(null);
+  const [aiReinforced, setAiReinforced] = useState(false); // prompt asked for a tougher build
   const [aiOrigin, setAiOrigin] = useState<{ x: number; z: number } | null>(null);
   const [aiCost, setAiCost] = useState(0); // USD of the last generation
   const [aiBudget, setAiBudget] = useState(''); // session $ cap (persisted)
@@ -4942,6 +4947,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
       const pieces = data.buildings ?? [];
       setAiOrigin({ x: posRef.current.x, z: posRef.current.z });
       setAiPreview(pieces);
+      setAiReinforced(isReinforcedLabel(aiPrompt)); // e.g. "a resistant wall" → tougher HP
       setAiMsg(`Preview ready — ${pieces.length} piece${pieces.length === 1 ? '' : 's'}.`);
     } catch {
       setAiMsg('Build request failed.');
@@ -4963,6 +4969,9 @@ export default function Scene3D({ memories = null, active = null, talking = fals
       // one repairable/demolishable cluster.
       const clusterKey = b.type === 'block' ? `${buildBase}:${b.part || 'structure'}` : undefined;
       const candidate = aiPieceToBuilding(b, x, z, clusterKey);
+      // Tag a reinforced build so placeBuilding gives it the tougher HP shell and
+      // the selection card reads "reinforced …".
+      if (aiReinforced && candidate.clusterLabel) candidate.clusterLabel = `reinforced ${candidate.clusterLabel}`;
       if (canPlaceBuilding(b.type, x, z, candidate, placedNow)) {
         const cost = buildCostAt(b.type, x, z);
         if (placeBuilding(candidate, cost)) {

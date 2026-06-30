@@ -1607,3 +1607,15 @@ todos los árboles proyecten sombra. (#8) subir HOUSE_WIDTH 2.4→3.0, HOUSE_DEP
 0.82→1.1 (colisión y modelo derivan de estas constantes; actualizar los ghosts). (#6) en el scan
 de enemigos (Maren + demonios) exigir el cono frontal `FACING_MIN` antes de fijar objetivo.
 **Qué se hizo:** lo anterior; `tsc` limpio; sin tocar archivos de Codex. **Commit:** _(este commit)_
+
+### 2026-06-29 · #5 árbol encoge al talar + #11 estructuras "resistentes" por IA
+**Pedido (humano):** #5 que un árbol disminuya de tamaño según la madera que le queda al talarlo;
+#11 si el usuario construye con IA pidiendo algo "resistente", multiplicar sus HP para que aguante.
+**Prompt sintetizado:** En `world.ts` exponer `treeHarvestFraction(index)` (0→1, progreso de tala
+transitorio) y, en el render de árboles de `Scene3D.tsx`, escalar el árbol por `(1 - frac*0.45)`
+en la capa base y en la animación de golpe. Para #11: helper `isReinforcedLabel` + `REINFORCED_HP_MULT`
+(2.5) en world.ts; `placeBuilding` multiplica `maxHp` cuando el `clusterLabel` luce reforzado.
+En `Scene3D.tsx`, al generar el build IA detectar la intención en el prompt (`aiReinforced`) y
+prefijar el clusterLabel con "reinforced …" al colocar, para que herede el HP y la tarjeta lo muestre.
+**Qué se hizo:** lo anterior; `tsc` limpio. Coordinado: Codex ya cerró su hotfix de world.ts antes
+de tocarlo. **Commit:** _(este commit)_
