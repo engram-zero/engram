@@ -1066,15 +1066,6 @@ function Game() {
               <button onClick={() => say(active, typed)} disabled={scene.loading} className="bg-black/40 border border-[#5a4a28] hover:border-[#d6b84a] rounded-md px-3 py-2 text-sm disabled:opacity-40">
                 Say
               </button>
-              {active === 'aldric' && (
-                <button
-                  onClick={sellWoodToAldric}
-                  disabled={scene.loading || world.inventory.wood <= 0}
-                  className="bg-black/40 border border-[#8a6a32] hover:border-[#d6b84a] rounded-md px-3 py-2 text-sm disabled:opacity-40"
-                >
-                  Sell wood
-                </button>
-              )}
               {active && dirty[active] ? (
                 <button onClick={leave} title="Save this conversation to 0G" className="bg-black/40 border border-[#5a4a28] hover:border-[#d6b84a] rounded-md px-3 py-2 text-sm text-[#d89]">
                   Leave &amp; save
@@ -1113,8 +1104,15 @@ function Game() {
                     className="w-24 bg-black/40 border border-[#5a4a28] focus:border-[#d6b84a] outline-none rounded-md px-3 py-2 text-sm"
                   />
                   <span className="text-sm text-[#f4e8d0]/75">
-                    Quick sale: <strong>{clampInt(merchantQty, 1, Math.max(1, world.inventory.wood)) * quote.sell}</strong> coin
+                    = <strong>{clampInt(merchantQty, 1, Math.max(1, world.inventory.wood)) * quote.sell}</strong> coin
                   </span>
+                  <button
+                    onClick={sellWoodToAldric}
+                    disabled={scene.loading || world.inventory.wood <= 0}
+                    className="bg-black/40 border border-[#8a6a32] hover:border-[#d6b84a] rounded-md px-3 py-2 text-sm disabled:opacity-40"
+                  >
+                    Sell
+                  </button>
                 </div>
 
                 {/* v2 — haggle: name your own price and let Aldric accept, counter, or refuse. */}

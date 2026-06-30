@@ -1885,3 +1885,10 @@ Documenta el contrato para que Claude lo renderice/coseche después.
 ahora persiste `resources`; `world.ts`, `parcel-save` y `public-world` normalizan/generan nodos; y
 `harvestParcelResource(node.id, node.type, node.amount)` soporta madera, piedra, plata y oro con
 caps. Esquema documentado en `docs/PARCEL_LOOT_SCHEMA.md`. `tsc` limpio. **Commit:** _(este commit)_
+
+### 2026-06-30 · GUI de Aldric: vender madera dentro del panel (no separado)
+**Pedido (humano):** la venta de madera está separada del resto (traslape de forma vieja/nueva).
+**Qué se hizo:** quité el botón "Sell wood" de la fila de acciones (junto a Say/Leave) y puse un
+botón "Sell" JUNTO al input "Wood to sell" dentro del panel de comercio, donde ya viven comprar/
+sapling/repair/axe/Market. Toda la venta/compra en un solo lugar (pilar 6: frontend simple).
+`tsc` limpio; solo client-page.tsx. **Commit:** _(este commit)_
