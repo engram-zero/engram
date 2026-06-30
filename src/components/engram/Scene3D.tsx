@@ -104,6 +104,7 @@ import {
 import { useEngramAudio } from '@/context/AudioContext';
 import type { AudioCueId } from '@/lib/audio/manifest';
 import { getPublicWorldSnapshot, usePublicWorld } from '@/lib/public-world';
+import { biomeAt, BIOME_GROUND } from '@/lib/biome';
 import { claimParcelOnchain, getParcelRegistryAddress } from '@/lib/registry/parcels';
 import { saveParcelData } from '@/lib/parcel-data';
 
@@ -2920,6 +2921,14 @@ function PublicBuildingMesh({ b, relation }: { b: Building; relation: WalletRela
   );
 }
 
+// Wraps children that should only show in the aerial management view (parcel
+// tint/border, etc.) — hidden in first person to keep the world immersive.
+function AerialOnlyGroup({ children }: React.PropsWithChildren) {
+  const ref = useRef<THREE.Group>(null);
+  useFrame(() => { if (ref.current) ref.current.visible = viewSignal.aerial; });
+  return <group ref={ref}>{children}</group>;
+}
+
 function ParcelOverlays({
   claimMode = false,
   networkType,
@@ -2987,15 +2996,19 @@ function ParcelOverlays({
         const y = getHeightAt(claim.x, claim.z) + 0.045;
         return (
           <group key={`parcel-${claim.owner}-${claim.id}`} position={[claim.x, y, claim.z]}>
-            {Math.hypot(claim.x, claim.z) > PARCEL_BASE_WORLD_RADIUS && <ParcelGroundTile claim={claim} color={color} />}
-            <mesh rotation={[-Math.PI / 2, 0, 0]}>
-              <planeGeometry args={[claim.size, claim.size]} />
-              <meshBasicMaterial color={color} transparent opacity={own ? 0.13 : 0.09} depthWrite={false} />
-            </mesh>
-            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.012, 0]}>
-              <ringGeometry args={[claim.size * 0.5 - 0.08, claim.size * 0.5, 4]} />
-              <meshBasicMaterial color={color} transparent opacity={own ? 0.72 : 0.45} depthWrite={false} />
-            </mesh>
+            {Math.hypot(claim.x, claim.z) > GROUND_RADIUS && <ParcelGroundTile claim={claim} color={color} />}
+            {/* Ownership tint + border are an aerial management overlay — hidden in
+                first person (immersion) like the building rings. */}
+            <AerialOnlyGroup>
+              <mesh rotation={[-Math.PI / 2, 0, 0]}>
+                <planeGeometry args={[claim.size, claim.size]} />
+                <meshBasicMaterial color={color} transparent opacity={own ? 0.13 : 0.09} depthWrite={false} />
+              </mesh>
+              <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.012, 0]}>
+                <ringGeometry args={[claim.size * 0.5 - 0.08, claim.size * 0.5, 4]} />
+                <meshBasicMaterial color={color} transparent opacity={own ? 0.72 : 0.45} depthWrite={false} />
+              </mesh>
+            </AerialOnlyGroup>
             {/* No floating parcel name in-world (breaks immersion); the label is
                 still shown on the claim-mode ghost cells when you're choosing one. */}
             <ParcelResourceCluster claim={claim} onDraftChange={onDraftChange} onToolFeedback={onToolFeedback} />
@@ -3020,9 +3033,15 @@ function ParcelGroundTile({ claim, color }: { claim: { x: number; z: number; siz
     g.computeVertexNormals();
     return g;
   }, [claim.size, claim.x, claim.z]);
+  // Far parcels sit beyond the base terrain, so this IS their ground — texture it
+  // with the parcel's biome (matching the world's biome regions) instead of always
+  // grass. The ownership colour now lives only in the aerial overlay, so the ground
+  // itself stays a natural, untinted surface.
+  void color;
+  const slot = BIOME_GROUND[biomeAt(claim.x, claim.z)] as Parameters<typeof getTextureVariant>[0];
   return (
     <mesh geometry={geom} receiveShadow>
-      <meshStandardMaterial color={color} map={getTextureVariant('terrain_grass', Math.round(claim.x + claim.z), { repeat: 4 })} roughness={1} />
+      <meshStandardMaterial color="#ffffff" map={getTextureVariant(slot, Math.round(claim.x + claim.z), { repeat: 4 })} roughness={1} />
     </mesh>
   );
 }
@@ -3508,10 +3527,11 @@ function BuildController({
   void world;
   const valid = isBuild && !!ghost && canPlaceBuilding(mode, ghost[0], ghost[1]);
 
-  // Walls (1.8 wide) snap to a 1.8 grid so they tile edge-to-edge into continuous
-  // fences instead of leaving gaps; houses/tools stay on the 1-grid. Wall rotation
-  // snaps to 45° steps so you can run fences straight AND on diagonals (R rotates).
-  const WALL_GRID = 1.8;
+  // Walls (1.8 wide) snap to a HALF-width grid (0.9) so they still tile edge-to-edge
+  // at 1.8 spacing for straight fences, but can ALSO sit at the half-step a corner
+  // needs — letting an E-W wall and an N-S wall meet, and 45° walls touch on the
+  // diagonal. Houses/tools stay on the 1-grid; rotation snaps to 45° steps (R).
+  const WALL_GRID = 0.9;
   const snapXZ = (px: number, pz: number): [number, number] =>
     mode === 'wall'
       ? [Math.round(px / WALL_GRID) * WALL_GRID, Math.round(pz / WALL_GRID) * WALL_GRID]

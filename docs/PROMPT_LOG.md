@@ -1757,3 +1757,13 @@ texturas (pasto base + arena/nieve/seco) por POSICIÓN del mundo, con los mismos
 `src/lib/biome.ts`; los biomas raros entran con `smoothstep` → regiones amplias y bordes suaves, sin
 parches. El centro (aldea) queda pasto puro. Conserva sombras (receiveShadow) e iluminación PBR.
 `tsc` limpio; solo Scene3D.tsx. **Commit:** _(este commit)_
+
+### 2026-06-30 · Restyle de parcela (sin pegote) + unión de muros 45°/perpendicular
+**Pedido (humano):** la parcela parece un pegote; el suelo debe degradar y no parecer parche; y los
+muros no se unen en 45° ni perpendiculares (N-S con E-O).
+**Qué se hizo:** (parcela) el tinte/borde de propiedad ahora es overlay SOLO-aérea (`AerialOnlyGroup`,
+oculto en 1ra persona, como los anillos de edificio); el `ParcelGroundTile` solo se dibuja cuando la
+parcela está fuera del terreno base (radio > GROUND_RADIUS, antes 132 → causaba doble suelo/parche),
+y usa la textura del BIOMA (biomeAt) sin tinte. (muros) `WALL_GRID 1.8 → 0.9` (media celda): permite
+posicionar esquinas (E-O con N-S) y que los 45° se toquen en la diagonal, conservando el tile recto a
+1.8. `tsc` limpio; solo Scene3D.tsx. **Commit:** _(este commit)_
