@@ -559,15 +559,17 @@ function parcelResourceNodes(claim: { id: string; x: number; z: number; terrain:
   }).filter((node) => !isParcelResourceDepleted(node.id));
 }
 
+// The base world is the SQUARE of textured terrain, not an inscribed circle — so
+// every bit of ground you can see is reachable (no invisible round wall cutting off
+// the textured corners), and parcels at the edge connect to it.
+const BASE_HALF = GROUND_RADIUS - 3;
 function isFrontierWalkable(x: number, z: number): boolean {
-  if (Math.hypot(x, z) <= WORLD_RADIUS) return true;
+  if (Math.abs(x) <= BASE_HALF && Math.abs(z) <= BASE_HALF) return true;
   return allClaimedParcels().some((claim) => pointInsideParcel(x, z, claim));
 }
 
 function clampToBaseWorld(x: number, z: number): [number, number] {
-  const d = Math.hypot(x, z);
-  if (d <= WORLD_RADIUS || d <= 1e-4) return [x, z];
-  return [(x / d) * WORLD_RADIUS, (z / d) * WORLD_RADIUS];
+  return [Math.max(-BASE_HALF, Math.min(BASE_HALF, x)), Math.max(-BASE_HALF, Math.min(BASE_HALF, z))];
 }
 
 /** Nearest walkable point: the base world circle OR any claimed parcel — whichever
@@ -2777,8 +2779,25 @@ function River() {
     g.computeVertexNormals();
     return g;
   }, []);
+  // Ripples that travel downstream (−t along x) so the water reads as flowing, not
+  // a frozen sheet. Cheap: just nudges each vertex's Y each frame off its base.
+  const ref = useRef<THREE.Mesh>(null);
+  const baseY = useMemo(() => Float32Array.from((geom.attributes.position as THREE.BufferAttribute).array as Float32Array), [geom]);
+  useFrame((state) => {
+    const g = ref.current?.geometry as THREE.BufferGeometry | undefined;
+    if (!g) return;
+    const pos = g.attributes.position as THREE.BufferAttribute;
+    const t = state.clock.elapsedTime;
+    for (let i = 0; i < pos.count; i++) {
+      const x = baseY[i * 3];
+      const z = baseY[i * 3 + 2];
+      const ripple = Math.sin(x * 0.85 - t * 1.7) * 0.05 + Math.sin(z * 1.4 + t * 1.05) * 0.022;
+      pos.setY(i, baseY[i * 3 + 1] + ripple);
+    }
+    pos.needsUpdate = true;
+  });
   return (
-    <mesh geometry={geom} receiveShadow renderOrder={1}>
+    <mesh ref={ref} geometry={geom} receiveShadow renderOrder={1}>
       <meshStandardMaterial
         vertexColors
         transparent
@@ -4746,9 +4765,11 @@ export default function Scene3D({ memories = null, active = null, talking = fals
       const night = isNightRef.current;
       const px = dynamicPlayerState.x;
       const pz = dynamicPlayerState.z;
+      // Birdsong belongs to green land — don't layer it over the snow/desert beds.
+      const inBareBiome = active && (() => { const b = biomeAt(px, pz); return b === 'snow' || b === 'sand'; })();
       for (const cue of SPATIAL_AUDIO_CUES) {
         let vol = 0;
-        if (active) {
+        if (active && !(cue === 'day_ambience' && inBareBiome)) {
           for (const e of AUDIO_EMITTERS) {
             if (e.cue !== cue) continue;
             if (e.nightOnly && !night) continue;

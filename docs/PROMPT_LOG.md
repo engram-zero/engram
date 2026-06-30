@@ -1814,3 +1814,14 @@ frena al jugador contra voxels altos (muros de torre) pero deja subir escalones.
 grounding y la colisión del Player FP, con `groundYRef` como referencia de step-up. (Limitación
 conocida: saltar sobre plataformas altas aún no aterriza encima; subir por escaleras sí — pendiente
 de playtest.) `tsc` limpio; solo Scene3D.tsx + docs. **Commit:** _(este commit)_
+
+### 2026-06-30 · Base caminable cuadrada (parcela/muro circular) + aves vs nieve + agua animada
+**Pedido (humano):** sigo sin entrar a mi parcela y el muro invisible es circular (hay textura
+inaccesible en un mapa cuadrado); las aves se oyen junto a la nevada (debe ser una u otra); animar
+el agua del río para que se note flujo.
+**Qué se hizo:** (#2) `isFrontierWalkable`/`clampToBaseWorld` ahora usan un CUADRADO base
+(`GROUND_RADIUS-3`) en vez del círculo `WORLD_RADIUS` → todo el terreno texturizado es caminable y
+las parcelas del borde conectan; quita el "muro redondo en mapa cuadrado". (#1c) en el tick de
+ambiente, `day_ambience` (aves) se silencia cuando el jugador está en bioma snow/sand → no se
+encima con snowfall/desierto. (#1b) `River` anima sus vértices con ondas que viajan río abajo
+(useFrame) → sensación de flujo. `tsc` limpio; solo Scene3D.tsx. **Commit:** _(este commit)_
