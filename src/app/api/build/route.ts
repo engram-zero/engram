@@ -33,7 +33,16 @@ type AIBuilding = {
   dy?: number;
   color?: string;
   scale?: number;
+  /** Named sub-structure this block belongs to (e.g. "pole", "crown") so blocks
+   * sharing a part are repaired/demolished together (hybrid HP). */
+  part?: string;
 };
+
+function partLabel(c: unknown): string | undefined {
+  if (typeof c !== 'string') return undefined;
+  const s = c.trim().toLowerCase().replace(/[^a-z0-9 _-]/g, '').slice(0, 24);
+  return s || undefined;
+}
 
 const serverKey = process.env.ANTHROPIC_API_KEY;
 const serverAnthropic = serverKey ? new Anthropic({ apiKey: serverKey }) : null;
@@ -80,6 +89,7 @@ function normalize(raw: unknown): AIBuilding[] {
         piece.dy = Math.round(Math.max(0, Math.min(12, Number(b.dy) || 0)) / BLOCK_UNIT) * BLOCK_UNIT;
         piece.scale = Math.max(BLOCK_SCALE_MIN, Math.min(BLOCK_SCALE_MAX, Math.round((Number(b.scale) || BLOCK_UNIT) / BLOCK_UNIT) * BLOCK_UNIT));
         piece.color = hexColor(b.color);
+        piece.part = partLabel(b.part);
       }
       return piece;
     });
@@ -87,7 +97,7 @@ function normalize(raw: unknown): AIBuilding[] {
 
 const SYSTEM = `You design structures for a low-poly village game. The player builds exactly
 what you return. Output STRICT JSON only:
-{"buildings":[{"type":"block"|"wall"|"house","dx":<n>,"dz":<n>,"rot":<radians>,"dy":<n>,"color":"#rrggbb","scale":<n>}]}
+{"buildings":[{"type":"block"|"wall"|"house","dx":<n>,"dz":<n>,"rot":<radians>,"dy":<n>,"color":"#rrggbb","scale":<n>,"part":"<name>"}]}
 Coordinates: dx,dz are offsets in world units from the player at 0,0 (range about -16..16).
 Pieces:
 - "block": a small COLOURED CUBE — the main tool. Stack and colour MANY blocks (like voxels/LEGO)
@@ -99,6 +109,10 @@ Pieces:
 - "house": a 2.4x2 cottage.
 Guidance: prefer BLOCKS for anything that isn't literally a fence or a plain house. Example — a tree:
 a vertical column of brown blocks (dy 0..2) topped with a cluster of green blocks (dy 2..4) around it.
+"part": label EVERY block with the named sub-structure it belongs to, in lowercase (e.g. "pole",
+"crown", "trunk", "leaves", "base", "roof"). Blocks sharing a "part" are treated as ONE repairable/
+demolishable piece in-game, so group by what the player would intuitively fix or tear down as a unit
+(a torch = "pole" + "flame"; a tree = "trunk" + "leaves").
 Be coherent and reasonably compact. Max ${MAX_PIECES} pieces. JSON only, no prose.`;
 
 // Works with no API key so the button does something on a fresh clone: a little

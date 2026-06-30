@@ -1371,3 +1371,16 @@ neural distinta por NPC), `isSpeechAvailable()`. En `client-page`: botón 🎤 (
 auto-envía) + toggle 🔊 (voz del NPC al responder), solo si hay vars. `.env.example` + `tmp/` al
 gitignore (repo ajeno de referencia). `npx tsc --noEmit` limpio (solo errores ajenos en tmp/).
 **Commit:** _(este commit)_
+
+### 29 jun 2026 · AI clusters (HP híbrido): la IA agrupa bloques en sub-estructuras
+**Pedido (humano):** que la IA, al construir, elija qué es cada cúmulo de bloques (palo vs corona de
+antorcha, muro de casa); y que HP/selección/repair/demolish operen por cúmulo (híbrido).
+**Prompt sintetizado:** (1) `/api/build`: cada bloque lleva `"part"` (etiqueta lowercase del
+sub-elemento); el prompt instruye etiquetar todo bloque; `partLabel()` sanea. (2) `Building` gana
+`clusterId`/`clusterLabel` (types); al colocar una build AI se asigna `clusterId = ai-<ts>:<part>`
+(`aiPieceToBuilding`/`placeAIPreview`), preservado en `normalizeBlockBuilding`. (3) world.ts:
+`repairCluster(id)` (cura todos los bloques por 1 costo) y `removeCluster(id)` (demuele todo,
+reembolsa ½). (4) Scene3D: click en bloque con `clusterId` selecciona el **cúmulo** (HP agregado),
+la tarjeta muestra la etiqueta y repair/demolish actúan por cúmulo; `SelectionRing` en todos los
+bloques del cúmulo. `npx tsc --noEmit` limpio.
+**Commit:** _(este commit)_

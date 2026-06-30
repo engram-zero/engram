@@ -90,6 +90,12 @@ export interface Building {
   hp?: number;
   /** Maximum HP of the building */
   maxHp?: number;
+  /** Block only: which named sub-structure of an AI build this voxel belongs to
+   * (e.g. a torch's "pole" vs "crown"). Blocks sharing a clusterId are selected,
+   * repaired and demolished together — the "hybrid" HP model. */
+  clusterId?: string;
+  /** Human label for the cluster, shown in the stats card. */
+  clusterLabel?: string;
 }
 
 export interface RaidEvent {

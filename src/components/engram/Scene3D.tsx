@@ -48,6 +48,8 @@ import {
   placeBuilding,
   removeBuilding,
   repairBuilding,
+  repairCluster,
+  removeCluster,
   recordRepairEvent,
   repairHealForInventory,
   commitParcelClaim,
@@ -382,6 +384,7 @@ function normalizeBlockBuilding(candidate: Partial<Building> & Pick<Building, 'x
     y: Math.max(0, Math.round(yRaw / BLOCK_UNIT) * BLOCK_UNIT),
     scale,
     color: candidate.color ?? '#8a6a4a',
+    ...(candidate.clusterId ? { clusterId: candidate.clusterId, clusterLabel: candidate.clusterLabel } : {}),
   };
 }
 
@@ -3010,7 +3013,7 @@ async function claimParcelFlow(
 }
 
 type SelectedBuilding =
-  | { scope: 'own'; index: number; id?: string; type: BuildingType; hp: number; maxHp: number }
+  | { scope: 'own'; index: number; id?: string; type: BuildingType; hp: number; maxHp: number; clusterId?: string; clusterLabel?: string }
   | { scope: 'public'; id?: string; owner: string; type: BuildingType; hp: number; maxHp: number; relation: WalletRelation };
 
 const SELECTION_COLORS: Record<WalletRelation, string> = { neutral: '#e8e8e8', allied: '#7fd06a', hostile: '#ff5f50' };
@@ -3152,11 +3155,20 @@ function Buildings({
                 handleOwnBuildingClick(i, displayBuilding);
                 return;
               }
-              const { hp, maxHp } = hpOf(displayBuilding);
-              onSelectBuilding?.({ scope: 'own', index: i, id: b.id, type: b.type, hp, maxHp });
+              if (b.clusterId) {
+                // Hybrid HP: select the whole named cluster, aggregate its HP.
+                let hp = 0, maxHp = 0;
+                for (const blk of world.buildings) {
+                  if (blk.clusterId === b.clusterId) { const h = hpOf(blk); hp += h.hp; maxHp += h.maxHp; }
+                }
+                onSelectBuilding?.({ scope: 'own', index: i, id: b.id, type: b.type, hp, maxHp, clusterId: b.clusterId, clusterLabel: b.clusterLabel });
+              } else {
+                const { hp, maxHp } = hpOf(displayBuilding);
+                onSelectBuilding?.({ scope: 'own', index: i, id: b.id, type: b.type, hp, maxHp });
+              }
             }}
           >
-            {selected?.scope === 'own' && selected.index === i && (
+            {selected?.scope === 'own' && (selected.clusterId ? b.clusterId === selected.clusterId : selected.index === i) && (
               <SelectionRing b={displayBuilding} color="#d6b84a" />
             )}
             <BuildingMesh b={displayBuilding} />
@@ -3431,15 +3443,17 @@ function MobileBuildGhost({ mode, posRef, rot }: { mode: BuildingType; posRef: P
 
 // A piece returned by /api/build (offset from the avatar). Blocks carry voxel
 // attributes (height, colour, size) so the AI can sculpt arbitrary shapes.
-type AIPiece = { type: BuildingType; dx: number; dz: number; rot: number; dy?: number; color?: string; scale?: number };
+type AIPiece = { type: BuildingType; dx: number; dz: number; rot: number; dy?: number; color?: string; scale?: number; part?: string };
 
-// AI piece → a placeable Building at absolute (x,z).
-function aiPieceToBuilding(b: AIPiece, x: number, z: number): Building {
+// AI piece → a placeable Building at absolute (x,z). `clusterKey` (a per-build id +
+// the AI's "part" label) groups voxels into one repairable/demolishable structure.
+function aiPieceToBuilding(b: AIPiece, x: number, z: number, clusterKey?: string): Building {
   const out: Building = { type: b.type, x, z, rot: b.rot };
   if (b.type === 'block') {
     out.y = b.dy ?? 0;
     out.color = b.color ?? '#8a6a4a';
     out.scale = b.scale ?? BLOCK_UNIT;
+    if (clusterKey) { out.clusterId = clusterKey; out.clusterLabel = b.part || 'structure'; }
     return normalizeBlockBuilding(out);
   }
   return out;
@@ -4730,10 +4744,14 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     let placed = 0;
     let wood = 0;
     const placedNow: Building[] = [];
+    const buildBase = `ai-${Date.now().toString(36)}`; // unique per AI build
     for (const b of aiPreview) {
       const x = b.type === 'block' ? aiOrigin.x + b.dx : Math.round(aiOrigin.x + b.dx);
       const z = b.type === 'block' ? aiOrigin.z + b.dz : Math.round(aiOrigin.z + b.dz);
-      const candidate = aiPieceToBuilding(b, x, z);
+      // Group this build's blocks by their AI "part" so each named sub-structure is
+      // one repairable/demolishable cluster.
+      const clusterKey = b.type === 'block' ? `${buildBase}:${b.part || 'structure'}` : undefined;
+      const candidate = aiPieceToBuilding(b, x, z, clusterKey);
       if (canPlaceBuilding(b.type, x, z, candidate, placedNow)) {
         const cost = buildCostAt(b.type, x, z);
         if (placeBuilding(candidate, cost)) {
@@ -5355,6 +5373,19 @@ export default function Scene3D({ memories = null, active = null, talking = fals
                 const canRepair = damaged && (isOwn || relation === 'allied');
                 const act = (fn: () => void) => { fn(); };
                 const repairSel = () => {
+                  if (isOwn && sel.clusterId) {
+                    if (!isLocalhostFreeBuildWallet() && getWorld().inventory.wood < REPAIR_WOOD_COST) { showToolFeedback({ text: `Need ${REPAIR_WOOD_COST} wood to repair.`, tone: 'bad' }); return; }
+                    if (repairCluster(sel.clusterId)) {
+                      let hp = 0, maxHp = 0;
+                      for (const blk of getWorld().buildings) if (blk.clusterId === sel.clusterId) { const h = hpOf(blk); hp += h.hp; maxHp += h.maxHp; }
+                      markBuildDraftDirty();
+                      showToolFeedback({ text: `Repaired the ${sel.clusterLabel ?? 'structure'} · ${Math.round(hp)}/${Math.round(maxHp)} HP.`, tone: 'good' });
+                      setSelectedBuilding({ ...sel, hp, maxHp });
+                    } else {
+                      showToolFeedback({ text: 'Already healthy.', tone: 'info' });
+                    }
+                    return;
+                  }
                   if (isOwn) {
                     const b = getWorld().buildings[sel.index];
                     if (!b) { setSelectedBuilding(null); return; }
@@ -5379,9 +5410,15 @@ export default function Scene3D({ memories = null, active = null, talking = fals
                 };
                 const demolishSel = () => {
                   if (!isOwn) return;
-                  removeBuilding(sel.index);
-                  markBuildDraftDirty();
-                  showToolFeedback({ text: 'Building demolished. Half its wood refunded.', tone: 'info' });
+                  if (sel.clusterId) {
+                    const r = removeCluster(sel.clusterId);
+                    markBuildDraftDirty();
+                    showToolFeedback({ text: `Demolished the ${sel.clusterLabel ?? 'structure'} (${r.removed} blocks). Half the wood refunded.`, tone: 'info' });
+                  } else {
+                    removeBuilding(sel.index);
+                    markBuildDraftDirty();
+                    showToolFeedback({ text: 'Building demolished. Half its wood refunded.', tone: 'info' });
+                  }
                   setSelectedBuilding(null);
                 };
                 const raidSel = () => {
@@ -5397,7 +5434,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
                 return (
                   <div className="pointer-events-auto absolute bottom-4 right-4 z-20 w-60 rounded-md border border-[#5a4a28] bg-black/75 p-3 text-xs text-[#f4e8d0] shadow-xl backdrop-blur-sm">
                     <div className="mb-2 flex items-center justify-between">
-                      <span className="font-semibold capitalize text-[#d6b84a]">{sel.type}</span>
+                      <span className="font-semibold capitalize text-[#d6b84a]">{sel.scope === 'own' && sel.clusterLabel ? sel.clusterLabel : sel.type}</span>
                       <button type="button" onClick={() => setSelectedBuilding(null)} aria-label="Close" className="px-1 text-[#f4e8d0]/60 hover:text-[#f4e8d0]">✕</button>
                     </div>
                     <div className="mb-1 text-[11px] text-[#f4e8d0]/70">

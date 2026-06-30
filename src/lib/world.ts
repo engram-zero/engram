@@ -1337,6 +1337,42 @@ export function repairBuilding(index: number): boolean {
   return true;
 }
 
+/** Hybrid HP — repair EVERY block of an AI build's named cluster for one repair cost
+ * (a structure is fixed as a unit, not block-by-block). */
+export function repairCluster(clusterId: string): boolean {
+  const blocks = state.buildings.filter((b) => b.clusterId === clusterId);
+  if (blocks.length === 0) return false;
+  const anyDamaged = blocks.some((b) => (b.hp ?? b.maxHp ?? 0) < (b.maxHp ?? b.hp ?? 0));
+  if (!anyDamaged) return false;
+  const freeBuild = isLocalhostFreeBuildWallet();
+  if (!freeBuild && state.inventory.wood < REPAIR_WOOD_COST) return false;
+  const useKit = state.repairKits > 0;
+  const newBuildings = state.buildings.map((b) =>
+    b.clusterId === clusterId ? { ...b, maxHp: b.maxHp ?? b.hp ?? 0, hp: b.maxHp ?? b.hp ?? 0 } : b
+  );
+  commit({
+    ...state,
+    inventory: { ...state.inventory, wood: freeBuild ? MAX_WOOD : Math.max(0, state.inventory.wood - REPAIR_WOOD_COST) },
+    repairKits: useKit ? Math.max(0, state.repairKits - 1) : state.repairKits,
+    buildings: newBuildings,
+  });
+  return true;
+}
+
+/** Demolish a whole cluster, refunding half its total wood cost. */
+export function removeCluster(clusterId: string): { removed: number } {
+  const blocks = state.buildings.filter((b) => b.clusterId === clusterId);
+  if (blocks.length === 0) return { removed: 0 };
+  const refundBase = blocks.reduce((sum, b) => sum + (b.woodCost ?? BUILD_COST[b.type]), 0);
+  const refund = Math.max(0, Math.floor(refundBase * 0.5));
+  commit({
+    ...state,
+    inventory: { ...state.inventory, wood: Math.min(MAX_WOOD, state.inventory.wood + refund) },
+    buildings: state.buildings.filter((b) => b.clusterId !== clusterId),
+  });
+  return { removed: blocks.length };
+}
+
 // ── React hooks ───────────────────────────────────────────────────────────────
 export function useWorld(): WorldState {
   return useSyncExternalStore(subscribe, getWorld, () => EMPTY_WORLD);
