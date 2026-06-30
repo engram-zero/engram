@@ -1190,6 +1190,16 @@ export function addResource(type: ResourceType, amount: number) {
   return commit({ ...state, inventory: { ...state.inventory, [type]: Math.max(0, state.inventory[type] + amount) } });
 }
 
+/** Persist the player's live HP into the 0G-backed world state (so a reload doesn't
+ *  reset to full). No-op if unchanged. Combat in the scene calls this; healing goes
+ *  through healPlayer/buyAldricMarketItem which already commit. */
+export function setPlayerHp(hp: number) {
+  const { maxHp } = playerHpWithEquipment();
+  const next = Math.max(0, Math.min(maxHp, Math.round(hp)));
+  if (next === state.playerHp) return;
+  commit({ ...state, playerHp: next });
+}
+
 export function playerHpWithEquipment(value: WorldState = state): { hp: number; maxHp: number } {
   const maxHp = Math.max(1, value.playerMaxHp + statModifierFor('maxHp', value));
   return { hp: Math.max(0, Math.min(maxHp, value.playerHp)), maxHp };

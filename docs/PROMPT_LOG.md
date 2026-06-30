@@ -1852,3 +1852,14 @@ commitear, no cada frame. `resolveCollision`, `blockSupportTop` y `resolveBlockW
 (2) En `Buildings`, mapas `useMemo` `local/publicRaid|RepairByBuilding` agrupan eventos por buildingId
 → cada edificio hace lookup en vez de filtrar todos los eventos (era buildings × events). `tsc`
 limpio; solo Scene3D.tsx. **Commit:** _(este commit)_
+
+### 2026-06-30 · Daño de demonios a -1, HP persistido en 0G, y falso "Hold F to mine"
+**Pedido (humano):** los demonios siguen quitando 15 (debe ser 1); la vida debe vivir en el JSON 0G
+del jugador (no salir con 100 al recargar); y aparece "Hold F to mine" sin piedra cerca (y sí mina).
+**Qué se hizo:** (daño) el DPS de enemigos al jugador pasó de 15 a **1** (Scene3D 2527). (HP en 0G)
+nuevo `setPlayerHp` en world.ts; en Scene3D el intervalo de HP inicializa `dynamicPlayerState.hp`
+desde `playerHpWithEquipment()` (carga del 0G) y reconcilia: una curación (hierbas) sube world.playerHp
+y se adopta; el combate baja la HP viva y se persiste (throttle ~900ms) → al recargar conserva la vida.
+(falso mine) la detección de roca/árbol solo usaba distancia HORIZONTAL; en colinas detectaba recursos
+muy arriba/abajo → agregué compuerta vertical (`|terrenoY - pies| ≤ 2.2`). `tsc` limpio.
+**Commit:** _(este commit)_

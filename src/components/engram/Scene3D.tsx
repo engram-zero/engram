@@ -32,6 +32,8 @@ import { getTexture, getTextureVariant, hasTexture } from './textures';
 import {
   useWorld,
   getWorld,
+  setPlayerHp as persistPlayerHp,
+  playerHpWithEquipment,
   getWorldWallet,
   cloneWorldState,
   replaceWorldState,
@@ -1021,8 +1023,10 @@ function Player({
     // facing no longer causes the old flicker. The closest in-front resource wins;
     // facing also disambiguates a tree vs a rock side by side. `forward` = look dir.
     const FACING_MIN = 0.85; // dot(forward, dirToResource) ≥ this → within a ~60° front cone
+    const VERTICAL_REACH = 2.2; // ignore resources far above/below you (e.g. down a hill)
     const px = camera.position.x;
     const pz = camera.position.z;
+    const feetY = camera.position.y - EYE_HEIGHT;
     let bestTree = -1, bestTd = Infinity;
     for (let i = 0; i < TREES.length; i++) {
       if (isChopped(i)) continue;
@@ -1030,6 +1034,7 @@ function Player({
       const ddx = t.x - px, ddz = t.z - pz;
       const dd = Math.hypot(ddx, ddz);
       if (dd >= CHOP_RANGE || dd < 1e-3) continue;
+      if (Math.abs(getHeightAt(t.x, t.z) - feetY) > VERTICAL_REACH) continue; // too far up/down a slope
       if ((forward.x * ddx + forward.z * ddz) / dd < FACING_MIN) continue; // behind you
       if (dd < bestTd) { bestTd = dd; bestTree = i; }
     }
@@ -1040,6 +1045,7 @@ function Player({
       const ddx = r.x - px, ddz = r.z - pz;
       const dd = Math.hypot(ddx, ddz);
       if (dd >= MINE_RANGE || dd < 1e-3) continue;
+      if (Math.abs(getHeightAt(r.x, r.z) - feetY) > VERTICAL_REACH) continue; // rock down/up a hill, not really reachable
       if ((forward.x * ddx + forward.z * ddz) / dd < FACING_MIN) continue; // behind you
       if (dd < bestRd) { bestRd = dd; bestRock = i; }
     }
@@ -2524,7 +2530,7 @@ function Enemy({ id, onSiege }: { id: string; onSiege?: (event: DemonSiegeEvent,
         if (closestDist < 1.4) {
           dyn.attackTimer -= dt;
           if (dyn.attackTimer <= 0) {
-            dynamicPlayerState.hp -= 15; // Enemy DPS
+            dynamicPlayerState.hp -= 1; // Enemy DPS — low because losing HP now costs you (Prompt 30)
             dyn.attackTimer = 1.0;
             if (dynamicPlayerState.hp <= 0) {
               dynamicPlayerState.dead = true;
@@ -5511,8 +5517,28 @@ export default function Scene3D({ memories = null, active = null, talking = fals
   // Sync player HP to UI and handle death / respawn
   const prevHpRef = useRef(dynamicPlayerState.hp);
   const lastHurtRef = useRef(0);
+  const hpInitRef = useRef(false);
+  const lastPersistRef = useRef(0);
   useEffect(() => {
     const interval = setInterval(() => {
+      // Adopt the 0G-persisted HP on first tick so a reload doesn't start at full.
+      if (!hpInitRef.current) {
+        const w = playerHpWithEquipment();
+        dynamicPlayerState.hp = w.hp;
+        dynamicPlayerState.maxHp = w.maxHp;
+        hpInitRef.current = true;
+      }
+      // Reconcile live HP with the world: a heal (herbs) raises world.playerHp, so
+      // adopt it; combat lowers the live HP, so persist that back to 0G (throttled).
+      if (!dynamicPlayerState.dead) {
+        const w = playerHpWithEquipment();
+        if (w.hp > dynamicPlayerState.hp + 0.5) {
+          dynamicPlayerState.hp = w.hp;
+        } else if (Math.round(dynamicPlayerState.hp) !== w.hp && Date.now() - lastPersistRef.current > 900) {
+          lastPersistRef.current = Date.now();
+          persistPlayerHp(dynamicPlayerState.hp);
+        }
+      }
       const hp = dynamicPlayerState.hp;
       // Hurt / death audio (rotating hurt variants so it isn't monotonous; hurt is
       // throttled so continuous enemy DPS can't machine-gun the clip).
