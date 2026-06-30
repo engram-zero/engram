@@ -1722,3 +1722,15 @@ puentes/granjas/comida); modo manual con manos. Y el prompt de arte para biomas 
 mercado, Codex+Claude), 31 (nature-actividad), 32 (escaleras escalables), 33 (río con propósito +
 comida), 34 (modo manual). Los prompts de textura por bioma ya están en `docs/ART_PROMPTS.md`.
 **Commit:** _(este commit)_
+
+### 2026-06-30 · Texturas de bioma cableadas, caminar a parcela, sin nombre flotante, +2 pilares
+**Pedido (humano):** clasificar/renombrar las 7 texturas de bioma y cablearlas; la frontera impide
+llegar a una parcela proclamada; quitar el nombre flotante (J17) de las parcelas; +2 pilares (UI
+simple; inmersión/realismo).
+**Qué se hizo:** renombré las webp a `arena1-2`, `nieve1-3`, `seco1-2` (clasificadas viendo el
+contenido) y las agregué a `textures.ts` (slots terrain_sand/snow/dry). Caminabilidad: `clampToFrontier`
+clampea a la región caminable MÁS CERCANA (círculo base o parcela), para cruzar el hueco y entrar a
+la parcela propia. Quité el `<Html>` del nombre de parcela (rompe inmersión; las ghost-cells en modo
+claim siguen mostrando su letra). DESIGN_PILLARS: pilar 6 (frontend simple) y 7 (inmersión/realismo).
+Pendiente (pasada enfocada): render del terreno por biomas (shader, gradiente sin parche) + restyle
+de la parcela + unión de muros 45°/perpendicular. `tsc` limpio. **Commit:** _(este commit)_

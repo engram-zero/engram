@@ -16,6 +16,9 @@ import * as THREE from 'three';
 
 export type TextureSlot =
   | 'terrain_grass'
+  | 'terrain_sand'
+  | 'terrain_snow'
+  | 'terrain_dry'
   | 'cottage_wood'
   | 'cottage_roof'
   | 'stone'
@@ -31,6 +34,9 @@ export type TextureSlot =
  */
 export const TEXTURE_MANIFEST: Record<TextureSlot, string[]> = {
   terrain_grass: ['pasto1.webp', 'pasto2.webp'],
+  terrain_sand: ['arena1.webp', 'arena2.webp'],
+  terrain_snow: ['nieve1.webp', 'nieve2.webp', 'nieve3.webp'],
+  terrain_dry: ['seco1.webp', 'seco2.webp'],
   cottage_wood: ['madera1.webp', 'madera2.webp', 'madera3.webp'],
   cottage_roof: ['tejado1.webp', 'tejado2.webp', 'tejado3.webp'],
   stone: ['piedra1.webp', 'piedra2.webp', 'piedra3.webp'],

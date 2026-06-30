@@ -544,9 +544,25 @@ function clampToBaseWorld(x: number, z: number): [number, number] {
   return [(x / d) * WORLD_RADIUS, (z / d) * WORLD_RADIUS];
 }
 
+/** Nearest walkable point: the base world circle OR any claimed parcel — whichever
+ * is closest. Lets the player cross the small gap between the round base world and
+ * a square claimed parcel and actually step onto land they own. */
+function clampToFrontier(x: number, z: number): [number, number] {
+  let [bx, bz] = clampToBaseWorld(x, z);
+  let best = Math.hypot(x - bx, z - bz);
+  for (const claim of allClaimedParcels()) {
+    const half = claim.size / 2;
+    const px = Math.max(claim.x - half, Math.min(claim.x + half, x));
+    const pz = Math.max(claim.z - half, Math.min(claim.z + half, z));
+    const d = Math.hypot(x - px, z - pz);
+    if (d < best) { best = d; bx = px; bz = pz; }
+  }
+  return [bx, bz];
+}
+
 // Slide the player out of the boundary and any prop/NPC they overlap.
 function resolveCollision(x: number, z: number): [number, number] {
-  if (!isFrontierWalkable(x, z)) [x, z] = clampToBaseWorld(x, z);
+  if (!isFrontierWalkable(x, z)) [x, z] = clampToFrontier(x, z);
   const obstacles = [
     { x: CAMPFIRE.x, z: CAMPFIRE.z, r: 1.0 },
     ...TREES.map((t, i) => ({ t, i }))
@@ -2942,9 +2958,8 @@ function ParcelOverlays({
               <ringGeometry args={[claim.size * 0.5 - 0.08, claim.size * 0.5, 4]} />
               <meshBasicMaterial color={color} transparent opacity={own ? 0.72 : 0.45} depthWrite={false} />
             </mesh>
-            <Html position={[0, 1.15, 0]} center pointerEvents="none">
-              <span className="rounded bg-black/65 px-1.5 py-0.5 text-[10px] font-bold text-[#f4e8d0]">{cellLabel(claim.gx, claim.gz)}</span>
-            </Html>
+            {/* No floating parcel name in-world (breaks immersion); the label is
+                still shown on the claim-mode ghost cells when you're choosing one. */}
             <ParcelResourceCluster claim={claim} onDraftChange={onDraftChange} onToolFeedback={onToolFeedback} />
           </group>
         );

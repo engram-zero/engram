@@ -39,6 +39,20 @@ los precios se mueven por escasez, los NPCs recuerdan. El mundo no es un escenar
 - Ejemplo: la IA de la naturaleza podría regenerar **más recursos cuanto más se juega/conecta**
   la comunidad (ver Prompt 31), atando la vitalidad del mundo a la actividad real.
 
+## 6. Frontend lo más simple posible
+La UI debe **simplificarse, no complicarse**. Menos botones, menos paneles flotantes, menos ruido
+visual. Cada elemento de interfaz se gana su lugar; si algo se puede inferir, contextualizar o
+esconder hasta que haga falta, mejor. Preferimos lo diegético (que la información viva en el mundo)
+sobre HUD encima de la pantalla. (Conecta con el pilar 4 y con quitar adornos que rompen realismo:
+nombres flotantes, anillos bajo edificios en 1ra persona, etc.)
+
+## 7. Inmersión y realismo
+La experiencia debe **sentirse viva y real**: voz (STT/TTS), audio espacial, sonidos de ambiente,
+día/noche, NPCs que reaccionan. Buscamos que el jugador *sienta* el mundo, no que lo opere como un
+menú. Nada que rompa la ilusión sin una buena razón (etiquetas flotantes, indicadores artificiales).
+El **modo de construcción manual** (ver las manos, hacer labores; pilar 4 y Prompt 34) es la
+dirección estrella de este pilar.
+
 ---
 
 > Regla práctica: antes de añadir X, escribe en una frase **por qué existe** y **con qué se
