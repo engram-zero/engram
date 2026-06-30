@@ -1554,3 +1554,17 @@ ortográfico de 12 a 9 en los dos clamps (rueda y pinch) para permitir alejar la
 poco más sin que asome el horizonte.
 **Qué se hizo:** dirty gateado por mensaje no vacío; min zoom 12→9. `tsc` limpio.
 **Commit:** _(este commit)_
+
+### 2026-06-29 · Warehouse como edificio (no HUD) + modos ?time + "0G Storage" + guion de video
+**Pedido (humano):** sacar el panel de almacén del HUD (ensucia); que sea un edificio que el
+usuario construya y, al estar en él (aérea/1ra persona), abra el panel con E/click. Modos de URL
+para día/noche fijos (grabar video). Y proponer/documentar varios órdenes de guion para el video.
+**Prompt sintetizado:** En `Scene3D.tsx` elimina el panel de warehouse siempre-visible del HUD.
+Detecta "almacén" por etiqueta de cluster (`isWarehouseLabel`: warehouse/almacén/storehouse/…);
+muestra "Press E · 0G Warehouse" al acercarte a uno construido y abre un modal con deposit/withdraw
+(reusando `depositResource`/`withdrawResource`). En la tarjeta de selección del edificio añade
+"📦 Open warehouse" (vista aérea). Añade `?time=day|night` que fija la hora (sol/luna fijos) sin
+ocultar el HUD, distinto de `?day=1` (debug) y `?shot` (thumbnail). En `client-page.tsx` el banner
+de recall dice "0G Storage" (el glifo "0G" se leía "oG"). Documenta el guion en `docs/VIDEO_SCRIPT.md`.
+**Qué se hizo:** warehouse gateado por edificio + E + card; modal de storage; `?time=`; banner
+"0G Storage"; `docs/VIDEO_SCRIPT.md` con 3 órdenes + voz en off. `tsc` limpio. **Commit:** _(este commit)_

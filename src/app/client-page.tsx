@@ -977,7 +977,7 @@ function Game() {
               return (
                 <div className="mb-3 -mt-1 text-xs text-[#8fd0a0]">
                   📜 {activeNpc.name} recalls {n} past {n === 1 ? 'conversation' : 'conversations'} with you · loaded from{' '}
-                  <span className="font-semibold">0G</span>
+                  <span className="font-semibold">0G Storage</span>
                   <span className="font-mono text-[#d6b84a]"> · {root.slice(0, 8)}…</span>
                 </div>
               );

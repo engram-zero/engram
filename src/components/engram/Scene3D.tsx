@@ -177,7 +177,18 @@ const WALK_SPEED = 4.6;
 const TALK_RANGE = 3.2; // how close you must stand before "Press E" appears
 const CHOP_RANGE = 2.8; // how close to a tree before "Press F to chop"
 const MINE_RANGE = 2.8; // how close to a rock before "Hold F to mine"
+const WAREHOUSE_RANGE = 4.0; // how close to a player-built warehouse before "Press E"
 const ORE_LABEL: Record<OreType, string> = { stone: 'Stone', silver: 'Silver', gold: 'Gold' };
+
+// A player's AI-built structure counts as a warehouse (opens the 0G storage panel)
+// when its cluster label reads like one. We match loosely so any sensible prompt —
+// "build a warehouse", "almacén", "storehouse", "granary" — works.
+const WAREHOUSE_WORDS = ['warehouse', 'almacen', 'almacén', 'storehouse', 'storage', 'depot', 'deposito', 'depósito', 'bodega', 'granary', 'silo', 'stockpile', 'barn', 'vault', 'store'];
+export function isWarehouseLabel(label?: string | null): boolean {
+  if (!label) return false;
+  const l = label.toLowerCase();
+  return WAREHOUSE_WORDS.some((w) => l.includes(w));
+}
 const RESOURCE_LABEL: Record<StoredResourceType, string> = { wood: 'Wood', stone: 'Stone', silver: 'Silver', gold: 'Gold' };
 
 // True when (x,z) sits over the creek's water ribbon (half-width matches the River
@@ -4497,6 +4508,19 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     return { hour: Number.isFinite(h) ? Math.max(0, Math.min(24, h)) : 18.6 };
   }, []);
   const photoMode = !!photo;
+  // Demo/recording: pin a fixed time of day (sun or moon held in place) WITHOUT
+  // hiding the HUD, so a video can show day and night scenes on demand.
+  //   ?time=day   → bright midday (sun high)
+  //   ?time=night → night (moon up, torches lit, crickets)
+  // (distinct from ?day=1, which is the flat-bright debug lighting, and ?shot,
+  // which pins a time AND hides all UI for clean thumbnails.)
+  const pinnedHour = useMemo(() => {
+    if (typeof window === 'undefined') return null;
+    const t = new URLSearchParams(window.location.search).get('time');
+    if (t === 'night') return 22;
+    if (t === 'day') return 13;
+    return null;
+  }, []);
   const forceBrightTestLighting = useMemo(() => {
     if (typeof window === 'undefined') return false;
     const params = new URLSearchParams(window.location.search);
@@ -4508,7 +4532,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     if (params.has('shot')) return false;
     return params.get('day') === '1';
   }, []);
-  const dn = useMemo(() => computeDayNight(forceBrightTestLighting ? 12 : photoMode ? photo!.hour : localHour), [forceBrightTestLighting, localHour, photoMode, photo]);
+  const dn = useMemo(() => computeDayNight(forceBrightTestLighting ? 12 : photoMode ? photo!.hour : pinnedHour ?? localHour), [forceBrightTestLighting, localHour, photoMode, photo, pinnedHour]);
 
   // Distance-based ambience: a light tick reads the live player position and sets
   // each loop's volume from the nearest emitter (see AUDIO_EMITTERS). Runs off a
@@ -4662,6 +4686,36 @@ export default function Scene3D({ memories = null, active = null, talking = fals
       setToolFeedback((current) => (current?.text === feedback.text ? null : current));
     }, 5000);
   }, []);
+
+  // 0G warehouse is no longer an always-on HUD panel — it opens only when the
+  // player is at a structure they built and labelled like a warehouse. Proximity
+  // is sampled off a timer (works in both views; `dynamicPlayerState` is updated
+  // every frame by Player) and E (or clicking the building's card) opens it.
+  const [storageOpen, setStorageOpen] = useState(false);
+  const [nearWarehouse, setNearWarehouse] = useState(false);
+  useEffect(() => {
+    if (!exploring) { setNearWarehouse(false); setStorageOpen(false); return; }
+    const id = window.setInterval(() => {
+      const px = dynamicPlayerState.x, pz = dynamicPlayerState.z;
+      let near = false;
+      for (const b of world.buildings) {
+        if (!isWarehouseLabel(b.clusterLabel)) continue;
+        if (Math.hypot(px - b.x, pz - b.z) <= WAREHOUSE_RANGE) { near = true; break; }
+      }
+      setNearWarehouse(near);
+    }, 250);
+    return () => window.clearInterval(id);
+  }, [exploring, world.buildings]);
+  useEffect(() => {
+    if (!exploring) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== 'KeyE') return;
+      if (storageOpen) { setStorageOpen(false); return; }
+      if (nearWarehouse) setStorageOpen(true);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [exploring, nearWarehouse, storageOpen]);
 
   const moveStorage = useCallback((type: StoredResourceType, direction: 'deposit' | 'withdraw', amount: number) => {
     const result = direction === 'deposit' ? depositResource(type, amount) : withdrawResource(type, amount);
@@ -5507,32 +5561,50 @@ export default function Scene3D({ memories = null, active = null, talking = fals
             {world.repairKits > 0 && (
               <span className="inline-flex items-center rounded-md bg-black/45 px-2.5 py-1" title="Repair kits">🧰 {world.repairKits}</span>
             )}
-            <div className="pointer-events-auto mt-1 w-48 rounded-lg border border-[#5a4a28]/80 bg-black/55 p-2 text-[11px] shadow-lg backdrop-blur-sm">
-              <div className="mb-1 flex items-center justify-between text-[#d6b84a]">
-                <span className="font-semibold tracking-[0.08em]">0G Storage</span>
-                <span className="text-[#f4e8d0]/55">warehouse</span>
-              </div>
-              {STORAGE_RESOURCES.map((type) => (
-                <div key={type} className="mb-1 grid grid-cols-[1fr_auto_auto] items-center gap-1">
-                  <span>{RESOURCE_LABEL[type]}: <strong>{Math.round(world.storage[type] * 10) / 10}</strong></span>
-                  <button
-                    onClick={() => moveStorage(type, 'deposit', world.inventory[type])}
-                    disabled={world.inventory[type] <= 0}
-                    className="rounded border border-[#6a5832] px-1.5 py-0.5 text-[#f4e8d0]/85 hover:border-[#d6b84a] disabled:opacity-35"
-                  >
-                    Dep
-                  </button>
-                  <button
-                    onClick={() => moveStorage(type, 'withdraw', 10)}
-                    disabled={world.storage[type] <= 0}
-                    className="rounded border border-[#6a5832] px-1.5 py-0.5 text-[#f4e8d0]/85 hover:border-[#d6b84a] disabled:opacity-35"
-                  >
-                    +10
-                  </button>
-                </div>
-              ))}
-            </div>
           </div>
+
+          {/* 0G warehouse, gated behind a player-built warehouse structure. A hint
+              appears when you stand at one; E (or the building's card) opens the
+              panel where you stockpile resources beyond your carry caps onto 0G. */}
+          {nearWarehouse && !storageOpen && (
+            <div className="pointer-events-none absolute left-1/2 bottom-28 z-20 -translate-x-1/2 rounded-md border border-[#d6b84a]/70 bg-black/70 px-3 py-1.5 text-sm text-[#f4e8d0] shadow-lg">
+              Press <strong className="text-[#d6b84a]">E</strong> · 0G Warehouse
+            </div>
+          )}
+          {storageOpen && (
+            <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/50 p-4" onClick={() => setStorageOpen(false)}>
+              <div className="w-72 rounded-xl border-2 border-[#c79a3a] bg-gradient-to-b from-[#241d12] to-[#15110a] p-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                <div className="mb-2 flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-[#d6b84a]">
+                    <span className="text-lg">📦</span>
+                    <span className="font-semibold tracking-[0.06em]">0G Warehouse</span>
+                  </div>
+                  <button onClick={() => setStorageOpen(false)} aria-label="Close" className="px-1 text-[#f4e8d0]/60 hover:text-[#f4e8d0]">✕</button>
+                </div>
+                <p className="mb-3 text-[11px] leading-snug text-[#f4e8d0]/60">Stockpile beyond your carry caps. Stored amounts persist to your 0G world bundle on save.</p>
+                {STORAGE_RESOURCES.map((type) => (
+                  <div key={type} className="mb-1.5 grid grid-cols-[1fr_auto_auto] items-center gap-1.5 text-sm">
+                    <span>{RESOURCE_LABEL[type]}: <strong>{Math.round(world.storage[type] * 10) / 10}</strong></span>
+                    <button
+                      onClick={() => moveStorage(type, 'deposit', world.inventory[type])}
+                      disabled={world.inventory[type] <= 0}
+                      className="rounded border border-[#6a5832] px-2 py-0.5 text-[#f4e8d0]/85 hover:border-[#d6b84a] disabled:opacity-35"
+                      title={`Deposit all ${RESOURCE_LABEL[type]}`}
+                    >
+                      Deposit
+                    </button>
+                    <button
+                      onClick={() => moveStorage(type, 'withdraw', 10)}
+                      disabled={world.storage[type] <= 0}
+                      className="rounded border border-[#6a5832] px-2 py-0.5 text-[#f4e8d0]/85 hover:border-[#d6b84a] disabled:opacity-35"
+                    >
+                      +10
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <button
             onClick={switchView}
             className="absolute top-20 right-4 z-30 rounded-md border border-[#5a4a28] bg-black/50 px-3 py-1.5 text-sm text-[#f4e8d0] hover:border-[#d6b84a]"
@@ -5628,6 +5700,9 @@ export default function Scene3D({ memories = null, active = null, talking = fals
                       </span>
                     </div>
                     <div className="flex flex-col gap-1">
+                      {isOwn && isWarehouseLabel(sel.clusterLabel) && (
+                        <button type="button" onClick={() => { setStorageOpen(true); setSelectedBuilding(null); }} className="rounded border border-[#c79a3a] bg-[#241d12]/80 px-2 py-1.5 text-left hover:border-[#d6b84a]">📦 Open warehouse</button>
+                      )}
                       {canRepair && (
                         <button type="button" onClick={() => act(repairSel)} className="rounded border border-[#6a8a4a] bg-[#1a2410]/70 px-2 py-1.5 text-left hover:border-[#8fd06a]">🧰 Repair{isOwn ? ` (${REPAIR_WOOD_COST} wood)` : ' (ally)'}</button>
                       )}
