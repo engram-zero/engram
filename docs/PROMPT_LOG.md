@@ -1907,3 +1907,15 @@ base y no es primer claim. `tsc` limpio. **Commit:** _(este commit)_
 botón "Sell" JUNTO al input "Wood to sell" dentro del panel de comercio, donde ya viven comprar/
 sapling/repair/axe/Market. Toda la venta/compra en un solo lugar (pilar 6: frontend simple).
 `tsc` limpio; solo client-page.tsx. **Commit:** _(este commit)_
+
+### 2026-06-30 · Recursos de parcela cosechables (loot packs de Codex) — adiós puntas verdes
+**Pedido (humano):** las puntas verdes de la parcela son adorno y no se cosechan; deberían ser
+"premios sorpresa" con rareza (oro > plata > piedra > madera).
+**Qué se hizo:** reescribí `ParcelResourceCluster` para consumir `claim.resources` (el loot pack
+de Codex, schema en docs/PARCEL_LOOT_SCHEMA.md) en vez de los nodos placeholder: wood → árbol,
+stone/silver/gold → roca/veta tintada (plata y oro BRILLAN con emissive + pointLight; oro/legendary
+más grande). Se posicionan en el suelo (getHeightAt por nodo), se cosechan al click
+(`harvestParcelResource(id, type, amount)`), los agotados desaparecen, y el feedback marca la rareza
+(✨ Legendary / ★ Rare). La colisión (`parcelLootColliders`) usa los mismos nodos (y se memoiza con
+`depletedParcelResources` en las keys). Quité el `parcelResourceNodes` viejo. `tsc` limpio; solo Scene3D.tsx.
+**Commit:** _(este commit)_

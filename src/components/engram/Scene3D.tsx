@@ -34,6 +34,7 @@ import {
   getWorld,
   setPlayerHp as persistPlayerHp,
   playerHpWithEquipment,
+  type ParcelResourceNode as LootNode,
   getWorldWallet,
   cloneWorldState,
   replaceWorldState,
@@ -508,7 +509,7 @@ function blocksOverlap(a: Building, b: Building) {
   );
 }
 
-function allClaimedParcels(): { id: string; x: number; z: number; size: number; owner: string; terrain: 'meadow' | 'grove' | 'quarry' }[] {
+function allClaimedParcels(): { id: string; x: number; z: number; size: number; owner: string; terrain: 'meadow' | 'grove' | 'quarry'; resources: LootNode[] }[] {
   const wallet = getWorldWallet()?.toLowerCase();
   const own = getWorld().parcelClaims;
   const publicClaims = getPublicWorldSnapshot().parcels.filter((claim) => claim.owner !== wallet);
@@ -520,45 +521,20 @@ function allClaimedParcels(): { id: string; x: number; z: number; size: number; 
   });
 }
 
+/** Live colliders for a parcel's loot-pack nodes (world coords), skipping depleted
+ *  ones so a harvested tree/rock stops blocking you. */
+function parcelLootColliders(claim: { x: number; z: number; resources: LootNode[] }): Collider[] {
+  const out: Collider[] = [];
+  for (const n of claim.resources) {
+    if (isParcelResourceDepleted(n.id)) continue;
+    out.push({ x: claim.x + n.localX, z: claim.z + n.localZ, r: n.radius });
+  }
+  return out;
+}
+
 function pointInsideParcel(x: number, z: number, claim: { x: number; z: number; size: number }): boolean {
   const half = claim.size / 2;
   return x >= claim.x - half && x <= claim.x + half && z >= claim.z - half && z <= claim.z + half;
-}
-
-type ParcelResourceNode = {
-  id: string;
-  index: number;
-  type: 'wood' | 'stone';
-  x: number;
-  z: number;
-  localX: number;
-  localZ: number;
-  localY: number;
-  r: number;
-};
-
-function parcelResourceNodes(claim: { id: string; x: number; z: number; terrain: 'meadow' | 'grove' | 'quarry' }): ParcelResourceNode[] {
-  const seed = claim.id.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
-  const count = claim.terrain === 'quarry' ? 4 : claim.terrain === 'grove' ? 6 : 5;
-  return Array.from({ length: count }, (_, i) => {
-    const a = seed * 0.13 + i * 2.399;
-    const r = 2.4 + ((seed + i * 17) % 32) / 8;
-    const x = claim.x + Math.cos(a) * r;
-    const z = claim.z + Math.sin(a) * r;
-    const id = parcelResourceKey(claim.id, i);
-    const type: ParcelResourceNode['type'] = claim.terrain === 'quarry' ? 'stone' : 'wood';
-    return {
-      id,
-      index: i,
-      type,
-      x,
-      z,
-      localX: x - claim.x,
-      localZ: z - claim.z,
-      localY: getHeightAt(x, z) - getHeightAt(claim.x, claim.z),
-      r: claim.terrain === 'meadow' ? 0.28 : claim.terrain === 'grove' ? 0.46 : 0.52,
-    };
-  }).filter((node) => !isParcelResourceDepleted(node.id));
 }
 
 // The base world is the SQUARE of textured terrain, not an inscribed circle — so
@@ -603,7 +579,7 @@ let _obsIdx: ObstacleIndex | null = null;
 function obstacleIndex(): ObstacleIndex {
   const w = getWorld();
   const pub = getPublicWorldSnapshot();
-  const keys = [w.buildings, w.choppedTrees, w.treeGrowth, w.minedRocks, w.parcelClaims, pub.buildings, pub.parcels] as const;
+  const keys = [w.buildings, w.choppedTrees, w.treeGrowth, w.minedRocks, w.parcelClaims, w.depletedParcelResources, pub.buildings, pub.parcels] as const;
   if (_obsIdx && _obsKeys && _obsKeys.length === keys.length && keys.every((k, i) => _obsKeys![i] === k)) return _obsIdx;
   const statics: Collider[] = [{ x: CAMPFIRE.x, z: CAMPFIRE.z, r: 1.0 }];
   for (let i = 0; i < TREES.length; i++) {
@@ -616,7 +592,7 @@ function obstacleIndex(): ObstacleIndex {
     const r = ROCKS[i];
     statics.push({ x: r.x, z: r.z, r: 0.6 * r.scale });
   }
-  for (const claim of allClaimedParcels()) for (const node of parcelResourceNodes(claim)) statics.push({ x: node.x, z: node.z, r: node.r });
+  for (const claim of allClaimedParcels()) for (const c of parcelLootColliders(claim)) statics.push(c);
   const walls: Collider[] = [];
   const houses: Building[] = [];
   const voxels: VoxelBox[] = [];
@@ -3153,30 +3129,20 @@ function ParcelResourceCluster({
   onDraftChange,
   onToolFeedback,
 }: {
-  claim: { id: string; owner?: string; x: number; z: number; terrain: 'meadow' | 'grove' | 'quarry' };
+  claim: { id: string; owner?: string; x: number; z: number; resources: LootNode[] };
   onDraftChange: () => void;
   onToolFeedback: (feedback: ToolFeedback) => void;
 }) {
-  const world = useWorld();
-  const seed = claim.id.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
-  const nodes = parcelResourceNodes(claim);
-  void world;
+  useWorld(); // re-render when nodes deplete / claims change
+  const baseY = getHeightAt(claim.x, claim.z);
 
-  const harvest = (node: ParcelResourceNode) => {
+  const harvest = (node: LootNode) => {
     const current = getWorldWallet()?.toLowerCase();
     if (!current) {
       onToolFeedback({ text: 'Connect a wallet first.', tone: 'bad' });
       return;
     }
     if (isParcelResourceDepleted(node.id)) return;
-    if (node.type === 'wood' && getWorld().inventory.wood >= MAX_WOOD) {
-      onToolFeedback({ text: `Wood full (${MAX_WOOD}).`, tone: 'info' });
-      return;
-    }
-    if (node.type === 'stone' && getWorld().inventory.stone >= MAX_STONE) {
-      onToolFeedback({ text: `Stone full (${MAX_STONE}).`, tone: 'info' });
-      return;
-    }
     if (claim.owner && claim.owner !== current) {
       const rent = recordParcelRentEvent(claim.owner, claim.id, 'gather', PARCEL_GATHER_RENT_COIN);
       if (!rent.ok) {
@@ -3184,80 +3150,63 @@ function ParcelResourceCluster({
         return;
       }
     }
-    if (!harvestParcelResource(node.id, node.type)) {
-      onToolFeedback({ text: node.type === 'wood' ? `Wood full (${MAX_WOOD}).` : `Stone full (${MAX_STONE}).`, tone: 'info' });
+    if (!harvestParcelResource(node.id, node.type, node.amount)) {
+      onToolFeedback({ text: `Can't carry more ${node.type} right now.`, tone: 'info' });
       return;
     }
     onDraftChange();
-    onToolFeedback({ text: `Collected ${node.type === 'wood' ? 'wood' : 'stone'} from parcel ${claim.id}. Save World to publish.`, tone: 'good' });
+    const flair = node.rarity === 'legendary' ? '✨ Legendary ' : node.rarity === 'rare' ? '★ Rare ' : '';
+    onToolFeedback({ text: `${flair}+${node.amount} ${node.type} from this parcel. Save World to publish.`, tone: 'good' });
   };
 
-  if (claim.terrain === 'quarry') {
-    return (
-      <group>
-        {nodes.map((node, i) => (
-          <mesh
-            key={node.id}
-            position={[node.localX, node.localY + 0.22, node.localZ]}
-            rotation={[0.2, seed + i, -0.15]}
-            castShadow
-            receiveShadow
-            onClick={(e) => {
-              e.stopPropagation();
-              harvest(node);
-            }}
-          >
-            <dodecahedronGeometry args={[0.42 + (i % 2) * 0.12, 0]} />
-            <meshStandardMaterial color={i % 3 === 0 ? '#c9b26b' : '#9aa4ad'} map={getTextureVariant('stone', seed + i)} flatShading />
-          </mesh>
-        ))}
-      </group>
-    );
-  }
-
-  if (claim.terrain === 'grove') {
-    return (
-      <group>
-        {nodes.map((node, i) => (
-          <group
-            key={node.id}
-            position={[node.localX, node.localY, node.localZ]}
-            rotation={[0, seed + i, 0]}
-            onClick={(e) => {
-              e.stopPropagation();
-              harvest(node);
-            }}
-          >
-            <mesh position={[0, 0.5, 0]} castShadow>
-              <cylinderGeometry args={[0.09, 0.14, 1.0, 5]} />
-              <meshStandardMaterial color="#5a3423" map={getTextureVariant('bark', seed + i)} flatShading />
-            </mesh>
-            <mesh position={[0, 1.16, 0]} castShadow>
-              <coneGeometry args={[0.54, 1.25, 7]} />
-              <meshStandardMaterial color="#264f31" map={getTextureVariant(i % 2 === 0 ? 'foliage_pine' : 'foliage_broadleaf', seed + i)} flatShading />
-            </mesh>
-          </group>
-        ))}
-      </group>
-    );
-  }
-
+  // The parcel's surprise loot pack rendered as real harvestable props: a tree for
+  // wood, an ore boulder for stone/silver/gold (rarer metals glow). Click to gather.
   return (
     <group>
-      {nodes.map((node, i) => (
-        <mesh
-          key={node.id}
-          position={[node.localX, node.localY + 0.16, node.localZ]}
-          castShadow
-          onClick={(e) => {
-            e.stopPropagation();
-            harvest(node);
-          }}
-        >
-          <coneGeometry args={[0.22, 0.34, 5]} />
-          <meshStandardMaterial color={i % 2 === 0 ? '#557a3a' : '#6f8d45'} flatShading />
-        </mesh>
-      ))}
+      {claim.resources.map((node) => {
+        if (isParcelResourceDepleted(node.id)) return null;
+        const wx = claim.x + node.localX;
+        const wz = claim.z + node.localZ;
+        const y = getHeightAt(wx, wz) - baseY; // sit on the ground, relative to the parcel group
+        const seed = node.id.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
+        if (node.type === 'wood') {
+          return (
+            <group key={node.id} position={[node.localX, y, node.localZ]} rotation={[0, seed, 0]} onClick={(e) => { e.stopPropagation(); harvest(node); }}>
+              <mesh position={[0, 0.5, 0]} castShadow>
+                <cylinderGeometry args={[0.09, 0.14, 1.0, 5]} />
+                <meshStandardMaterial color="#5a3423" map={getTextureVariant('bark', seed)} flatShading />
+              </mesh>
+              <mesh position={[0, 1.16, 0]} castShadow>
+                <coneGeometry args={[0.54, 1.25, 7]} />
+                <meshStandardMaterial color="#264f31" map={getTextureVariant(seed % 2 === 0 ? 'foliage_pine' : 'foliage_broadleaf', seed)} flatShading />
+              </mesh>
+            </group>
+          );
+        }
+        const ore = node.type === 'gold'
+          ? { color: '#e7c64f', emissive: '#a8761a', emissiveIntensity: 0.55, light: '#ffcf6a' }
+          : node.type === 'silver'
+            ? { color: '#cdd6e0', emissive: '#8fa6c4', emissiveIntensity: 0.35, light: '#bcd2ee' }
+            : { color: '#9aa4ad', emissive: '#000000', emissiveIntensity: 0, light: null as string | null };
+        const big = node.type === 'gold' || node.rarity === 'legendary';
+        return (
+          <group key={node.id} position={[node.localX, y + 0.22, node.localZ]} rotation={[0.2, seed, -0.15]} onClick={(e) => { e.stopPropagation(); harvest(node); }}>
+            <mesh castShadow receiveShadow>
+              <dodecahedronGeometry args={[big ? 0.5 : 0.42, 0]} />
+              <meshStandardMaterial
+                color={ore.color}
+                emissive={ore.emissive}
+                emissiveIntensity={ore.emissiveIntensity}
+                map={node.type === 'stone' ? getTextureVariant('stone', seed) : undefined}
+                metalness={node.type === 'stone' ? 0 : 0.55}
+                roughness={node.type === 'stone' ? 1 : 0.4}
+                flatShading
+              />
+            </mesh>
+            {ore.light && <pointLight color={ore.light} intensity={node.rarity === 'legendary' ? 1.0 : 0.5} distance={2.4} decay={2} />}
+          </group>
+        );
+      })}
     </group>
   );
 }
@@ -3521,7 +3470,7 @@ function canPlaceBuilding(type: BuildingType, x: number, z: number, candidate?: 
       { x: CAMPFIRE.x, z: CAMPFIRE.z, r: 1.0 },
       ...TREES.map((t, i) => ({ t, i })).filter(({ i }) => !isChopped(i)).map(({ t }) => ({ x: t.x, z: t.z, r: 0.45 * t.scale })),
       ...ROCKS.map((r, i) => ({ r, i })).filter(({ i }) => !isMined(i)).map(({ r }) => ({ x: r.x, z: r.z, r: 0.6 * r.scale })),
-      ...allClaimedParcels().flatMap((claim) => parcelResourceNodes(claim).map((node) => ({ x: node.x, z: node.z, r: node.r }))),
+      ...allClaimedParcels().flatMap((claim) => parcelLootColliders(claim)),
       ...(Object.values(NPC_POS) as [number, number, number][]).map((p) => ({ x: p[0], z: p[2], r: 0.9 })),
     ];
     for (const c of staticObstacles) {
@@ -3543,7 +3492,7 @@ function canPlaceBuilding(type: BuildingType, x: number, z: number, candidate?: 
     { x: CAMPFIRE.x, z: CAMPFIRE.z, r: 1.0 },
     ...TREES.map((t, i) => ({ t, i })).filter(({ i }) => !isChopped(i)).map(({ t }) => ({ x: t.x, z: t.z, r: 0.45 * t.scale })),
     ...ROCKS.map((r, i) => ({ r, i })).filter(({ i }) => !isMined(i)).map(({ r }) => ({ x: r.x, z: r.z, r: 0.6 * r.scale })),
-    ...allClaimedParcels().flatMap((claim) => parcelResourceNodes(claim).map((node) => ({ x: node.x, z: node.z, r: node.r }))),
+    ...allClaimedParcels().flatMap((claim) => parcelLootColliders(claim)),
     ...w.buildings.filter((b) => b.type !== 'block').map((b) => ({ x: b.x, z: b.z, r: BUILD_RADIUS[b.type] })),
     ...extraBuildings.filter((b) => b.type !== 'block').map((b) => ({ x: b.x, z: b.z, r: BUILD_RADIUS[b.type] })),
     ...(Object.values(NPC_POS) as [number, number, number][]).map((p) => ({ x: p[0], z: p[2], r: 0.9 })),
