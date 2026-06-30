@@ -1749,3 +1749,11 @@ la parcela propia. Quité el `<Html>` del nombre de parcela (rompe inmersión; l
 claim siguen mostrando su letra). DESIGN_PILLARS: pilar 6 (frontend simple) y 7 (inmersión/realismo).
 Pendiente (pasada enfocada): render del terreno por biomas (shader, gradiente sin parche) + restyle
 de la parcela + unión de muros 45°/perpendicular. `tsc` limpio. **Commit:** _(este commit)_
+
+### 2026-06-30 · Render del terreno por biomas (shader, gradiente suave)
+**Pedido (humano):** que el suelo no parezca tapiz/parche; usar las texturas de bioma con gradiente.
+**Qué se hizo:** `Terrain` ahora usa un MeshStandardMaterial con `onBeforeCompile` que mezcla las 4
+texturas (pasto base + arena/nieve/seco) por POSICIÓN del mundo, con los mismos centros/radios que
+`src/lib/biome.ts`; los biomas raros entran con `smoothstep` → regiones amplias y bordes suaves, sin
+parches. El centro (aldea) queda pasto puro. Conserva sombras (receiveShadow) e iluminación PBR.
+`tsc` limpio; solo Scene3D.tsx. **Commit:** _(este commit)_

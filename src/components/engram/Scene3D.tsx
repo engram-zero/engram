@@ -1301,6 +1301,11 @@ function makeRadialTexture(core: string, mid = 'rgba(255,255,255,0)') {
 // ── Terrain ──
 // A single displaced plane whose vertices read their height from getHeightAt,
 // so the visible ground and the walked-on ground are literally the same surface.
+// The ground blends FOUR biome textures (meadow grass + sand + snow + dry) by world
+// position, matching the biome regions in src/lib/biome.ts. Meadow is the base
+// everywhere; the rare biomes fade IN smoothly near their centres (smoothstep), so
+// the terrain reads as broad regions with soft gradients instead of a tiled patch.
+const BIOME_TILE = 6.0; // world units per texture repeat
 function Terrain() {
   const geom = useMemo(() => {
     const size = GROUND_RADIUS * 2;
@@ -1314,11 +1319,44 @@ function Terrain() {
     g.computeVertexNormals();
     return g;
   }, []);
-  return (
-    <mesh geometry={geom} receiveShadow>
-      <meshStandardMaterial color="#7c8a5c" map={getTexture('terrain_grass', { repeat: Math.round(GROUND_RADIUS / 3) })} roughness={1} />
-    </mesh>
-  );
+
+  const material = useMemo(() => {
+    const grass = getTexture('terrain_grass', {});
+    const sand = getTexture('terrain_sand', {});
+    const snow = getTexture('terrain_snow', {});
+    const dry = getTexture('terrain_dry', {});
+    for (const t of [grass, sand, snow, dry]) if (t) t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    const m = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 1, map: grass ?? undefined });
+    m.onBeforeCompile = (shader) => {
+      shader.uniforms.uSand = { value: sand };
+      shader.uniforms.uSnow = { value: snow };
+      shader.uniforms.uDry = { value: dry };
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nvarying vec2 vBiomeXZ;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvBiomeXZ = (modelMatrix * vec4(transformed, 1.0)).xz;');
+      shader.fragmentShader = shader.fragmentShader
+        .replace(
+          '#include <common>',
+          '#include <common>\nvarying vec2 vBiomeXZ;\nuniform sampler2D uSand;\nuniform sampler2D uSnow;\nuniform sampler2D uDry;',
+        )
+        .replace(
+          '#include <map_fragment>',
+          `vec2 buv = vBiomeXZ / ${BIOME_TILE.toFixed(1)};
+           float wSnow = smoothstep(0.0, 0.45, 1.0 - distance(vBiomeXZ, vec2(-128.0, -116.0)) / 118.0);
+           float wSand = smoothstep(0.0, 0.45, 1.0 - distance(vBiomeXZ, vec2(138.0, 122.0)) / 126.0);
+           float wDry  = smoothstep(0.0, 0.45, 1.0 - distance(vBiomeXZ, vec2(124.0, -112.0)) / 104.0);
+           float wsum = 1.0 + wSnow + wSand + wDry;
+           vec3 cBiome = (texture2D(map, buv).rgb
+             + texture2D(uSnow, buv).rgb * wSnow
+             + texture2D(uSand, buv).rgb * wSand
+             + texture2D(uDry,  buv).rgb * wDry) / wsum;
+           diffuseColor.rgb *= pow(cBiome, vec3(2.2));`,
+        );
+    };
+    return m;
+  }, []);
+
+  return <mesh geometry={geom} material={material} receiveShadow />;
 }
 
 // ── Moon ── emissive disc + an additive halo sprite.
