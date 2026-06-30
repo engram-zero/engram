@@ -1581,6 +1581,19 @@ de 10min y piso seguro `max(24 HP, 35% maxHp)` para que el asedio no pueda borra
 sí solo. `nature-agents.ts` ahora clampa spawns a 2-6min y el normalizador de mundo eleva bundles
 viejos a mínimo 2min. Sin cambios en `Scene3D.tsx`. **Commit:** _(este commit)_
 
+### 2026-06-30 · Parcel-save tolerante a 0G 503
+**Pedido (humano):** comprar parcela mostraba "request failed 503" después de "saving data to 0G"
+porque el storage/indexer Standard de 0G está caído/deprecado; el claim no debe romperse por eso.
+**Prompt sintetizado:** Hacer que `/api/parcel-save` use la misma estrategia estable que memoria:
+forzar Turbo cuando el cliente venga de Standard, reintentar la subida con backoff, y si 0G sigue
+caído devolver un estado `pending` legible para que el cliente pueda continuar el claim on-chain con
+metadata diferida en vez de arrojar un 503 crudo.
+**Qué se hizo:** `parcel-save` calcula el `rootHash`, sube en Turbo con retries, y ante fallos
+transitorios devuelve `202` con `storageStatus: "pending"`, `retryQueued` best-effort y `message`
+claro. `saveParcelData` acepta ese estado pendiente y también degrada fallos de red/5xx a un
+resultado local con `dataRoot=null`, evitando "request failed". Sin cambios en `Scene3D.tsx`.
+**Commit:** _(este commit)_
+
 ### 2026-06-29 · Lote de pulido aéreo/combate (deselección, muros, sombras, casas, cono de ataque)
 **Pedido (humano):** del playtest — #9 click izq. no deselecciona en aérea; #10 no se pueden rotar
 muros a 45° y a veces no se puede colocar otro muro; #2 árboles sin sombra; #8 casas muy chicas;
