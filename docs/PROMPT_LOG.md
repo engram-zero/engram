@@ -1525,3 +1525,21 @@ quita cualquier marcador markdown suelto (`* _ \` # ~ >`), colapsando espacios. 
 pantalla queda intacto; solo cambia lo que se pronuncia. Si tras sanear queda vacío, no habla.
 **Qué se hizo:** helper `forSpeech` aplicado al SSML de `speakText`. (tsc local con errores ajenos
 del WIP de Codex en world.ts/types.ts — `speech.ts` no toca esos tipos.) **Commit:** _(este commit)_
+
+### 2026-06-29 · Prompt 24 — árboles por etapas + almacén 0G
+**Pedido (humano):** implementar árboles que no reaparezcan maduros de golpe: etapa persistida
+(`sapling → young → mature`), rendimiento distinto por etapa, y un almacén para guardar wood/menas
+por encima del cap de bolsillo.
+**Prompt sintetizado:** Mantener `map.ts` como fuente de posiciones; añadir estado dinámico por
+índice en `WorldState.treeGrowth` con `stage`, `nextStageAt`, `updatedAt`; `harvestTree` debe rendir
+según etapa (`8/24/50 wood`) y al agotarse iniciar regrowth como sapling. El agente Tierra/economía
+avanza etapas con la cadencia de Prompt 23 F3, y `woodQuote` debe calcular scarcity desde árboles
+maduros disponibles. Añadir `WorldState.storage` para `wood`/`stone`/`silver`/`gold`, con
+depositar/retirar persistido en el bundle 0G y sin subir el cap de acarreo. Exponer helpers de etapa
+para que `Scene3D` renderice escala por árbol y documentar el seam en `COORDINATION.md`.
+**Qué se hizo:** `TreeGrowthState`/`storage` normalizados y clonados en `world.ts`; helpers
+`treeStageFor`, `treeIsVisible`, `matureTreeCount`, `advanceTreeGrowth`, `depositResource` y
+`withdrawResource`; render instanciado escala sapling/young/mature; HUD muestra etapa/rendimiento y
+panel "0G Storage"; `client-page` avanza etapas con Tierra; docs actualizados. `npx tsc --noEmit`
+limpio.
+**Commit:** _(este commit)_

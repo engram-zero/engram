@@ -45,7 +45,8 @@ export function computeNatureSnapshot(world: WorldState): NatureZoneSnapshot[] {
   TREES.forEach((tree, index) => {
     const zone = byZone.get(zoneOfPoint(tree.x, tree.z));
     if (!zone) return;
-    if (chopped.has(index)) zone.choppedTrees += 1;
+    const growth = world.treeGrowth[index];
+    if (chopped.has(index) || (growth && growth.stage !== 'mature')) zone.choppedTrees += 1;
     else zone.standingTrees += 1;
   });
 
@@ -171,6 +172,7 @@ export function computeEcosystemActivity(
 export function fingerprintNature(world: WorldState): string {
   return [
     world.choppedTrees.length,
+    Object.keys(world.treeGrowth).length,
     world.minedRocks.length,
     world.buildings.length,
     world.parcelClaims.length,

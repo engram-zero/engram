@@ -26,6 +26,9 @@ import {
   upgradeAxe,
   receiveBoughtWood,
   addRepairKits,
+  advanceTreeGrowth,
+  scheduleTreeRegrowth,
+  treeGrowthDueIndexes,
   woodQuote,
   oreQuote,
   MARKET,
@@ -312,6 +315,7 @@ function Game() {
 
   const natureFingerprint = useMemo(() => fingerprintNature(world), [
     world.choppedTrees.length,
+    world.treeGrowth,
     world.minedRocks.length,
     world.buildings.length,
     world.parcelClaims.length,
@@ -391,16 +395,23 @@ function Game() {
   useEffect(() => {
     const earth = world.ecosystem?.earth;
     if (!earth || world.choppedTrees.length === 0) return;
-    const delay = Math.max(1000, earth.nextGrowthAt - Date.now());
+    const nextTreeStageAt = Object.values(world.treeGrowth)
+      .map((growth) => growth.nextStageAt)
+      .filter((at) => at > Date.now())
+      .sort((a, b) => a - b)[0];
+    const wakeAt = Math.min(earth.nextGrowthAt, nextTreeStageAt ?? earth.nextGrowthAt);
+    const delay = Math.max(1000, wakeAt - Date.now());
     const timer = window.setTimeout(() => {
       const current = getWorld();
       const liveEarth = current.ecosystem?.earth;
-      if (!liveEarth || current.choppedTrees.length === 0 || liveEarth.nextGrowthAt > Date.now()) return;
-      const treeIndex = pickTreeToRegrow(current.choppedTrees, liveEarth);
-      if (treeIndex === null) return;
+      const dueGrowth = treeGrowthDueIndexes(current);
+      if (!liveEarth || current.choppedTrees.length === 0 || (dueGrowth.length === 0 && liveEarth.nextGrowthAt > Date.now())) return;
+      const treeIndex = dueGrowth[0] ?? pickTreeToRegrow(current.choppedTrees.filter((id) => !current.treeGrowth[id]), liveEarth);
+      if (treeIndex == null) return;
       const now = Date.now();
-      const choppedTrees = current.choppedTrees.filter((id) => id !== treeIndex);
-      const nextWorld = { ...current, choppedTrees };
+      const advanced = dueGrowth.length > 0 ? advanceTreeGrowth(treeIndex) : { ok: scheduleTreeRegrowth(treeIndex), stage: 'sapling' as const };
+      if (!advanced.ok) return;
+      const nextWorld = getWorld();
       const activity = computeEcosystemActivity(nextWorld, current.ecosystem?.activity, liveEarth.cadenceMs);
       void replaceWorldState({
         ...nextWorld,
@@ -414,14 +425,14 @@ function Game() {
             cadenceMs: activity.treeCadenceMs,
             nextGrowthAt: now + activity.treeCadenceMs,
             nextRockAt: liveEarth.nextRockAt ?? now + activity.rockCadenceMs,
-            summary: `${liveEarth.summary} One sapling stirs back to life in ${zoneLabel(liveEarth.dominantZone)}.`,
+            summary: `${liveEarth.summary} One tree advances to ${advanced.stage ?? 'sapling'} in ${zoneLabel(liveEarth.dominantZone)}.`,
           },
         },
       });
     }, delay);
 
     return () => window.clearTimeout(timer);
-  }, [world.choppedTrees, world.ecosystem?.earth]);
+  }, [world.choppedTrees, world.treeGrowth, world.ecosystem?.earth]);
 
   useEffect(() => {
     const earth = world.ecosystem?.earth;

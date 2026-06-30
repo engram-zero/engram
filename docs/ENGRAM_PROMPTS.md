@@ -1170,6 +1170,14 @@ redespliega. Refuerza "own your world".
 
 ## Prompt 24 — Árboles con etapas de crecimiento + almacén (storage) en 0G
 
+> **✅ CORE DONE — 29 jun 2026.** Implementado en `WorldState.treeGrowth` (etapas
+> `sapling → young → mature`, `nextStageAt` persistido) y `WorldState.storage`
+> (`wood`/`stone`/`silver`/`gold` por encima del cap de bolsillo). `harvestTree` usa
+> rendimientos por etapa (`8/24/50 wood`) y al agotar un árbol inicia regrowth como sapling,
+> no como árbol maduro instantáneo. Tierra avanza etapas con su cadencia económica; `woodQuote`
+> usa árboles maduros disponibles para la scarcity. `Scene3D` renderiza escala por etapa y
+> expone un panel "0G Storage" para depositar/retirar. `npx tsc --noEmit` limpio.
+
 **Para:** Codex (nature-AI / economía / 0G).
 
 ### Contexto del estado actual

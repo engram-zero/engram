@@ -36,6 +36,10 @@ import {
   replaceWorldState,
   harvestTree,
   isChopped,
+  treeIsVisible,
+  treeStageFor,
+  TREE_STAGE_SCALE,
+  TREE_STAGE_YIELD,
   woodIsFull,
   harvestRock,
   isMined,
@@ -65,11 +69,14 @@ import {
   harvestParcelResource,
   recordParcelRentEvent,
   collectParcelRentIncome,
+  depositResource,
   damageBuilding,
   recordDemonSiegeHit,
   recordRaidEvent,
   recordEnemyKill,
   setWalletRelation,
+  withdrawResource,
+  STORAGE_RESOURCES,
   BUILD_COST,
   BUILD_RADIUS,
   RAID_STONE_COST,
@@ -85,6 +92,7 @@ import {
   type WalletRelation,
   type WorldState,
   type OreType,
+  type StoredResourceType,
   type BuildingType,
   type Building,
   type DemonSiegeEvent,
@@ -170,6 +178,7 @@ const TALK_RANGE = 3.2; // how close you must stand before "Press E" appears
 const CHOP_RANGE = 2.8; // how close to a tree before "Press F to chop"
 const MINE_RANGE = 2.8; // how close to a rock before "Hold F to mine"
 const ORE_LABEL: Record<OreType, string> = { stone: 'Stone', silver: 'Silver', gold: 'Gold' };
+const RESOURCE_LABEL: Record<StoredResourceType, string> = { wood: 'Wood', stone: 'Stone', silver: 'Silver', gold: 'Gold' };
 
 // True when (x,z) sits over the creek's water ribbon (half-width matches the River
 // mesh in this file), so footsteps splash instead of crunching on grass.
@@ -498,7 +507,9 @@ function resolveCollision(x: number, z: number): [number, number] {
   if (!isFrontierWalkable(x, z)) [x, z] = clampToBaseWorld(x, z);
   const obstacles = [
     { x: CAMPFIRE.x, z: CAMPFIRE.z, r: 1.0 },
-    ...TREES.map((t, i) => ({ t, i })).filter(({ i }) => !isChopped(i)).map(({ t }) => ({ x: t.x, z: t.z, r: 0.45 * t.scale })),
+    ...TREES.map((t, i) => ({ t, i }))
+      .filter(({ i }) => treeIsVisible(getWorld(), i))
+      .map(({ t, i }) => ({ x: t.x, z: t.z, r: 0.45 * t.scale * TREE_STAGE_SCALE[treeStageFor(getWorld(), i)] })),
     ...ROCKS.map((r, i) => ({ r, i })).filter(({ i }) => !isMined(i)).map(({ r }) => ({ x: r.x, z: r.z, r: 0.6 * r.scale })),
     ...allClaimedParcels().flatMap((claim) => parcelResourceNodes(claim).map((node) => ({ x: node.x, z: node.z, r: node.r }))),
     ...(Object.values(dynamicNpcState)).map((state) => ({ x: state.x, z: state.z, r: 0.6 })),
@@ -1458,13 +1469,13 @@ function TreePart({
   geometry,
   material,
   localY,
-  chopped,
+  world,
 }: {
   items: TreeInst[];
   geometry: THREE.BufferGeometry;
   material: THREE.Material;
   localY: number;
-  chopped: ReadonlySet<number>;
+  world: WorldState;
 }) {
   const ref = useRef<THREE.InstancedMesh>(null);
   const dummy = useMemo(() => new THREE.Object3D(), []);
@@ -1472,13 +1483,15 @@ function TreePart({
     const mesh = ref.current;
     if (!mesh) return;
     items.forEach((t, i) => {
-      // A chopped tree collapses to zero scale (invisible) but keeps its slot.
-      if (chopped.has(t.idx)) {
+      const visible = treeIsVisible(world, t.idx);
+      const stageScale = TREE_STAGE_SCALE[treeStageFor(world, t.idx)];
+      if (!visible) {
         dummy.position.set(t.x, -1000, t.z);
         dummy.scale.setScalar(0);
       } else {
-        dummy.position.set(t.x, getHeightAt(t.x, t.z) + localY * t.scale, t.z);
-        dummy.scale.setScalar(t.scale);
+        const scale = t.scale * stageScale;
+        dummy.position.set(t.x, getHeightAt(t.x, t.z) + localY * scale, t.z);
+        dummy.scale.setScalar(scale);
       }
       dummy.rotation.set(0, t.rot, 0);
       dummy.updateMatrix();
@@ -1486,7 +1499,7 @@ function TreePart({
     });
     mesh.instanceMatrix.needsUpdate = true;
     mesh.computeBoundingSphere();
-  }, [items, localY, chopped, dummy]);
+  }, [items, localY, world, dummy]);
 
   // Shake animation: per-frame matrix update for the currently-hit tree only.
   useFrame((state) => {
@@ -1499,10 +1512,11 @@ function TreePart({
       const shake = treeShake[idx];
       if (!shake || shake.amp <= 0.002) continue;
       const slot = items.findIndex((it) => it.idx === idx);
-      if (slot < 0 || chopped.has(idx)) continue;
+      if (slot < 0 || !treeIsVisible(world, idx)) continue;
       const tree = items[slot];
-      dummy.position.set(tree.x, getHeightAt(tree.x, tree.z) + localY * tree.scale, tree.z);
-      dummy.scale.setScalar(tree.scale);
+      const scale = tree.scale * TREE_STAGE_SCALE[treeStageFor(world, idx)];
+      dummy.position.set(tree.x, getHeightAt(tree.x, tree.z) + localY * scale, tree.z);
+      dummy.scale.setScalar(scale);
       dummy.rotation.set(
         Math.sin(t * 38) * shake.amp * 0.18,
         tree.rot,
@@ -1604,9 +1618,7 @@ function InstancedTrees() {
   // Carry each tree's global index so chopping can target individual trees.
   const withIdx = useMemo<TreeInst[]>(() => TREES.map((t, idx) => ({ ...t, idx })), []);
 
-  // Re-render instance matrices when the chopped set changes.
   const world = useWorld();
-  const chopped = useMemo(() => new Set(world.choppedTrees), [world.choppedTrees]);
 
   const geo = useMemo(
     () => ({
@@ -1663,16 +1675,16 @@ function InstancedTrees() {
       {Array.from({ length: TREE_BUCKETS }, (_, b) => (
         <group key={b}>
           {/* pines: trunk + three stacked cones */}
-          <TreePart items={groups.pine[b]} geometry={geo.trunk} material={buckets[b].bark} localY={0.7} chopped={chopped} />
-          <TreePart items={groups.pine[b]} geometry={geo.pineA} material={buckets[b].pine} localY={1.9} chopped={chopped} />
-          <TreePart items={groups.pine[b]} geometry={geo.pineB} material={buckets[b].pine} localY={2.8} chopped={chopped} />
-          <TreePart items={groups.pine[b]} geometry={geo.pineC} material={buckets[b].pine} localY={3.6} chopped={chopped} />
+          <TreePart items={groups.pine[b]} geometry={geo.trunk} material={buckets[b].bark} localY={0.7} world={world} />
+          <TreePart items={groups.pine[b]} geometry={geo.pineA} material={buckets[b].pine} localY={1.9} world={world} />
+          <TreePart items={groups.pine[b]} geometry={geo.pineB} material={buckets[b].pine} localY={2.8} world={world} />
+          <TreePart items={groups.pine[b]} geometry={geo.pineC} material={buckets[b].pine} localY={3.6} world={world} />
           {/* broadleaf: taller trunk + two foliage clumps */}
-          <TreePart items={groups.broad[b]} geometry={geo.broadTrunk} material={buckets[b].bark} localY={0.8} chopped={chopped} />
-          <TreePart items={groups.broad[b]} geometry={geo.leaf} material={buckets[b].broad} localY={2.3} chopped={chopped} />
-          <TreePart items={groups.broad[b]} geometry={geo.leafS} material={buckets[b].broad} localY={3.0} chopped={chopped} />
+          <TreePart items={groups.broad[b]} geometry={geo.broadTrunk} material={buckets[b].bark} localY={0.8} world={world} />
+          <TreePart items={groups.broad[b]} geometry={geo.leaf} material={buckets[b].broad} localY={2.3} world={world} />
+          <TreePart items={groups.broad[b]} geometry={geo.leafS} material={buckets[b].broad} localY={3.0} world={world} />
           {/* bushes: a single low clump */}
-          <TreePart items={groups.bush[b]} geometry={geo.bush} material={buckets[b].bushLeaf} localY={0.55} chopped={chopped} />
+          <TreePart items={groups.bush[b]} geometry={geo.bush} material={buckets[b].bushLeaf} localY={0.55} world={world} />
         </group>
       ))}
     </group>
@@ -4651,6 +4663,16 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     }, 5000);
   }, []);
 
+  const moveStorage = useCallback((type: StoredResourceType, direction: 'deposit' | 'withdraw', amount: number) => {
+    const result = direction === 'deposit' ? depositResource(type, amount) : withdrawResource(type, amount);
+    showToolFeedback({
+      text: result.ok
+        ? `${direction === 'deposit' ? 'Stored' : 'Withdrew'} ${result.moved} ${RESOURCE_LABEL[type]}.`
+        : result.reason ?? 'Storage action failed.',
+      tone: result.ok ? 'good' : 'bad',
+    });
+  }, [showToolFeedback]);
+
   const handleDemonSiege = useCallback((event: DemonSiegeEvent, building: Building) => {
     markBuildDraftDirty();
     const hp = hpOf(building);
@@ -5056,7 +5078,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
             d.markBuildDraftDirty();
           }
           if (canChop) {
-            const { depleted } = harvestTree(tree!); // grant 1 wood; deplete after TREE_WOOD
+            const { depleted } = harvestTree(tree!); // stage yield decides when regrowth starts
             d.showPickup('Wood', '#8fd06a'); // Prompt 16: floating "+1" feedback
             if (depleted) {
               setNearbyTree(null); // tree gone; Player repicks next frame
@@ -5485,6 +5507,31 @@ export default function Scene3D({ memories = null, active = null, talking = fals
             {world.repairKits > 0 && (
               <span className="inline-flex items-center rounded-md bg-black/45 px-2.5 py-1" title="Repair kits">🧰 {world.repairKits}</span>
             )}
+            <div className="pointer-events-auto mt-1 w-48 rounded-lg border border-[#5a4a28]/80 bg-black/55 p-2 text-[11px] shadow-lg backdrop-blur-sm">
+              <div className="mb-1 flex items-center justify-between text-[#d6b84a]">
+                <span className="font-semibold tracking-[0.08em]">0G Storage</span>
+                <span className="text-[#f4e8d0]/55">warehouse</span>
+              </div>
+              {STORAGE_RESOURCES.map((type) => (
+                <div key={type} className="mb-1 grid grid-cols-[1fr_auto_auto] items-center gap-1">
+                  <span>{RESOURCE_LABEL[type]}: <strong>{Math.round(world.storage[type] * 10) / 10}</strong></span>
+                  <button
+                    onClick={() => moveStorage(type, 'deposit', world.inventory[type])}
+                    disabled={world.inventory[type] <= 0}
+                    className="rounded border border-[#6a5832] px-1.5 py-0.5 text-[#f4e8d0]/85 hover:border-[#d6b84a] disabled:opacity-35"
+                  >
+                    Dep
+                  </button>
+                  <button
+                    onClick={() => moveStorage(type, 'withdraw', 10)}
+                    disabled={world.storage[type] <= 0}
+                    className="rounded border border-[#6a5832] px-1.5 py-0.5 text-[#f4e8d0]/85 hover:border-[#d6b84a] disabled:opacity-35"
+                  >
+                    +10
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
           <button
             onClick={switchView}
@@ -5996,6 +6043,9 @@ Left-click to look around · right-click to act · WASD to walk · V for aerial
               ) : (
                 <div className="rounded-2xl border border-[#6a8a4a] px-5 py-2.5 text-center text-sm font-semibold text-[#f4e8d0] shadow-lg" style={{ background: 'rgba(16,20,10,0.9)' }}>
                   Hold <span className="text-[#8fd06a]">F</span> to chop
+                  <div className="mt-1 text-[11px] font-normal capitalize text-[#f4e8d0]/65">
+                    {treeStageFor(world, nearbyTree)} tree · up to {TREE_STAGE_YIELD[treeStageFor(world, nearbyTree)]} wood
+                  </div>
                   <div className="mt-1.5 h-2 w-40 overflow-hidden rounded-full bg-black/55">
                     <div className="h-full rounded-full bg-[#8fd06a] transition-[width] duration-75" style={{ width: `${chopPct}%` }} />
                   </div>
@@ -6097,6 +6147,9 @@ Left-click to look around · right-click to act · WASD to walk · V for aerial
                   className="rounded-2xl border border-[#6a8a4a] bg-[rgba(16,20,10,0.92)] px-4 py-3 text-center text-sm font-semibold text-[#f4e8d0]"
                 >
                   Hold to chop
+                  <div className="mt-1 text-[11px] font-normal capitalize text-[#f4e8d0]/65">
+                    {treeStageFor(world, nearbyTree)} · {TREE_STAGE_YIELD[treeStageFor(world, nearbyTree)]} wood
+                  </div>
                   <div className="mt-1.5 h-2 w-32 overflow-hidden rounded-full bg-black/55">
                     <div className="h-full rounded-full bg-[#8fd06a] transition-[width] duration-75" style={{ width: `${chopPct}%` }} />
                   </div>

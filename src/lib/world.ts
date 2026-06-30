@@ -15,9 +15,9 @@
 //     NOT cross-device, NOT on-chain).
 
 import { useSyncExternalStore } from 'react';
-import { BLOCK_SCALE_MAX, BLOCK_SCALE_MIN, BLOCK_UNIT, type DemonSiegeEvent, type EcosystemState, type OreType, type ParcelClaim, type ParcelRentEvent, type RaidEvent, type RepairEvent, type ResourceType, type WalletRelation, type WorldState, type Building, type BuildingType } from '@/lib/types';
+import { BLOCK_SCALE_MAX, BLOCK_SCALE_MIN, BLOCK_UNIT, type DemonSiegeEvent, type EcosystemState, type OreType, type ParcelClaim, type ParcelRentEvent, type RaidEvent, type RepairEvent, type ResourceType, type StoredResourceType, type TreeGrowthStage, type TreeGrowthState, type WalletRelation, type WorldState, type Building, type BuildingType } from '@/lib/types';
 
-export type { DemonSiegeEvent, EcosystemState, OreType, ParcelClaim, ParcelRentEvent, RaidEvent, RepairEvent, ResourceType, WalletRelation, WorldState, Building, BuildingType } from '@/lib/types';
+export type { DemonSiegeEvent, EcosystemState, OreType, ParcelClaim, ParcelRentEvent, RaidEvent, RepairEvent, ResourceType, StoredResourceType, TreeGrowthStage, TreeGrowthState, WalletRelation, WorldState, Building, BuildingType } from '@/lib/types';
 
 /** How much wood the player can carry before they must use/drop some. Raised to
  * support AI-built structures and the pricier builds near the village centre. */
@@ -43,7 +43,9 @@ const DEMON_SIEGE_EVENT_TTL_MS = 1000 * 60 * 60 * 24 * 14;
 
 export const EMPTY_WORLD: WorldState = {
   inventory: { wood: 0, stone: 0, coin: 0, silver: 0, gold: 0 },
+  storage: { wood: 0, stone: 0, silver: 0, gold: 0 },
   choppedTrees: [],
+  treeGrowth: {},
   minedRocks: [],
   buildings: [],
   enemiesKilled: 0,
@@ -130,6 +132,12 @@ export const RESOURCE_BASE_PRICE: Record<'wood' | 'stone' | 'silver' | 'gold', n
   wood: 3, stone: 4.5, silver: 13, gold: 33,
 };
 
+export const TREE_STAGE_YIELD: Record<TreeGrowthStage, number> = { sapling: 8, young: 24, mature: 50 };
+export const TREE_STAGE_SCALE: Record<TreeGrowthStage, number> = { sapling: 0.34, young: 0.68, mature: 1 };
+export const TREE_GROWTH_FORMULA =
+  'nextStageAt = now + clamp(earth.treeCadenceMs / 2, 45s, 12m); sapling -> young -> mature; mature removes treeGrowth and choppedTrees';
+export const STORAGE_RESOURCES: StoredResourceType[] = ['wood', 'stone', 'silver', 'gold'];
+
 export interface WoodQuote {
   /** Fair mid price (coin/unit) before the house spread. */
   mid: number;
@@ -139,6 +147,28 @@ export interface WoodQuote {
   buy: number;
   /** Most Aldric will pay per unit even when haggled hard (≈ the fair mid). */
   haggleCeil: number;
+}
+
+export function treeGrowthStageFor(world: WorldState, index: number): TreeGrowthStage | null {
+  return world.treeGrowth[index]?.stage ?? null;
+}
+
+export function treeStageFor(world: WorldState, index: number): TreeGrowthStage {
+  return treeGrowthStageFor(world, index) ?? 'mature';
+}
+
+export function treeIsVisible(world: WorldState, index: number): boolean {
+  return !world.choppedTrees.includes(index) || !!world.treeGrowth[index];
+}
+
+export function matureTreeCount(world: WorldState, totalTrees: number): number {
+  const growing = new Set(
+    Object.entries(world.treeGrowth)
+      .filter(([, growth]) => growth.stage !== 'mature')
+      .map(([index]) => Number(index))
+  );
+  const felled = new Set(world.choppedTrees.filter((index) => !world.treeGrowth[index]));
+  return Math.max(0, totalTrees - growing.size - felled.size);
 }
 
 /**
@@ -159,8 +189,8 @@ export function quoteFromScarcity(basePrice: number, fractionRemaining: number, 
 }
 
 export function woodQuote(world: WorldState, totalTrees: number): WoodQuote {
-  const remaining = Math.max(0, totalTrees - world.choppedTrees.length);
-  const forest = totalTrees > 0 ? remaining / totalTrees : 1; // 1 full → 0 clearcut
+  const remaining = matureTreeCount(world, totalTrees);
+  const forest = totalTrees > 0 ? remaining / totalTrees : 1; // 1 full mature forest → 0 mature trees
   return quoteFromScarcity(RESOURCE_BASE_PRICE.wood, forest, world.inventory.coin);
 }
 
@@ -579,6 +609,38 @@ function normalizeParcelResourceIds(raw: unknown): string[] {
   return Array.from(new Set(raw.map((id) => cleanId(id, '')).filter(Boolean))).slice(0, MAX_DEPLETED_PARCEL_RESOURCES);
 }
 
+function normalizeStorage(raw: unknown): Record<StoredResourceType, number> {
+  const p = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
+  return {
+    wood: Math.max(0, Number(p.wood ?? 0)),
+    stone: Math.max(0, Number(p.stone ?? 0)),
+    silver: Math.max(0, Number(p.silver ?? 0)),
+    gold: Math.max(0, Number(p.gold ?? 0)),
+  };
+}
+
+function cleanTreeGrowthStage(raw: unknown): TreeGrowthStage {
+  return raw === 'young' || raw === 'mature' ? raw : 'sapling';
+}
+
+function normalizeTreeGrowth(raw: unknown): Record<number, TreeGrowthState> {
+  if (!raw || typeof raw !== 'object') return {};
+  const out: Record<number, TreeGrowthState> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    const index = Number(key);
+    if (!Number.isInteger(index) || index < 0) continue;
+    if (!value || typeof value !== 'object') continue;
+    const p = value as Record<string, unknown>;
+    const updatedAt = Math.max(0, Math.round(Number(p.updatedAt ?? Date.now()))) || Date.now();
+    out[index] = {
+      stage: cleanTreeGrowthStage(p.stage),
+      nextStageAt: Math.max(0, Math.round(Number(p.nextStageAt ?? 0))),
+      updatedAt,
+    };
+  }
+  return out;
+}
+
 function normalizeTreasury(raw: unknown, baseUpdatedAt: number): NonNullable<EcosystemState['treasury']> | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
   const p = raw as Record<string, unknown>;
@@ -704,7 +766,9 @@ export function normalizeWorldState(raw: unknown): WorldState {
       silver: Math.max(0, Number(p?.inventory?.silver ?? 0)),
       gold: Math.max(0, Number(p?.inventory?.gold ?? 0)),
     },
+    storage: normalizeStorage(p?.storage),
     choppedTrees,
+    treeGrowth: normalizeTreeGrowth(p?.treeGrowth),
     minedRocks,
     buildings: normalizeBuildings(p?.buildings),
     enemiesKilled: Math.max(0, Number(p?.enemiesKilled ?? 0)),
@@ -726,7 +790,9 @@ export function normalizeWorldState(raw: unknown): WorldState {
 export function cloneWorldState(value: WorldState = EMPTY_WORLD): WorldState {
   return {
     inventory: { ...value.inventory },
+    storage: { ...value.storage },
     choppedTrees: [...value.choppedTrees],
+    treeGrowth: Object.fromEntries(Object.entries(value.treeGrowth).map(([index, growth]) => [index, { ...growth }])),
     minedRocks: [...value.minedRocks],
     buildings: value.buildings.map((b) => ({ ...b })),
     enemiesKilled: value.enemiesKilled,
@@ -858,25 +924,52 @@ export function addResource(type: ResourceType, amount: number) {
   return commit({ ...state, inventory: { ...state.inventory, [type]: Math.max(0, state.inventory[type] + amount) } });
 }
 
+function carryCapFor(type: StoredResourceType): number {
+  return type === 'wood' ? MAX_WOOD : ORE_MAX[type];
+}
+
+export function depositResource(type: StoredResourceType, amount: number): { ok: boolean; moved: number; reason?: string } {
+  const available = Math.max(0, state.inventory[type]);
+  const moved = Math.max(0, Math.min(available, Math.floor(amount)));
+  if (moved <= 0) return { ok: false, moved: 0, reason: `No ${type} to deposit.` };
+  commit({
+    ...state,
+    inventory: { ...state.inventory, [type]: available - moved },
+    storage: { ...state.storage, [type]: state.storage[type] + moved },
+  });
+  return { ok: true, moved };
+}
+
+export function withdrawResource(type: StoredResourceType, amount: number): { ok: boolean; moved: number; reason?: string } {
+  const stored = Math.max(0, state.storage[type]);
+  const room = Math.max(0, carryCapFor(type) - state.inventory[type]);
+  const moved = Math.max(0, Math.min(stored, room, Math.floor(amount)));
+  if (moved <= 0) return { ok: false, moved: 0, reason: room <= 0 ? `${type} pocket is full.` : `No stored ${type}.` };
+  commit({
+    ...state,
+    inventory: { ...state.inventory, [type]: state.inventory[type] + moved },
+    storage: { ...state.storage, [type]: stored - moved },
+  });
+  return { ok: true, moved };
+}
+
 export function recordEnemyKill() {
   return commit({ ...state, enemiesKilled: state.enemiesKilled + 1 });
 }
 
-/** Chop a tree (by its TREES index): mark it chopped + grant wood (capped at
- * MAX_WOOD). No-op if already chopped or already carrying the max. */
+/** Legacy one-shot chop path: grant wood, then start the Prompt 24 regrowth cycle. */
 export function chopTree(index: number, woodYield = 3) {
-  if (state.choppedTrees.includes(index)) return;
+  if (!treeIsVisible(state, index)) return;
   if (state.inventory.wood >= MAX_WOOD) return; // can't carry more
   const wood = Math.min(MAX_WOOD, state.inventory.wood + woodYield);
-  return commit({
+  return commit(startTreeRegrowth(index, {
     ...state,
     inventory: { ...state.inventory, wood },
-    choppedTrees: [...state.choppedTrees, index],
-  });
+  }));
 }
 
 export function isChopped(index: number): boolean {
-  return state.choppedTrees.includes(index);
+  return !treeIsVisible(state, index);
 }
 
 /** True when the player can't carry any more wood. */
@@ -990,35 +1083,91 @@ export function harvestRock(index: number, ore: OreType = 'stone', options: Harv
   return { depleted, gained: true, paid: cost > 0, cost: cost || undefined };
 }
 
-/** Each fill of the chop bar grants ONE unit of wood (like the original pacing);
- * the tree is felled after TREE_CHOPS fills, so a full tree yields 20 wood but
- * takes ~4x longer than before to chop down. */
-export const TREE_CHOPS = 20;
+/** Prompt 24 stage yields; kept under the legacy TREE_* names for older imports. */
+export const TREE_CHOPS = TREE_STAGE_YIELD.mature;
 export const WOOD_PER_CHOP = 1;
-export const TREE_WOOD = TREE_CHOPS * WOOD_PER_CHOP; // 20
+export const TREE_WOOD = TREE_STAGE_YIELD.mature;
 
 // Transient per-tree extraction progress (not persisted — only the final
 // "chopped" state matters for the world; partial harvest resets on reload).
 const harvested: Record<number, number> = {};
 
+function treeGrowthDelayMs(value: WorldState = state): number {
+  const cadence = value.ecosystem?.activity?.treeCadenceMs ?? value.ecosystem?.earth?.cadenceMs ?? 1000 * 60 * 4;
+  return Math.max(1000 * 45, Math.min(1000 * 60 * 12, Math.round(cadence / 2)));
+}
+
+function startTreeRegrowth(index: number, value: WorldState = state): WorldState {
+  const now = Date.now();
+  return {
+    ...value,
+    choppedTrees: Array.from(new Set([...value.choppedTrees, index])),
+    treeGrowth: {
+      ...value.treeGrowth,
+      [index]: { stage: 'sapling', nextStageAt: now + treeGrowthDelayMs(value), updatedAt: now },
+    },
+  };
+}
+
+export function advanceTreeGrowth(index: number): { ok: boolean; stage?: TreeGrowthStage } {
+  const growth = state.treeGrowth[index];
+  if (!growth) return { ok: false };
+  const now = Date.now();
+  const nextStage: TreeGrowthStage | null =
+    growth.stage === 'sapling' ? 'young'
+    : growth.stage === 'young' ? 'mature'
+    : null;
+  if (!nextStage) {
+    const { [index]: _done, ...treeGrowth } = state.treeGrowth;
+    commit({ ...state, treeGrowth, choppedTrees: state.choppedTrees.filter((id) => id !== index) });
+    return { ok: true, stage: 'mature' };
+  }
+  const nextTreeGrowth = {
+    ...state.treeGrowth,
+    [index]: { stage: nextStage, nextStageAt: nextStage === 'mature' ? 0 : now + treeGrowthDelayMs(state), updatedAt: now },
+  };
+  if (nextStage === 'mature') {
+    const { [index]: _done, ...treeGrowth } = nextTreeGrowth;
+    commit({ ...state, treeGrowth, choppedTrees: state.choppedTrees.filter((id) => id !== index) });
+  } else {
+    commit({ ...state, treeGrowth: nextTreeGrowth });
+  }
+  return { ok: true, stage: nextStage };
+}
+
 /**
  * Extract ONE unit of wood from a tree (called each time the player holds the
- * chop key long enough). After TREE_WOOD units the tree is fully chopped and
- * vanishes. No-op (gained:false) if already chopped or the player is full.
+ * chop key long enough). Stage yield decides when it becomes a sapling again.
+ * No-op (gained:false) if fully felled or the player is full.
  */
 export function harvestTree(index: number): { depleted: boolean; gained: boolean } {
-  if (state.choppedTrees.includes(index)) return { depleted: true, gained: false };
+  if (!treeIsVisible(state, index)) return { depleted: true, gained: false };
   if (state.inventory.wood >= MAX_WOOD) return { depleted: false, gained: false };
-  const units = (harvested[index] = (harvested[index] ?? 0) + 1);
-  const depleted = units >= TREE_CHOPS;
+  const stage = treeStageFor(state, index);
   // Sharper axe (bought from Aldric) doubles the wood gained per chop.
   const yieldPerChop = WOOD_PER_CHOP * (state.axeLevel >= 1 ? 2 : 1);
+  const units = (harvested[index] = (harvested[index] ?? 0) + yieldPerChop);
+  const depleted = units >= TREE_STAGE_YIELD[stage];
+  const next = depleted ? startTreeRegrowth(index, state) : state;
   commit({
-    ...state,
-    inventory: { ...state.inventory, wood: Math.min(MAX_WOOD, state.inventory.wood + yieldPerChop) },
-    choppedTrees: depleted ? [...state.choppedTrees, index] : state.choppedTrees,
+    ...next,
+    inventory: { ...next.inventory, wood: Math.min(MAX_WOOD, next.inventory.wood + yieldPerChop) },
   });
+  if (depleted) harvested[index] = 0;
   return { depleted, gained: true };
+}
+
+export function treeGrowthDueIndexes(value: WorldState = state, now = Date.now()): number[] {
+  return Object.entries(value.treeGrowth)
+    .filter(([, growth]) => growth.nextStageAt > 0 && growth.nextStageAt <= now)
+    .map(([index]) => Number(index))
+    .filter((index) => Number.isInteger(index));
+}
+
+export function scheduleTreeRegrowth(index: number): boolean {
+  if (!state.choppedTrees.includes(index)) return false;
+  commit(startTreeRegrowth(index, state));
+  return true;
 }
 
 // ── Market actions (coin sinks bought from Aldric) ────────────────────────────
@@ -1030,7 +1179,8 @@ export function harvestTree(index: number): { depleted: boolean; gained: boolean
  * forest is already whole. The caller charges {@link SAPLING_COST} coin. */
 export function replantTree(): boolean {
   if (state.choppedTrees.length === 0) return false;
-  commit({ ...state, choppedTrees: state.choppedTrees.slice(0, -1) });
+  const index = state.choppedTrees[state.choppedTrees.length - 1];
+  commit(startTreeRegrowth(index, state));
   return true;
 }
 

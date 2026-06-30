@@ -34,6 +34,12 @@ export function setWorldPersistence(p: WorldPersistence): void; // register your
 - **world/UI dev owns:** the gameplay store + actions (`chopTree`, `addResource`,
   `useWorld`) and the default `localWorldPersistence` (localStorage). DON'T change the
   store's public API.
+- **Prompt 24 seam:** tree growth is dynamic state on `WorldState.treeGrowth` keyed by
+  `TREES` index (`sapling`/`young`/`mature`, `nextStageAt`) while positions still live in
+  `map.ts`. Scene code should read `treeStageFor(...)`/`treeIsVisible(...)` from
+  `world.ts` instead of inferring from `choppedTrees` alone. Extra resources live in
+  `WorldState.storage` (`wood`/`stone`/`silver`/`gold`) and move only through
+  `depositResource`/`withdrawResource`, so carry caps remain separate from 0G storage.
 - **martelaxe owns:** the 0G/contract persistence adapter. Current MVP:
   `createBundleWorldPersistence(networkType)` in `src/lib/world-0g.ts`, registered from
   `src/app/client-page.tsx`. **You do not need to touch Scene3D or gameplay code** for

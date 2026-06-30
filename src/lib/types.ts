@@ -7,6 +7,8 @@ export type NPCName = 'aldric' | 'maren' | 'sable';
 export type ResourceType = 'wood' | 'stone' | 'coin' | 'silver' | 'gold';
 /** Minerals you can mine out of rock outcrops (a subset of ResourceType). */
 export type OreType = 'stone' | 'silver' | 'gold';
+export type StoredResourceType = 'wood' | OreType;
+export type TreeGrowthStage = 'sapling' | 'young' | 'mature';
 export type WalletRelation = 'neutral' | 'allied' | 'hostile';
 export type NatureZoneId = 'north_forest' | 'riverlands' | 'east_hills' | 'south_fields' | 'west_grove';
 export type FaunaMood = 'hostile' | 'wary' | 'neutral';
@@ -90,6 +92,12 @@ export interface WorldTreasuryState {
   paidMiningRevenue: number;
   paidMiningCount: number;
   orePurchased: Record<OreType, number>;
+}
+
+export interface TreeGrowthState {
+  stage: TreeGrowthStage;
+  nextStageAt: number;
+  updatedAt: number;
 }
 
 export type BuildingType = 'wall' | 'house' | 'block';
@@ -237,8 +245,12 @@ export interface ParcelRentEvent {
 
 export interface WorldState {
   inventory: Record<ResourceType, number>;
+  /** Resources stored in the player's 0G warehouse, separate from carry caps. */
+  storage: Record<StoredResourceType, number>;
   /** Indices (into map.ts TREES) of trees the player has chopped. */
   choppedTrees: number[];
+  /** Per-tree growth stages for felled/regrowing trees, keyed by TREES index. */
+  treeGrowth: Record<number, TreeGrowthState>;
   /** Indices (into map.ts ROCKS) of rock outcrops the player has mined out. */
   minedRocks: number[];
   /** Structures the player has built. */
