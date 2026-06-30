@@ -1800,4 +1800,4 @@ base. Expón una regla compartida para futuros consumidores y mantén `tsc` limp
 `parcelOverlapsWalkable(...)`; `frontierClaimableCells` escanea la frontera con esa misma regla, de
 modo que las parcelas nuevas siempre se pegan físicamente a tierra caminable. `parcelCellsOverlap`
 acepta contacto por borde y evita contacto diagonal de esquina. Sin cambios en `Scene3D.tsx`.
-**Commit:** _(este commit)_
+**Commit:** `5d8dc4b`
