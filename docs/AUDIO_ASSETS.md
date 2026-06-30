@@ -41,6 +41,7 @@ all uploads use the Pixabay Content License, but confirm before shipping.
 | File | Source | License |
 | --- | --- | --- |
 | `ambient/day-ambience-loop.mp3` | https://pixabay.com/sound-effects/nature-birds-chirping-calm-173695/ | Pixabay Content License |
+| `ambient/river-water-loop.mp3` | https://pixabay.com/sound-effects/nature-forest-river-sammer-450696/ (recorte en loop) | Pixabay Content License |
 | `sfx/attack-hit.mp3` | https://pixabay.com/sound-effects/film-special-effects-sword-hit-7160/ | Pixabay Content License |
 | `sfx/attack-swing.mp3` | https://pixabay.com/sound-effects/film-special-effects-slash-21834/ | Pixabay Content License |
 | `sfx/player-hurt-1..5.mp3`, `player-mort.mp3` | https://pixabay.com/sound-effects/people-grunts-33249/ (1-min clip; individual grunts cut out) | Pixabay Content License |

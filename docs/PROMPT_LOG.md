@@ -1651,3 +1651,12 @@ siembra emisores espaciales a lo largo de `riverCenterZ()` (radio RIVER_CLEAR+3,
 falta el archivo `ambient/river-water-loop.mp3` (fallback silencioso). (docs) Prompt 29 (suelo por
 biomas + parcelas) en ENGRAM_PROMPTS; `docs/ART_PROMPTS.md` con prompts de textura por bioma +
 slots nuevos + tabla de provenance/autoría; ASSET_AUDIT actualizado. `tsc` limpio. **Commit:** _(este commit)_
+
+### 2026-06-29 · Edificio reforzado cuesta más madera + crédito del río
+**Pedido (humano):** si un edificio es más resistente, es lógico que cueste más (madera) — y
+también más tokens de su Anthropic key (prompt de sistema + prompt del usuario). Crédito del río.
+**Qué se hizo:** en `Scene3D.tsx` `placeAIPreview`, un build reforzado cuesta `×REINFORCED_HP_MULT`
+(2.5) de madera, igual que su factor de HP. El costo en tokens es inherente (el sistema manda
+nuestras instrucciones + el prompt del usuario a /api/build con su key; el presupuesto en $ ya lo
+contempla) — sin cambio. Crédito del río en `docs/AUDIO_ASSETS.md` (Pixabay 450696, recorte) y
+ASSET_AUDIT marcado como presente. `tsc` limpio. **Commit:** _(este commit)_

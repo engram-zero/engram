@@ -29,11 +29,12 @@ piel de **demonio/enemigo**, superficie de **bloque IA**. Dime si quieres alguno
 
 ## 🔊 Audio
 
+### ✅ Añadidos
+- `ambient/river-water-loop.mp3` — flujo de agua del río (recorte de Pixabay 450696), wired como
+  emisor espacial a lo largo del cauce. **Ya presente.**
+
 ### Faltan (referenciados en el manifest, hoy en silencio)
 Coloca en `public/audio/...`:
-- `ambient/river-water-loop.mp3` — **flujo de agua del río** (ya wired como emisor espacial a lo
-  largo del cauce; solo se oye cerca de las orillas, día y noche). Busca un loop limpio de "gentle
-  stream/creek water" en Pixabay.
 - `foley/land-dirt.mp3` — aterrizaje tras saltar.
 - `ui/dialogue-open.mp3` — abrir diálogo.
 - `ui/dialogue-close.mp3` — cerrar diálogo.

@@ -41,6 +41,7 @@ import {
   treeStageFor,
   treeHarvestFraction,
   isReinforcedLabel,
+  REINFORCED_HP_MULT,
   TREE_STAGE_SCALE,
   TREE_STAGE_YIELD,
   woodIsFull,
@@ -4987,7 +4988,9 @@ export default function Scene3D({ memories = null, active = null, talking = fals
       // the selection card reads "reinforced …".
       if (aiReinforced && candidate.clusterLabel) candidate.clusterLabel = `reinforced ${candidate.clusterLabel}`;
       if (canPlaceBuilding(b.type, x, z, candidate, placedNow)) {
-        const cost = buildCostAt(b.type, x, z);
+        // A reinforced build is tougher, so it logically costs proportionally more
+        // wood (same factor as its HP boost).
+        const cost = buildCostAt(b.type, x, z) * (aiReinforced ? REINFORCED_HP_MULT : 1);
         if (placeBuilding(candidate, cost)) {
           placed += 1;
           wood += cost;
