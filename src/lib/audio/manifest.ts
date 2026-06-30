@@ -2,6 +2,7 @@ export type AudioCueId =
   | 'night_crickets'
   | 'day_ambience'
   | 'campfire_crackle'
+  | 'river_water'
   | 'footstep_grass'
   | 'footstep_water'
   | 'jump'
@@ -44,6 +45,12 @@ export const AUDIO_CUES: Record<AudioCueId, AudioCue> = {
     src: '/audio/ambient/campfire-crackle-loop.mp3',
     loop: true,
     volume: 0.22,
+  },
+  river_water: {
+    label: 'Flowing water loop — heard near the creek (spatial)',
+    src: '/audio/ambient/river-water-loop.mp3',
+    loop: true,
+    volume: 0.5,
   },
   footstep_grass: {
     label: 'Footsteps on grass/dirt',

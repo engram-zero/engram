@@ -1641,3 +1641,13 @@ vendibles) y una nueva idea #16 (NPC compañero); y pasar la lista de assets fal
 **Qué se hizo:** `docs/ENGRAM_PROMPTS.md` Prompts 25 (#15, para Codex, backend/0G), 26 (#12),
 27 (#13), 28 (#16). Nuevo `docs/ASSET_AUDIT.md`: texturas completas (8 slots), faltan 5 audios
 referenciados (land-dirt + 4 de ui/) y variantes/cues opcionales. **Commit:** _(este commit)_
+
+### 2026-06-29 · Sonido del río + biomas (doc) + prompts de arte
+**Pedido (humano):** sonido de flujo de agua cerca del río; confirmar resistencia variable de
+edificios a igual tamaño (sin casas miniatura); que el suelo no parezca tapiz (zonas/biomas, con
+parcelas nuevas coherentes); y los prompts para generar el arte (con autoría/provenance).
+**Qué se hizo:** (audio) cue `river_water` en el manifest + `makeRiverEmitters()` en Scene3D que
+siembra emisores espaciales a lo largo de `riverCenterZ()` (radio RIVER_CLEAR+3, día y noche);
+falta el archivo `ambient/river-water-loop.mp3` (fallback silencioso). (docs) Prompt 29 (suelo por
+biomas + parcelas) en ENGRAM_PROMPTS; `docs/ART_PROMPTS.md` con prompts de textura por bioma +
+slots nuevos + tabla de provenance/autoría; ASSET_AUDIT actualizado. `tsc` limpio. **Commit:** _(este commit)_

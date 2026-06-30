@@ -1323,4 +1323,34 @@ Sin decisión de alcance todavía — documentado para no perder la idea.
 
 ---
 
+## Prompt 29 — Suelo por zonas/biomas (no "tapiz") + biomas en parcelas nuevas
+
+**Para:** Claude (Scene3D/terreno) — futuro cercano.
+
+### Problema
+El pasto hoy mezcla variantes de textura por tile de forma cuasi-aleatoria → se ve como un
+**tapiz/caleidoscopio**. Queremos **áreas grandes y coherentes** con suelos distintos
+(pradera, **arenoso/desértico**, **nevado**, seco/savana…), **lejos unas de otras** y con
+**transiciones suaves** en los bordes.
+
+### Diseño propuesto
+- Reusar los **NatureZoneId** existentes (`north_forest`, `riverlands`, `east_hills`,
+  `south_fields`, `west_grove`) o un **mapa de biomas** por ruido de baja frecuencia: cada gran
+  región tiene **un** suelo dominante. Pocos biomas, regiones amplias.
+- En `src/components/engram/textures.ts` añadir slots de suelo por bioma (`terrain_sand`,
+  `terrain_snow`, `terrain_dry`…) y en el render del terreno (`Scene3D.tsx`) elegir el suelo por
+  **posición/zona**, no por variante aleatoria por tile.
+- **Bordes:** mezclar (blend/alpha o ruido de transición) entre biomas vecinos; mantener los biomas
+  "raros" (nieve/desierto) **separados** geográficamente para que no parezca caleidoscopio.
+- **Parcelas nuevas (frontera):** cada parcela hereda el bioma de **su ubicación** (zona/mapa de
+  biomas en su centro) para que la expansión casilla-a-casilla quede coherente; persistir el bioma
+  si hace falta para estabilidad entre reloads.
+
+### Criterios de aceptación
+1. El suelo se ve en **regiones amplias y coherentes**, no como tapiz de variantes por tile.
+2. Al menos 2-3 biomas (pradera + arenoso + nevado) **separados** con **transición suave**.
+3. Una parcela nueva toma el bioma de su ubicación de forma coherente y estable.
+
+---
+
 *Engram — Zero Cup 2026 — Build on 0G. Own your story.*

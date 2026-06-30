@@ -23,6 +23,7 @@ import {
   WORLD_RADIUS,
   GROUND_RADIUS,
   riverCenterZ,
+  RIVER_CLEAR,
   type TreeDef,
   type RockDef,
   type CottageDef,
@@ -273,9 +274,22 @@ function makeCricketEmitters(): AudioEmitter[] {
   return out;
 }
 
+// Flowing-water emitters strung along the creek's centre-line, so the river is
+// audible only when you're near its banks (day and night). Sampling the same
+// riverCenterZ() the renderer uses keeps the sound exactly on the water ribbon.
+function makeRiverEmitters(): AudioEmitter[] {
+  const out: AudioEmitter[] = [];
+  for (let x = -WORLD_RADIUS; x <= WORLD_RADIUS; x += 7) {
+    out.push({ cue: 'river_water', x, z: riverCenterZ(x), radius: RIVER_CLEAR + 3, volume: 0.55 });
+  }
+  return out;
+}
+
 const AUDIO_EMITTERS: AudioEmitter[] = [
   // Campfire crackle — only audible around the village fire.
   { cue: 'campfire_crackle', x: CAMPFIRE.x, z: CAMPFIRE.z, radius: 12, volume: 0.5 },
+  // Flowing water along the creek (heard near the banks, day and night).
+  ...makeRiverEmitters(),
   // Daytime ambience bed (birds/breeze) — a single huge emitter so it plays
   // everywhere while the sun is up, replacing the night crickets during the day.
   { cue: 'day_ambience', x: 0, z: 0, radius: 1000, volume: 0.22, dayOnly: true },
