@@ -1686,3 +1686,15 @@ dos aguas vayan del alero a la cumbrera sin dejar hueco sea cual sea el tamaño.
 renders y al caballete.
 **Qué se hizo:** constantes de techo derivadas; ambos techos parametrizados; cumbrera más alta.
 `tsc` limpio; solo Scene3D.tsx. **Commit:** _(este commit)_
+
+### 2026-06-30 · Build fixes: commit río + casas más altas + ventanas afuera + sin anillo en FP
+**Pedido (humano):** (1) el sonido del agua no se oye; (2) casas un poco más grandes (al entrar el
+techo queda a la altura de los ojos); (3) las ventanas de las cottages están "por dentro" del muro;
+(4) un muro quedó con un anillo (como seleccionado) en 1ra persona — quitarlo.
+**Hallazgo/fix:** (1) el cableado estaba bien pero `river-water-loop.mp3` estaba SIN COMMITEAR
+(untracked) → prod en silencio; se commitea el archivo. (2) `HOUSE_WALL_HEIGHT 1.8→2.3` (+ ridge/
+roofY derivados), con dintel de puerta parametrizado `HOUSE_DOOR_TOP_Y`. (3) las ventanas/posts de
+la cottage estaban hardcodeados en z viejo (1.01/1.06); ahora se anclan a `HOUSE_FRONT_Z` (cara
+exterior del muro frontal) para verse desde afuera. (4) el anillo era el `DamageMarker` (muro
+dañado por asedio); ahora `DamageMarker` y `RelationMarker` se ocultan en 1ra persona (visible solo
+en aérea, como la barra de HP). `tsc` limpio; solo Scene3D.tsx + el mp3. **Commit:** _(este commit)_

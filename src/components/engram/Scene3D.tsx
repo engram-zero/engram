@@ -300,13 +300,15 @@ const AUDIO_EMITTERS: AudioEmitter[] = [
 const SPATIAL_AUDIO_CUES = Array.from(new Set(AUDIO_EMITTERS.map((e) => e.cue)));
 const HOUSE_WIDTH = 3.0;
 const HOUSE_DEPTH = 2.6;
-const HOUSE_WALL_HEIGHT = 1.8;
+const HOUSE_WALL_HEIGHT = 2.3; // taller so the ceiling clears the camera's eye line inside
 const HOUSE_WALL_THICKNESS = 0.16;
 const HOUSE_DOOR_WIDTH = 1.1; // player diameter is 0.9, so this is a comfortable entry
+const HOUSE_DOOR_TOP_Y = HOUSE_WALL_HEIGHT - 0.32; // top of the door frame / lintel
+const HOUSE_FRONT_Z = HOUSE_DEPTH / 2; // outer face of the front wall (door/windows live here)
 const HOUSE_DOOR_OFFSET_Z = HOUSE_DEPTH / 2 - HOUSE_WALL_THICKNESS / 2;
 const HOUSE_PORCH_DEPTH = 0.42;
-const HOUSE_ROOF_Y = 1.94;
-const HOUSE_RIDGE_Y = 2.78; // raised so the wider/deeper house gets a properly pitched roof
+const HOUSE_ROOF_Y = HOUSE_WALL_HEIGHT + 0.14; // chimney flashing sits at the eaves
+const HOUSE_RIDGE_Y = HOUSE_WALL_HEIGHT + 0.95; // ridge above the (now taller) walls, pitched roof
 const HOUSE_GABLE_HEIGHT = HOUSE_RIDGE_Y - HOUSE_WALL_HEIGHT;
 const HOUSE_CEILING_Y = HOUSE_WALL_HEIGHT - 0.04;
 const HOUSE_GABLE_X = HOUSE_WIDTH / 2 - HOUSE_WALL_THICKNESS * 0.18;
@@ -1466,27 +1468,28 @@ function Cottage({ def, seed }: { def: CottageDef; seed: number }) {
         <boxGeometry args={[HOUSE_ROOF_WIDTH_X + 0.04, 0.13, 0.13]} />
         <meshStandardMaterial color="#3a2a1a" flatShading />
       </mesh>
-      {/* door lintel + open doorway */}
-      <mesh position={[0, 1.66, HOUSE_DOOR_OFFSET_Z]}>
+      {/* door lintel + frame posts (sit on the front wall's outer face) */}
+      <mesh position={[0, HOUSE_DOOR_TOP_Y, HOUSE_DOOR_OFFSET_Z]}>
         <boxGeometry args={[HOUSE_DOOR_WIDTH, 0.18, 0.08]} />
         <meshStandardMaterial color="#2a1a10" flatShading />
       </mesh>
-      <mesh position={[-0.47, 0.78, 1.06]}>
-        <boxGeometry args={[0.14, 1.42, 0.06]} />
+      <mesh position={[-(HOUSE_DOOR_WIDTH / 2 - 0.02), HOUSE_DOOR_TOP_Y / 2, HOUSE_FRONT_Z - 0.03]}>
+        <boxGeometry args={[0.14, HOUSE_DOOR_TOP_Y, 0.06]} />
         <meshStandardMaterial color="#5a3a1f" flatShading />
       </mesh>
-      <mesh position={[0.47, 0.78, 1.06]}>
-        <boxGeometry args={[0.14, 1.42, 0.06]} />
+      <mesh position={[HOUSE_DOOR_WIDTH / 2 - 0.02, HOUSE_DOOR_TOP_Y / 2, HOUSE_FRONT_Z - 0.03]}>
+        <boxGeometry args={[0.14, HOUSE_DOOR_TOP_Y, 0.06]} />
         <meshStandardMaterial color="#5a3a1f" flatShading />
       </mesh>
-      {/* windows: dark frame + warm glow */}
+      {/* windows: dark frame + warm glow, on the front wall's OUTER face so they
+          read from outside (they used to sit behind the now-deeper front wall). */}
       {[-0.92, 0.92].map((x, i) => (
-        <group key={i} position={[x, 1.24, 1.01]}>
+        <group key={i} position={[x, HOUSE_DOOR_TOP_Y - 0.5, HOUSE_FRONT_Z - 0.03]}>
           <mesh>
             <boxGeometry args={[0.56, 0.56, 0.05]} />
             <meshStandardMaterial color="#2a1a10" flatShading />
           </mesh>
-          <mesh position={[0, 0, 0.04]}>
+          <mesh position={[0, 0, 0.05]}>
             <planeGeometry args={[0.4, 0.4]} />
             <meshBasicMaterial color="#ffcf7a" />
           </mesh>
@@ -2723,7 +2726,7 @@ function BuildingMesh({ b }: { b: Building }) {
             <meshStandardMaterial color={woodColor} map={getTextureVariant('cottage_wood', Math.round(b.x))} flatShading />
           </mesh>
         ))}
-        <mesh position={[0, 1.66, HOUSE_DOOR_OFFSET_Z]} castShadow receiveShadow>
+        <mesh position={[0, HOUSE_DOOR_TOP_Y, HOUSE_DOOR_OFFSET_Z]} castShadow receiveShadow>
           <boxGeometry args={[HOUSE_DOOR_WIDTH, 0.18, 0.08]} />
           <meshStandardMaterial color="#55341f" flatShading transparent opacity={0.92} />
         </mesh>
@@ -2761,13 +2764,17 @@ function DamageMarker({ b, ratio }: { b: Building; ratio: number }) {
   const y = getHeightAt(b.x, b.z) + 0.075;
   const radius = b.type === 'house' ? 2.1 : b.type === 'wall' ? 1.05 : 0.38;
   const color = ratio < 0.35 ? '#ff5f50' : '#ffbd66';
+  const ringRef = useRef<THREE.Group>(null);
+  // The damage ring is an aerial management readout (like the HP bar); never show
+  // it in first person, where it looks like the building is "selected".
+  useFrame(() => { if (ringRef.current) ringRef.current.visible = viewSignal.aerial; });
   return (
     <>
       {/* Voxel 'block' pieces (e.g. an AI-built torch) are small and numerous, so a
           ground ring per block stacks into an ugly cluster of circles — skip the ring
           for blocks and let the (aerial-only) HP bar carry the damage read. */}
       {b.type !== 'block' && (
-        <group position={[b.x, y, b.z]}>
+        <group ref={ringRef} position={[b.x, y, b.z]}>
           <mesh rotation={[-Math.PI / 2, 0, 0]}>
             <ringGeometry args={[radius, radius + 0.07, 48]} />
             <meshBasicMaterial color={color} transparent opacity={0.72} depthWrite={false} />
@@ -2813,12 +2820,15 @@ function BuildingHpBar({ b, ratio }: { b: Building; ratio: number }) {
 }
 
 function RelationMarker({ b, relation }: { b: Building; relation: WalletRelation }) {
-  if (relation === 'neutral') return null;
   const y = getHeightAt(b.x, b.z) + 0.055;
   const style = RELATION_STYLES[relation];
   const radius = b.type === 'house' ? 2.45 : b.type === 'wall' ? 1.25 : 0.42;
+  const ref = useRef<THREE.Group>(null);
+  // Aerial-only overlay (matches the HP bar / damage ring) — hidden in first person.
+  useFrame(() => { if (ref.current) ref.current.visible = viewSignal.aerial && relation !== 'neutral'; });
+  if (relation === 'neutral') return null;
   return (
-    <group position={[b.x, y, b.z]}>
+    <group ref={ref} position={[b.x, y, b.z]}>
       <mesh rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[radius, radius + 0.055, 48]} />
         <meshBasicMaterial color={style.color} transparent opacity={0.58} depthWrite={false} />
