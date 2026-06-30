@@ -1442,3 +1442,14 @@ Documentar flag y honestidad: economía in-game/testnet simulada, no custodia de
 atómico y feedback de saldo; `Scene3D` calcula el ask dinámico desde `oreQuote` y bloquea extracción
 solo con el flag ON; `client-page` muestra coin del banco; `.env.example` y Prompt 23 actualizados.
 **Commit:** _(este commit)_
+
+### 29 jun 2026 · Review F4 de Codex + fix anti-arbitraje del costo de minado
+**Pedido (humano):** revisar el commit 6eb9bd1 (paid mining de Codex), que esté bien y no rompa nada.
+**Hallazgo:** tsc limpio, flag OFF por defecto, un solo caller de `harvestRock` (firma retro-
+compatible), conservación del coin a la tesorería (`addMiningTreasuryPayment`) — todo bien. **Pero**
+`miningCostFromQuote` ponía el costo por debajo de la reventa (`sell-1`), creando un money pump
+(minar barato → vender caro drena la tesorería). Codex siguió mi criterio mal redactado ("costo <
+reventa"); el correcto es **≥ reventa**.
+**Fix:** `miningCostFromQuote` ahora devuelve el **mid** (`max(sell+1, round(mid))`): sobre la
+reventa (sin arbitraje) y bajo el precio de compra de Aldric (minar sigue siendo más barato que
+comprar). `npx tsc --noEmit` limpio. **Commit:** _(este commit)_

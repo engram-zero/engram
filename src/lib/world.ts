@@ -174,9 +174,11 @@ export function oreQuote(world: WorldState, ore: OreType, totalOfOre: number, mi
 /** Prompt 23 F4: the treasury ask is derived from live mid, but kept below resale
  * so paid mining can back minerals without creating a buy-low/sell-high exploit. */
 export function miningCostFromQuote(quote: WoodQuote): number {
-  const belowResale = Math.max(0, quote.sell - 1);
-  const midDiscounted = Math.floor(quote.mid / (HOUSE_SPREAD * HOUSE_SPREAD));
-  return Math.max(1, Math.min(belowResale || 1, midDiscounted));
+  // Mining = buying the ore from the world treasury. Price it at the fair MID:
+  // strictly ABOVE the resale price (quote.sell) so you can't mine-then-sell for a
+  // free-coin pump that drains the treasury, yet BELOW Aldric's buy price (mid ×
+  // spread) so mining still beats buying.
+  return Math.max(quote.sell + 1, Math.round(quote.mid));
 }
 
 export function isLocalhostFreeBuildWallet(addr: string | null = wallet): boolean {
