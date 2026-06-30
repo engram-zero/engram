@@ -171,6 +171,14 @@ export function oreQuote(world: WorldState, ore: OreType, totalOfOre: number, mi
   return quoteFromScarcity(RESOURCE_BASE_PRICE[ore], frac, world.inventory.coin);
 }
 
+/** Prompt 23 F4: the treasury ask is derived from live mid, but kept below resale
+ * so paid mining can back minerals without creating a buy-low/sell-high exploit. */
+export function miningCostFromQuote(quote: WoodQuote): number {
+  const belowResale = Math.max(0, quote.sell - 1);
+  const midDiscounted = Math.floor(quote.mid / (HOUSE_SPREAD * HOUSE_SPREAD));
+  return Math.max(1, Math.min(belowResale || 1, midDiscounted));
+}
+
 export function isLocalhostFreeBuildWallet(addr: string | null = wallet): boolean {
   // Hard disable for now to allow proper testing of gathering and building locally
   return false;
@@ -569,6 +577,23 @@ function normalizeParcelResourceIds(raw: unknown): string[] {
   return Array.from(new Set(raw.map((id) => cleanId(id, '')).filter(Boolean))).slice(0, MAX_DEPLETED_PARCEL_RESOURCES);
 }
 
+function normalizeTreasury(raw: unknown, baseUpdatedAt: number): NonNullable<EcosystemState['treasury']> | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const p = raw as Record<string, unknown>;
+  const oreRaw = p.orePurchased && typeof p.orePurchased === 'object' ? p.orePurchased as Record<string, unknown> : {};
+  return {
+    updatedAt: Math.max(0, Math.round(Number(p.updatedAt ?? baseUpdatedAt))) || baseUpdatedAt,
+    coin: Math.max(0, Math.round(Number(p.coin ?? 0))),
+    paidMiningRevenue: Math.max(0, Math.round(Number(p.paidMiningRevenue ?? p.coin ?? 0))),
+    paidMiningCount: Math.max(0, Math.round(Number(p.paidMiningCount ?? 0))),
+    orePurchased: {
+      stone: Math.max(0, Math.round(Number(oreRaw.stone ?? 0))),
+      silver: Math.max(0, Math.round(Number(oreRaw.silver ?? 0))),
+      gold: Math.max(0, Math.round(Number(oreRaw.gold ?? 0))),
+    },
+  };
+}
+
 function normalizeEcosystem(raw: unknown): EcosystemState | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
   const p = raw as Record<string, any>;
@@ -608,7 +633,7 @@ function normalizeEcosystem(raw: unknown): EcosystemState | undefined {
   const activity = activityRaw
     ? {
         updatedAt: Math.max(0, Math.round(Number(activityRaw.updatedAt ?? baseUpdatedAt))) || baseUpdatedAt,
-        formulaVersion: typeof activityRaw.formulaVersion === 'string' ? activityRaw.formulaVersion : 'prompt23-f2f3-v1',
+        formulaVersion: typeof activityRaw.formulaVersion === 'string' ? activityRaw.formulaVersion : 'prompt23-f4-v1',
         tokensInCirculation: Math.max(0, Math.round(Number(activityRaw.tokensInCirculation ?? 0))),
         depletedTrees: Math.max(0, Math.round(Number(activityRaw.depletedTrees ?? 0))),
         depletedRocks: Math.max(0, Math.round(Number(activityRaw.depletedRocks ?? 0))),
@@ -620,8 +645,10 @@ function normalizeEcosystem(raw: unknown): EcosystemState | undefined {
       }
     : undefined;
 
-  if (!earth && !fauna && !activity) return undefined;
-  return { updatedAt: baseUpdatedAt, sourceFingerprint, earth, fauna, activity };
+  const treasury = normalizeTreasury(p.treasury, baseUpdatedAt);
+
+  if (!earth && !fauna && !activity && !treasury) return undefined;
+  return { updatedAt: baseUpdatedAt, sourceFingerprint, earth, fauna, activity, treasury };
 }
 
 function cleanNatureZoneId(raw: unknown): 'north_forest' | 'riverlands' | 'east_hills' | 'south_fields' | 'west_grove' {
@@ -726,9 +753,16 @@ export function cloneWorldState(value: WorldState = EMPTY_WORLD): WorldState {
               }
             : undefined,
           activity: value.ecosystem.activity ? { ...value.ecosystem.activity } : undefined,
+          treasury: value.ecosystem.treasury
+            ? {
+                ...value.ecosystem.treasury,
+                orePurchased: { ...value.ecosystem.treasury.orePurchased },
+              }
+            : undefined,
         }
       : undefined,
     relations: { ...value.relations },
+    savedAt: value.savedAt,
   };
 }
 
@@ -896,20 +930,62 @@ export function harvestParcelResource(resourceId: string, type: Extract<Resource
   return true;
 }
 
+function addMiningTreasuryPayment(ecosystem: EcosystemState | undefined, ore: OreType, coin: number): EcosystemState {
+  const now = Date.now();
+  const previous = ecosystem?.treasury;
+  const orePurchased = {
+    stone: previous?.orePurchased.stone ?? 0,
+    silver: previous?.orePurchased.silver ?? 0,
+    gold: previous?.orePurchased.gold ?? 0,
+  };
+  orePurchased[ore] += STONE_PER_MINE;
+  return {
+    ...(ecosystem ?? { updatedAt: now }),
+    updatedAt: now,
+    treasury: {
+      updatedAt: now,
+      coin: (previous?.coin ?? 0) + coin,
+      paidMiningRevenue: (previous?.paidMiningRevenue ?? 0) + coin,
+      paidMiningCount: (previous?.paidMiningCount ?? 0) + 1,
+      orePurchased,
+    },
+  };
+}
+
+type HarvestRockOptions = {
+  paidMining?: boolean;
+  cost?: number;
+};
+
 /** Extract one unit of `ore` from a rock (mirrors harvestTree). After ROCK_MINES
  * fills the rock is exhausted and vanishes. No-op if already mined or that ore is
  * full. The caller passes the rock's ore (from map.ts ROCKS[index].ore). */
-export function harvestRock(index: number, ore: OreType = 'stone'): { depleted: boolean; gained: boolean } {
+export function harvestRock(index: number, ore: OreType = 'stone', options: HarvestRockOptions = {}): { depleted: boolean; gained: boolean; paid?: boolean; cost?: number; reason?: string } {
   if (state.minedRocks.includes(index)) return { depleted: true, gained: false };
   if (state.inventory[ore] >= ORE_MAX[ore]) return { depleted: false, gained: false };
+  const cost = options.paidMining ? Math.max(1, Math.round(Number(options.cost ?? 0))) : 0;
+  if (cost > 0 && state.inventory.coin < cost) {
+    return {
+      depleted: false,
+      gained: false,
+      paid: true,
+      cost,
+      reason: `Need ${cost} coin to extract ${ore}.`,
+    };
+  }
   const units = (mined[index] = (mined[index] ?? 0) + 1);
   const depleted = units >= ROCK_MINES;
   commit({
     ...state,
-    inventory: { ...state.inventory, [ore]: Math.min(ORE_MAX[ore], state.inventory[ore] + STONE_PER_MINE) },
+    inventory: {
+      ...state.inventory,
+      coin: cost > 0 ? Math.max(0, state.inventory.coin - cost) : state.inventory.coin,
+      [ore]: Math.min(ORE_MAX[ore], state.inventory[ore] + STONE_PER_MINE),
+    },
     minedRocks: depleted ? [...state.minedRocks, index] : state.minedRocks,
+    ecosystem: cost > 0 ? addMiningTreasuryPayment(state.ecosystem, ore, cost) : state.ecosystem,
   });
-  return { depleted, gained: true };
+  return { depleted, gained: true, paid: cost > 0, cost: cost || undefined };
 }
 
 /** Each fill of the chop bar grants ONE unit of wood (like the original pacing);

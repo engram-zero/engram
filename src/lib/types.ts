@@ -67,6 +67,7 @@ export interface EcosystemState {
   earth?: EarthAgentState;
   fauna?: FaunaAgentState;
   activity?: EcosystemActivityState;
+  treasury?: WorldTreasuryState;
 }
 
 export interface EcosystemActivityState {
@@ -80,6 +81,15 @@ export interface EcosystemActivityState {
   activityScore: number;
   treeCadenceMs: number;
   rockCadenceMs: number;
+}
+
+export interface WorldTreasuryState {
+  updatedAt: number;
+  /** In-game coin paid into the world's bank by gated paid mining. */
+  coin: number;
+  paidMiningRevenue: number;
+  paidMiningCount: number;
+  orePurchased: Record<OreType, number>;
 }
 
 export type BuildingType = 'wall' | 'house' | 'block';

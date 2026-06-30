@@ -1415,3 +1415,14 @@ nametags drei `<Html>` (z-index altísimo) y el GUI queda encima. (2) panel de d
 sable=en-GB-RyanNeural con SSML `rate -14% / pitch -12%` (viejo y sabio); `speakText` pasa a
 `speakSsmlAsync` con XML escapado. `npx tsc --noEmit` limpio.
 **Commit:** _(este commit)_
+
+### 29 jun 2026 · Botón "Leave" (sin guardar) + iluminación híbrida (colores localhost + cielo prod)
+**Pedido (humano):** (1) un botón para salir del diálogo SIN guardar (si solo quieres leer al NPC);
+(2) que convivan los colores de localhost (vibrantes/planos) con el cielo de prod (sol/día-noche).
+**Prompt sintetizado:** (1) `leaveNoSave()` cierra el diálogo, descarta `dirty[npc]` y NO escribe a
+0G; botón **Leave** siempre visible, **Leave & save** solo si hay cambios. (2) Mantener el path
+cinematic (Sky/sol/día-noche de prod) pero subir y blanquear la luz a niveles "localhost":
+`visible` floor 0.52→0.74, ambient mix(1.45,1.95)→(2.1,2.55) y casi-blanco, hemi (1.45,1.82)→
+(1.9,2.2), dir (0.75,2.2)→(1.5,2.6); exposición 1.9→2.05; niebla alejada (30,110)→(70,220) para que
+los colores cercanos no se apaguen. `npx tsc --noEmit` limpio.
+**Commit:** _(este commit)_

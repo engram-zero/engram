@@ -40,6 +40,8 @@ import {
   harvestRock,
   isMined,
   oreIsFull,
+  oreQuote,
+  miningCostFromQuote,
   ORE_MAX,
   MAX_WOOD,
   MAX_STONE,
@@ -82,6 +84,7 @@ import {
   isLocalhostFreeBuildWallet,
   type WalletRelation,
   type WorldState,
+  type OreType,
   type BuildingType,
   type Building,
   type DemonSiegeEvent,
@@ -166,7 +169,7 @@ const WALK_SPEED = 4.6;
 const TALK_RANGE = 3.2; // how close you must stand before "Press E" appears
 const CHOP_RANGE = 2.8; // how close to a tree before "Press F to chop"
 const MINE_RANGE = 2.8; // how close to a rock before "Hold F to mine"
-const ORE_LABEL: Record<'stone' | 'silver' | 'gold', string> = { stone: 'Stone', silver: 'Silver', gold: 'Gold' };
+const ORE_LABEL: Record<OreType, string> = { stone: 'Stone', silver: 'Silver', gold: 'Gold' };
 
 // True when (x,z) sits over the creek's water ribbon (half-width matches the River
 // mesh in this file), so footsteps splash instead of crunching on grass.
@@ -179,9 +182,30 @@ const MARREN_PLAYER_AGGRO_RADIUS = 8.5; // Maren only pursues the player within 
 // Compute inference (proof-of-useful-work). OFF unless the env flag is set AND
 // the compute ledger is funded server-side; mining always works either way.
 const COMPUTE_ENABLED = process.env.NEXT_PUBLIC_ENGRAM_COMPUTE === '1';
+// Prompt 23 F4: OFF by default so the tournament demo keeps today's free mining
+// unless we explicitly turn on treasury-backed paid extraction.
+const PAID_MINING_ENABLED = process.env.NEXT_PUBLIC_ENGRAM_PAID_MINING === '1';
 
 type MineReceipt = { status: 'verifying' | 'verified' | 'local'; chatID?: string | null; model?: string };
 const SPAWN_XZ: [number, number] = [0, 9]; // y is sampled from the terrain
+
+function oreSupplyFor(world: WorldState, ore: OreType) {
+  const mined = new Set(world.minedRocks);
+  let total = 0;
+  let minedCount = 0;
+  for (let i = 0; i < ROCKS.length; i++) {
+    if (ROCKS[i].ore !== ore) continue;
+    total += 1;
+    if (mined.has(i)) minedCount += 1;
+  }
+  return { total, mined: minedCount };
+}
+
+function miningAskFor(world: WorldState, ore: OreType) {
+  const supply = oreSupplyFor(world, ore);
+  const quote = oreQuote(world, ore, supply.total, supply.mined);
+  return { quote, cost: miningCostFromQuote(quote) };
+}
 
 const keyboardMap = [
   { name: 'forward', keys: ['ArrowUp', 'KeyW'] },
@@ -4036,7 +4060,9 @@ export function computeDayNight(hour: number): DayNight {
   // Keep a visibility floor so night still reads as night, but terrain, trees and
   // silhouettes don't collapse into pure black. The floor is the night "moonlight
   // fill" — raised slightly so the ground isn't crushed-black on real hardware.
-  const visible = 0.52 + daylight * 0.48;
+  // Lighting stays bright & vibrant (the "localhost colours") across the whole arc —
+  // only the SKY cycles (the "prod sky"). High floor so even night reads richly lit.
+  const visible = 0.74 + daylight * 0.26;
   const skyVisible = Math.max(0, Math.min(1, (sunY - 0.02) / 0.28));
 
   // Moon rides its own arc across the night (sunset → sunrise).
@@ -4052,14 +4078,14 @@ export function computeDayNight(hour: number): DayNight {
     // lit-floor `visible`, so there's no blue/grey night sky) and back to day blue.
     bg: mixColor('#000000', '#a8caee', daylight),
     fog: mixColor('#000000', '#b8d0e8', daylight),
-    ambIntensity: mix(1.45, 1.95, visible),
-    ambColor: mixColor('#b4c3e5', '#fff3e0', visible),
-    hemiSky: mixColor('#6f84ac', '#d7e6ff', visible),
-    hemiGround: mixColor('#4f5c45', '#93a073', visible),
-    hemiIntensity: mix(1.45, 1.82, visible),
+    ambIntensity: mix(2.1, 2.55, visible),
+    ambColor: mixColor('#e2e8f5', '#fffaf0', visible), // near-white → true, vibrant colours
+    hemiSky: mixColor('#aebbd6', '#eaf2ff', visible),
+    hemiGround: mixColor('#7c8868', '#a9b487', visible),
+    hemiIntensity: mix(1.9, 2.2, visible),
     dirPos: [sunX * 60, Math.max(18, sunY * 60), -40], // key light follows the sun; min height keeps moonlight
-    dirIntensity: mix(0.75, 2.2, visible),
-    dirColor: mixColor('#d3def7', '#fff1d6', visible),
+    dirIntensity: mix(1.5, 2.6, visible),
+    dirColor: mixColor('#e6ecf8', '#fff3da', visible),
     turbidity: mix(7.2, 10.8, visible),
     rayleigh: mix(0.8, 1.55, visible),
     skyVisible: skyVisible > 0.02,
@@ -5191,11 +5217,11 @@ export default function Scene3D({ memories = null, active = null, talking = fals
           shadows={!forceBrightTestLighting}
           dpr={[1, 1.75]}
           camera={{ position: [0, 3.1, 9], fov: 60 }}
-          gl={{ antialias: true, toneMappingExposure: forceBrightTestLighting ? 2.2 : 1.9 }}
+          gl={{ antialias: true, toneMappingExposure: forceBrightTestLighting ? 2.2 : 2.05 }}
           onPointerMissed={() => setSelectedBuilding(null)}
         >
           <color attach="background" args={[forceBrightTestLighting ? '#a8caee' : dn.bg]} />
-          {!forceBrightTestLighting && <fog attach="fog" args={[dn.fog, 30, 110]} />}
+          {!forceBrightTestLighting && <fog attach="fog" args={[dn.fog, 70, 220]} />}
 
           {/* Skydome. Bright mode: a fixed, low afternoon sun so the disc is clearly
               visible (local's old defect was a missing sun) while the scene stays

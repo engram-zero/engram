@@ -118,7 +118,7 @@ const RECENT_EXTRACTION_REF = 6;
 const MIN_RESTOCK_CADENCE_MS = 1000 * 45;
 const MAX_RESTOCK_CADENCE_MS = 1000 * 60 * 12;
 export const ECOSYSTEM_ACTIVITY_FORMULA =
-  'activityScore = clamp01(0.45*coin/200 + 0.35*recentExtraction/6 + 0.20*depletedStock); cadence = base*(1.25 - 0.45*depletedStock)*(1 - 0.45*activityScore)';
+  'activityScore = clamp01(0.45*(playerCoin+treasuryCoin)/200 + 0.35*recentExtraction/6 + 0.20*depletedStock); cadence = base*(1.25 - 0.45*depletedStock)*(1 - 0.45*activityScore)';
 
 function clamp01(value: number): number {
   return clampFloat(value, 0, 1);
@@ -148,15 +148,16 @@ export function computeEcosystemActivity(
   const previousTrees = previous?.depletedTrees ?? depletedTrees;
   const previousRocks = previous?.depletedRocks ?? depletedRocks;
   const recentExtraction = Math.max(0, depletedTrees - previousTrees) + Math.max(0, depletedRocks - previousRocks);
-  const tokenSignal = clamp01(world.inventory.coin / ACTIVITY_COIN_REF);
+  const tokensInCirculation = Math.max(0, world.inventory.coin + (world.ecosystem?.treasury?.coin ?? 0));
+  const tokenSignal = clamp01(tokensInCirculation / ACTIVITY_COIN_REF);
   const recentSignal = clamp01(recentExtraction / RECENT_EXTRACTION_REF);
   const activityScore = clamp01(tokenSignal * 0.45 + recentSignal * 0.35 + stockPressure * 0.2);
   const treeCadenceMs = restockCadenceMs(baseCadenceMs, stockPressure, activityScore);
 
   return {
     updatedAt: Date.now(),
-    formulaVersion: 'prompt23-f2f3-v1',
-    tokensInCirculation: Math.max(0, Math.round(world.inventory.coin)),
+    formulaVersion: 'prompt23-f4-v1',
+    tokensInCirculation: Math.max(0, Math.round(tokensInCirculation)),
     depletedTrees,
     depletedRocks,
     recentExtraction,

@@ -720,6 +720,17 @@ function Game() {
     }
   }
 
+  // Close the dialogue WITHOUT writing to 0G — for when you just wanted to hear an
+  // NPC out. Any unsaved chat for this NPC is discarded (no storage write, no
+  // wallet signature).
+  function leaveNoSave() {
+    const npc = active;
+    setActive(null);
+    setScene({ dialogue: '', options: [], loading: false });
+    void play('dialogue_close');
+    if (npc) setDirty((d) => ({ ...d, [npc]: false }));
+  }
+
   // ── Title screen ── (skipped in photo mode so ?shot jumps straight into the
   // explorable village for a clean thumbnail, no wallet needed).
   if ((!isConnected || !address) && !guest && !photoMode) {
@@ -998,9 +1009,14 @@ function Game() {
                   Sell wood
                 </button>
               )}
-              <button onClick={leave} className="bg-black/40 border border-[#5a4a28] hover:border-[#d6b84a] rounded-md px-3 py-2 text-sm text-[#d89]">
-                Leave & save
+              <button onClick={leaveNoSave} title="Close without saving anything to 0G" className="bg-black/40 border border-[#5a4a28] hover:border-[#d6b84a] rounded-md px-3 py-2 text-sm text-[#f4e8d0]/80">
+                Leave
               </button>
+              {active && dirty[active] && (
+                <button onClick={leave} title="Save this conversation to 0G" className="bg-black/40 border border-[#5a4a28] hover:border-[#d6b84a] rounded-md px-3 py-2 text-sm text-[#d89]">
+                  Leave & save
+                </button>
+              )}
             </div>
 
             {active === 'aldric' && (
