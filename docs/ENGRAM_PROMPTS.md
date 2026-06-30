@@ -1234,4 +1234,86 @@ redespliega. Refuerza "own your world".
 
 ---
 
+## Prompt 25 — Herramientas/armas diseñadas con IA y vendibles en el mercado (#15)
+
+**Para:** Codex (backend/0G). Punto FUERTE para la tesis 0G.
+
+### La idea
+Igual que el jugador construye estructuras con IA, que pueda **diseñar ítems con IA**:
+herramientas de recolección (hacha/pico mejorados), armas para enemigos, o ítems que **mejoran
+un stat** (velocidad, daño, rinde de tala/minado, HP). Y que pueda **ofertarlos en el mercado**,
+de modo que otros jugadores los **compren**. Resultado: **0G guarda creaciones de usuarios** y se
+vuelven **activos comerciables** entre wallets — propiedad real on-chain.
+
+### Por qué encaja con 0G (el gancho)
+- El ítem es **estado propiedad del jugador**, persistido en su bundle 0G (como la memoria/mundo).
+- Una **listing** de mercado es un objeto en 0G/registry que otra wallet puede leer y comprar →
+  transferencia de propiedad verificable. "Crea con prompts, posee en 0G, vende a otros."
+
+### Primera versión (acotada, sin romper nada)
+- **Esquema de ítem** (`src/lib/types.ts`): id, owner, nombre, tipo (`tool | weapon | trinket`),
+  `stat` afectado + magnitud, rareza/coste estimado, `createdAt`, prompt origen. Determinista y
+  con límites (no stats infinitos): clampea magnitudes.
+- **/api/forge** (nuevo, espejo de `/api/build`): prompt → ítem(s) con stats acotados (Claude),
+  coste estimado en $ y presupuesto como en build IA.
+- **Persistencia 0G**: guarda el ítem en el inventario del jugador dentro del WorldState/bundle
+  (reusa el seam de `world.ts`/`save.ts`). Que sobreviva al reload.
+- **Mercado**: poder **listar** un ítem a un precio (coin) y que otra wallet lo **compre**
+  (transferencia de propiedad + pago). Empieza con un registry/estado público mínimo (como
+  public-world/parcels) o, si 0G storage sigue 503-eando, degrada con `pending` como en parcels.
+- **Efecto en juego (seam para Claude/Scene3D):** EXPONER el ítem equipado y su modificador de
+  stat; el render/uso en `Scene3D.tsx` (equipar, swing, bonus de rinde) lo cablea Claude después.
+  **No edites Scene3D.tsx**; deja funciones/َstate listos para consumir.
+
+### Restricciones
+- Determinista y con clamps (anti-exploit económico; respeta la lógica de scarcity del Prompt 23).
+- `npx tsc --noEmit` limpio; `pnpm install` si agregas deps; co-author Codex; `git pull --no-edit`
+  antes de push; entrada en `docs/PROMPT_LOG.md`; **no toques `Scene3D.tsx`** (Claude trabaja ahí).
+
+### Criterios de aceptación
+1. El jugador describe un ítem por prompt y obtiene un ítem con stats **acotados**, guardado en 0G.
+2. Puede **listar** el ítem en el mercado y otra wallet puede **comprarlo** (cambia el dueño + paga).
+3. El ítem persiste tras reload; si 0G está caído, degrada con `pending` (no rompe).
+4. El modificador de stat queda EXPUESTO para que la escena lo use; `tsc` limpio; sin tocar Scene3D.
+
+---
+
+## Prompt 26 — Rotación de la vista aérea (#12)
+
+**Para:** Claude (Scene3D/cámara) — futuro.
+
+Hoy la vista aérea está fija (norte arriba). Permitir **girar el azimut** de la cámara aérea
+(p. ej. Q/E o arrastrar con botón medio) para ver el mapa desde varias perspectivas. Cuidar que
+los controles RTS (mover/seleccionar), el snapping de construcción y los labels del mundo sigan
+coherentes con la rotación (transformar el input del cursor por el azimut). Persistir o resetear
+el ángulo al entrar/salir según se sienta mejor. Aceptación: la aérea se puede rotar suavemente
+y construir/seleccionar sigue funcionando en cualquier ángulo.
+
+---
+
+## Prompt 27 — Hambre / sustento (#13)
+
+**Para:** futuro (más adelante).
+
+Introducir una mecánica de **hambre** (o energía/sustento): baja con el tiempo/actividad y se
+repone comiendo (recurso comida — pescar en el río, cultivar, comprar a Aldric). Penaliza stats si
+llega a 0 (no muerte instantánea para no frustrar). Debe persistir en 0G como el resto del estado.
+Pensar el balance para que sume inmersión sin volverse tedioso. Documentar antes de implementar.
+
+---
+
+## Prompt 28 — NPC compañero del jugador (#16)
+
+**Para:** futuro (posible siguiente ronda, o junto al servidor multijugador en tiempo real).
+
+Que un jugador pueda tener un **NPC de compañía** que lo acompañe por el mundo. Diálogos
+**mínimos o nulos** al inicio (aún por definir): podría empezar como un seguidor silencioso que
+camina contigo (pathfinding/follow), y luego sumar interacciones mínimas. Ideas a explorar:
+- Vínculo persistido en 0G (el compañero es tuyo, parte de tu estado).
+- Posible utilidad (carga extra hacia el almacén, ayuda en combate, ilumina de noche).
+- Encaja bien con el mundo multijugador en tiempo real (compañeros visibles entre jugadores).
+Sin decisión de alcance todavía — documentado para no perder la idea.
+
+---
+
 *Engram — Zero Cup 2026 — Build on 0G. Own your story.*

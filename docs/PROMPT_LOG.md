@@ -1619,3 +1619,10 @@ En `Scene3D.tsx`, al generar el build IA detectar la intención en el prompt (`a
 prefijar el clusterLabel con "reinforced …" al colocar, para que herede el HP y la tarjeta lo muestre.
 **Qué se hizo:** lo anterior; `tsc` limpio. Coordinado: Codex ya cerró su hotfix de world.ts antes
 de tocarlo. **Commit:** _(este commit)_
+
+### 2026-06-29 · Documentar futuros (#12,#13,#15,#16) + auditoría de assets (#14)
+**Pedido (humano):** documentar #12 (rotar vista aérea), #13 (hambre), #15 (herramientas/armas IA
+vendibles) y una nueva idea #16 (NPC compañero); y pasar la lista de assets faltantes/pendientes.
+**Qué se hizo:** `docs/ENGRAM_PROMPTS.md` Prompts 25 (#15, para Codex, backend/0G), 26 (#12),
+27 (#13), 28 (#16). Nuevo `docs/ASSET_AUDIT.md`: texturas completas (8 slots), faltan 5 audios
+referenciados (land-dirt + 4 de ui/) y variantes/cues opcionales. **Commit:** _(este commit)_
