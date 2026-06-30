@@ -1698,3 +1698,13 @@ la cottage estaban hardcodeados en z viejo (1.01/1.06); ahora se anclan a `HOUSE
 exterior del muro frontal) para verse desde afuera. (4) el anillo era el `DamageMarker` (muro
 dañado por asedio); ahora `DamageMarker` y `RelationMarker` se ocultan en 1ra persona (visible solo
 en aérea, como la barra de HP). `tsc` limpio; solo Scene3D.tsx + el mp3. **Commit:** _(este commit)_
+
+### 2026-06-30 · Pilares de diseño + backlog (muerte/mercado, nature-actividad, escaleras, río, manual)
+**Pedido (humano):** documentar el pilar "todo elemento debe estar justificado"; consecuencia de
+morir (resta recursos) → daño de demonios a -1 + mercado de Aldric con hierbas e ítems de jugadores;
+nature-AI alimentada por tiempo jugado; escaleras escalables/torres; río con propósito (cavar/pescar/
+puentes/granjas/comida); modo manual con manos. Y el prompt de arte para biomas (uno por uno).
+**Qué se hizo:** nuevo `docs/DESIGN_PILLARS.md` (5 pilares); ENGRAM_PROMPTS Prompts 30 (muerte+
+mercado, Codex+Claude), 31 (nature-actividad), 32 (escaleras escalables), 33 (río con propósito +
+comida), 34 (modo manual). Los prompts de textura por bioma ya están en `docs/ART_PROMPTS.md`.
+**Commit:** _(este commit)_

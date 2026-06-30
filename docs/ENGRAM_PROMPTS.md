@@ -1359,4 +1359,82 @@ El pasto hoy mezcla variantes de textura por tile de forma cuasi-aleatoria → s
 
 ---
 
+## Prompt 30 — Consecuencia de morir + economía de curación + mercado de Aldric
+
+**Para:** Codex (economía/world.ts) + Claude (UI del mercado). Ver `docs/DESIGN_PILLARS.md` (1 y 2).
+
+### Por qué
+El kit de hierbas medicinales **no tiene razón de ser** mientras perder vida no cueste nada. Damos
+peso a la vida → curarse importa → defenderse importa.
+
+### Cambios
+- **Consecuencia de daño/muerte:** perder vida (o morir) **resta recursos/coin** al jugador
+  (define la regla: p. ej. al llegar a 0 HP pierdes un % de coin/recursos y revives; o cada golpe
+  recibido tiene un costo). Persistido en 0G como el resto del estado.
+- **Daño bajo y justo:** baja el daño de demonios a ~**-1** por golpe (hoy world.ts ya lo bajó a -2;
+  ajústalo) para que la consecuencia sea tensa, no frustrante.
+- **Hierbas medicinales en el mercado:** hoy no están en las opciones de Aldric. Crea un **botón
+  "Mercado"** en su GUI con dos secciones: **productos estándar** (hierbas medicinales, kits de
+  reparación, mejoras) y **productos fabricados por jugadores** (los ítems del Prompt 25 puestos a
+  la venta). Comprar hierbas → cura HP.
+- **Seam:** Codex hace el backend (regla de consecuencia, catálogo estándar, integración con las
+  listings de #15) en world.ts/economía; Claude cablea el botón/GUI del mercado en client-page.tsx.
+
+### Aceptación
+1. Recibir daño/morir tiene un costo real (recursos/coin) persistido en 0G.
+2. Demonios hacen ~-1 por golpe.
+3. Aldric tiene un Mercado con hierbas (curan) + ítems de jugadores; comprar funciona.
+
+---
+
+## Prompt 31 — La actividad de la comunidad alimenta a la IA de naturaleza
+
+**Para:** Codex (nature-AI) — futuro. Ver pilar 5.
+
+Que un **factor de regeneración** de recursos (árboles/rocas) dependa del **tiempo jugado/conectado**
+por la comunidad: entre más se juega, más vivo y abundante el mundo. Atarlo a 0G (registrar
+actividad agregada como estado on-chain/0G y derivar de ahí la cadencia de la nature-AI). Cuidar
+balance (que no explote la oferta ni rompa la economía de escasez del Prompt 23). Documentar la
+métrica de "actividad" y cómo se persiste antes de implementar.
+
+---
+
+## Prompt 32 — Estructuras escalables de verdad (escaleras, torres)
+
+**Para:** Claude (Scene3D/colisión) — futuro. Ver pilar 1.
+
+Si el jugador pide a la IA construir **escaleras**, deben **poder subirse realmente** (no bloques
+decorativos), de modo que se pueda llegar a lo alto de una **torre**. Implica colisión/altura
+"escalonada" (step-up) contra bloques: el jugador sube si el bloque siguiente está dentro de un
+umbral de altura. Pensar pendientes/rampas también. Aceptación: construir una escalera de bloques
+y poder ascender por ella a una plataforma elevada.
+
+---
+
+## Prompt 33 — El río con propósito: cavar, pescar, puentes, granjas, comida
+
+**Para:** futuro (grande; varias fases). Ver pilar 1.
+
+El río no debe ser decorativo. Mecánicas a desarrollar (por fases):
+- **Cavar terreno** (lógica de altura del terreno editable) → cerca del río puede crear
+  **vertientes/canales** que desvían agua.
+- **Pescar** en el río → nuevo recurso **comida** (conecta con Prompt 27, hambre).
+- **Puentes** construibles sobre el agua; **transporte** por el río.
+- **Granjas** (cultivar comida) — nuevo recurso comida como base de sustento.
+Cada fase debe persistir su estado en 0G (terreno modificado, granjas, capturas). Requiere diseño
+de la edición de terreno (es lo más delicado). Documentar fases y su orden antes de implementar.
+
+---
+
+## Prompt 34 — Modo manual: ver las manos y "trabajar" para construir
+
+**Para:** futuro (exploratorio). Ver pilar 4.
+
+En vez de construir con "apretar un botón", un modo donde se ven las **manos del jugador** y
+construir/recolectar implica una **serie de labores/procedimientos** (gestos, pasos). Pensado
+también para **VR** (manos rastreadas): que la construcción se sienta física y realista. Exploratorio;
+documentar alcance y viabilidad antes de comprometer.
+
+---
+
 *Engram — Zero Cup 2026 — Build on 0G. Own your story.*
