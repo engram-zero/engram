@@ -53,12 +53,13 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const unavailableRef = useRef(new Set<string>());
   const mutedRef = useRef(false);
 
-  // Hydrate persisted mute preference on mount (client-only to avoid SSR mismatch).
-  useEffect(() => {
-    const stored = readStoredMute();
-    mutedRef.current = stored;
-    setMutedState(stored);
-  }, []);
+  // Always start a fresh page load with sound ON. This is a demo/hackathon build:
+  // judges (and us) should hear the world every session and notice the 🔊/🎤 buttons.
+  // The mute toggle still works within the session — we just don't carry a previous
+  // session's mute across reloads (a once-muted session would otherwise stay silent
+  // forever and the player would miss the audio/voice value). We keep readStoredMute
+  // around in case we ever want an opt-in "remember mute" later.
+  void readStoredMute;
 
   useEffect(() => {
     if (typeof window === 'undefined') return;

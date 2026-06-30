@@ -1489,3 +1489,15 @@ jugador (`atan2(player - npc)`) y la rotación usa ese target con sway mínimo. 
 `muted=false` por defecto y arranca al primer gesto (autoplay unlock) — confirmado; añadido un pulso
 `.engram-attention` (borde verde latente) al botón 🎤 para invitar a los jueces a probar la voz.
 `npx tsc --noEmit` limpio. **Commit:** _(este commit)_
+
+### 2026-06-29 · El audio arranca silenciado entre sesiones
+**Pedido (humano):** al cargar la página e ir a hablar con un NPC, la bocina sale apagada
+aunque la sesión anterior la dejé prendida; los jueces se perderían valor si no lo notan.
+**Prompt sintetizado:** El estado de mute se persiste en `localStorage` (`engram:audioMuted`)
+y se rehidrata al montar `AudioProvider`, así que una sesión que alguna vez quedó silenciada
+arranca muda para siempre — fatal para una demo de jueces. Quita la rehidratación al cargar:
+cada carga de página debe empezar con el sonido ENCENDIDO (`muted=false`), conservando el
+toggle dentro de la sesión. No persistas mute entre reloads.
+**Qué se hizo:** removí el `useEffect` que rehidrataba `readStoredMute()` en
+`src/context/AudioContext.tsx`; el default `false` ahora gana en cada carga. `tsc` limpio.
+**Commit:** _(este commit)_
