@@ -216,6 +216,7 @@ function Game() {
   const [scene, setScene] = useState<Scene>({ dialogue: '', options: [], loading: false });
   const [typed, setTyped] = useState('');
   const [panelOpen, setPanelOpen] = useState(false);
+  const [treasuryOpen, setTreasuryOpen] = useState(false); // World Treasury panel (opt-in)
   const [dirty, setDirty] = useState<Partial<Record<NPCName, boolean>>>({});
   const [save, setSave] = useState<SaveState>({ status: 'idle' });
   const [err, setErr] = useState<string | null>(null);
@@ -847,6 +848,14 @@ function Game() {
               <span className="text-xs font-mono bg-black/40 border border-[#4a3f28] px-3 py-1.5 rounded-full" title={address}>
                 {short(address)}
               </span>
+              <button
+                onClick={() => setTreasuryOpen((t) => !t)}
+                title="World Treasury — the economy's 0G state"
+                className="bg-black/40 border rounded-md px-3 py-1.5 text-sm"
+                style={{ borderColor: treasuryOpen ? '#d6b84a' : '#5a4a28' }}
+              >
+                🌍 0G
+              </button>
               <button onClick={() => setPanelOpen(true)} className="bg-black/40 border border-[#5a4a28] hover:border-[#d6b84a] rounded-md px-3 py-1.5 text-sm">
                 📜 Memory
               </button>
@@ -881,11 +890,11 @@ function Game() {
         </div>
       )}
 
-      {!photoMode && address && (
-        <div className="pointer-events-none absolute top-16 left-4 z-20 hidden w-[292px] max-w-[calc(100vw-2rem)] rounded-md border border-[#5a4a28]/85 bg-[rgba(12,10,7,0.72)] px-3 py-2 text-[11px] leading-snug text-[#f4e8d0]/82 shadow-[0_8px_28px_rgba(0,0,0,0.35)] backdrop-blur-sm sm:block">
+      {!photoMode && address && treasuryOpen && (
+        <div className="pointer-events-auto absolute top-16 right-4 z-30 w-[292px] max-w-[calc(100vw-2rem)] rounded-md border border-[#5a4a28]/85 bg-[rgba(12,10,7,0.92)] px-3 py-2 text-[11px] leading-snug text-[#f4e8d0]/82 shadow-[0_8px_28px_rgba(0,0,0,0.35)] backdrop-blur-sm">
           <div className="mb-1 flex items-center justify-between text-[#d6b84a]">
             <span className="font-semibold tracking-[0.08em]">World Treasury</span>
-            <span className="font-mono text-[10px] text-[#f4e8d0]/55">0G state</span>
+            <button onClick={() => setTreasuryOpen(false)} aria-label="Close" className="text-[#f4e8d0]/60 hover:text-[#f4e8d0]">✕</button>
           </div>
           <div className="mb-1 text-[#f4e8d0]/68">
             Earth: <span className="capitalize text-[#f4e8d0]">{treasury.dominantZone}</span>
