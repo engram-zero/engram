@@ -47,6 +47,11 @@ export function setWorldPersistence(p: WorldPersistence): void; // register your
   `statModifierFor(stat)` or `allStatModifiers(...)`. Market hooks are
   `listAiItem(...)`, `cancelAiItemListing(...)` and `buyAiItemListing(...)`. Do not
   trust raw bundle stats: `world.ts` clamps item magnitude/value on load and add.
+- **Prompt 29 seam:** biome data lives in `src/lib/biome.ts`. Render should call
+  `biomeAt(x,z)` / `biomeBlendAt(x,z)` and use `BIOME_GROUND` to map
+  `meadow|sand|snow|dry` to texture slots. Parcels persist `ParcelClaim.biome`; old
+  claims derive it from their centre via `biomeAt(...)`. Do not create a second
+  biome map inside `Scene3D.tsx`.
 - **martelaxe owns:** the 0G/contract persistence adapter. Current MVP:
   `createBundleWorldPersistence(networkType)` in `src/lib/world-0g.ts`, registered from
   `src/app/client-page.tsx`. **You do not need to touch Scene3D or gameplay code** for

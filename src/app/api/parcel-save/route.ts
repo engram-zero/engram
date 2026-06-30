@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import type { NetworkType } from '@/app/providers';
 import { createBlob, generateMerkleTree, getRootHash } from '@/lib/0g/blob';
+import { biomeAt } from '@/lib/biome';
 import { getNetworkConfig } from '@/lib/0g/network';
 import { uploadToStorage } from '@/lib/0g/uploader';
 import type { ParcelClaim, ParcelDataBundle } from '@/lib/types';
@@ -19,6 +20,10 @@ const PARCEL_STORAGE_NETWORK: NetworkType = 'turbo';
 const UPLOAD_RETRY_DELAYS_MS = [800, 1800, 4000];
 const DEFERRED_RETRY_DELAYS_MS = [15000, 60000, 180000];
 const pendingDeferredUploads = new Set<string>();
+
+function normalizeBiome(raw: unknown, x: number, z: number): ParcelClaim['biome'] {
+  return raw === 'sand' || raw === 'snow' || raw === 'dry' || raw === 'meadow' ? raw : biomeAt(x, z);
+}
 
 function readEnvFileValue(name: string): string | undefined {
   if (process.env.NODE_ENV === 'production') return undefined;
@@ -126,6 +131,8 @@ function normalizeParcel(raw: unknown, walletAddress: string): ParcelClaim | nul
   const gz = Math.max(-12, Math.min(12, Math.round(Number(p.gz ?? 0))));
   const id = `p:${gx}:${gz}`;
   const terrain = p.terrain === 'grove' || p.terrain === 'quarry' ? p.terrain : 'meadow';
+  const x = gx * PARCEL_SIZE;
+  const z = gz * PARCEL_SIZE;
   const at = Math.round(Number(p.at ?? 0));
 
   return {
@@ -133,12 +140,13 @@ function normalizeParcel(raw: unknown, walletAddress: string): ParcelClaim | nul
     owner,
     gx,
     gz,
-    x: gx * PARCEL_SIZE,
-    z: gz * PARCEL_SIZE,
+    x,
+    z,
     size: PARCEL_SIZE,
     claimCost: Math.max(0, Math.min(999, Math.round(Number(p.claimCost ?? 0)))),
     commissionBps: Math.max(0, Math.min(5000, Math.round(Number(p.commissionBps ?? PARCEL_COMMISSION_BPS)))),
     terrain,
+    biome: normalizeBiome(p.biome, x, z),
     at: Number.isFinite(at) && at > 0 ? at : Date.now(),
   };
 }

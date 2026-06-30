@@ -13,6 +13,7 @@ export type WalletRelation = 'neutral' | 'allied' | 'hostile';
 export type AiItemType = 'tool' | 'weapon' | 'trinket';
 export type AiItemStat = 'woodYield' | 'miningYield' | 'combatDamage' | 'moveSpeed' | 'maxHp';
 export type AiItemRarity = 'common' | 'uncommon' | 'rare';
+export type BiomeId = 'meadow' | 'sand' | 'snow' | 'dry';
 export type NatureZoneId = 'north_forest' | 'riverlands' | 'east_hills' | 'south_fields' | 'west_grove';
 export type FaunaMood = 'hostile' | 'wary' | 'neutral';
 export const BLOCK_UNIT = 0.1; // smaller voxels → more detailed, realistic builds
@@ -243,8 +244,10 @@ export interface ParcelClaim {
   claimCost: number;
   /** Commission paid by visitors in basis points. */
   commissionBps: number;
-  /** Simple biome/material hint for data-driven rendering. */
+  /** Legacy parcel resource hint (grove/quarry/meadow); kept for resource overlays. */
   terrain: 'meadow' | 'grove' | 'quarry';
+  /** Ground biome at parcel center; render can map this to coherent soil textures. */
+  biome?: BiomeId;
   /** 0G Storage root for the parcel's standalone data bundle. */
   dataRoot?: string | null;
   /** 0G Storage upload tx/hash for the parcel bundle, when available. */

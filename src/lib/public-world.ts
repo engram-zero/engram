@@ -10,6 +10,7 @@ import { getRegistryAddress } from '@/lib/registry/registry';
 import { PARCEL_REGISTRY_ABI } from '@/lib/registry/parcel-abi';
 import { getParcelRegistryAddress } from '@/lib/registry/parcels';
 import { normalizeWorldState, PARCEL_SIZE, parcelClaimCost, parcelTerrainForGrid, type Building, type DemonSiegeEvent, type ParcelClaim, type ParcelRentEvent, type RaidEvent, type RepairEvent } from '@/lib/world';
+import { biomeAt } from '@/lib/biome';
 
 export type PublicRaidEvent = RaidEvent & { author: string };
 export type PublicRepairEvent = RepairEvent & { author: string };
@@ -105,6 +106,7 @@ function parcelFromRegistryEvent(log: EventLog): PublicParcelClaim | null {
       claimCost: parcelClaimCost(gx, gz),
       commissionBps: Number(log.args?.commissionBps ?? 0),
       terrain: parcelTerrainForGrid(gx, gz),
+      biome: biomeAt(gx * PARCEL_SIZE, gz * PARCEL_SIZE),
       dataRoot: normalizeRoot(log.args?.dataRoot),
       at: Number(log.args?.at ?? 0) * 1000,
     };

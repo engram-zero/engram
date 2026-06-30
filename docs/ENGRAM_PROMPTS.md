@@ -1327,6 +1327,12 @@ Sin decisión de alcance todavía — documentado para no perder la idea.
 
 **Para:** Claude (Scene3D/terreno) — futuro cercano.
 
+> **🟢 DATA LAYER DONE — 30 jun 2026.** `src/lib/biome.ts` expone
+> `biomeAt(x,z)`, `biomeBlendAt(x,z)` y `BIOME_GROUND` para
+> `meadow|sand|snow|dry`; las regiones son amplias/deterministas y separan nieve/arena.
+> `ParcelClaim.biome` se persiste y claims viejos lo derivan del centro. Falta el
+> render en `Scene3D.tsx` y los slots/archivos de texturas en el manifest.
+
 ### Problema
 El pasto hoy mezcla variantes de textura por tile de forma cuasi-aleatoria → se ve como un
 **tapiz/caleidoscopio**. Queremos **áreas grandes y coherentes** con suelos distintos

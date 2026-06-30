@@ -1609,6 +1609,20 @@ acciones de mercado sin romper economía/scarcity.
 `COORDINATION.md` y estado del Prompt 25 actualizado. Sin cambios en `Scene3D.tsx`.
 **Commit:** _(este commit)_
 
+### 2026-06-30 · Prompt 29 data layer — biomas coherentes + parcelas
+**Pedido (humano):** implementar solo la capa de datos de biomas: regiones coherentes
+`meadow/sand/snow/dry`, mapeo a slots de suelo, y que las parcelas nuevas hereden bioma estable.
+No tocar `Scene3D.tsx` ni `textures.ts`.
+**Prompt sintetizado:** Crear `BiomeId`, `biomeAt(x,z)` determinista con regiones amplias y raros
+separados, `biomeBlendAt` para bordes, `BIOME_GROUND` para que el render elija textura, y persistir
+`ParcelClaim.biome` derivándolo del centro si falta.
+**Qué se hizo:** `src/lib/biome.ts` con centros regionales + ruido de baja frecuencia, blend
+primario/secundario, y mapping `terrain_grass/terrain_sand/terrain_snow/terrain_dry`; `ParcelClaim`
+incluye `biome`; `world.ts`, `parcel-save` y `public-world` normalizan/derivan el bioma para
+claims nuevos, bundles dedicados y eventos on-chain sin metadata. Seam documentado en
+`COORDINATION.md`; estado de Prompt 29 actualizado. Sin cambios en `Scene3D.tsx` ni `textures.ts`.
+**Commit:** _(este commit)_
+
 ### 2026-06-29 · Lote de pulido aéreo/combate (deselección, muros, sombras, casas, cono de ataque)
 **Pedido (humano):** del playtest — #9 click izq. no deselecciona en aérea; #10 no se pueden rotar
 muros a 45° y a veces no se puede colocar otro muro; #2 árboles sin sombra; #8 casas muy chicas;

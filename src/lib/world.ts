@@ -15,9 +15,10 @@
 //     NOT cross-device, NOT on-chain).
 
 import { useSyncExternalStore } from 'react';
-import { BLOCK_SCALE_MAX, BLOCK_SCALE_MIN, BLOCK_UNIT, type AiItem, type AiItemListing, type AiItemStat, type AiItemType, type DemonSiegeEvent, type EcosystemState, type OreType, type ParcelClaim, type ParcelRentEvent, type RaidEvent, type RepairEvent, type ResourceType, type StoredResourceType, type TreeGrowthStage, type TreeGrowthState, type WalletRelation, type WorldState, type Building, type BuildingType } from '@/lib/types';
+import { biomeAt } from '@/lib/biome';
+import { BLOCK_SCALE_MAX, BLOCK_SCALE_MIN, BLOCK_UNIT, type AiItem, type AiItemListing, type AiItemStat, type AiItemType, type BiomeId, type DemonSiegeEvent, type EcosystemState, type OreType, type ParcelClaim, type ParcelRentEvent, type RaidEvent, type RepairEvent, type ResourceType, type StoredResourceType, type TreeGrowthStage, type TreeGrowthState, type WalletRelation, type WorldState, type Building, type BuildingType } from '@/lib/types';
 
-export type { AiItem, AiItemListing, AiItemStat, AiItemType, DemonSiegeEvent, EcosystemState, OreType, ParcelClaim, ParcelRentEvent, RaidEvent, RepairEvent, ResourceType, StoredResourceType, TreeGrowthStage, TreeGrowthState, WalletRelation, WorldState, Building, BuildingType } from '@/lib/types';
+export type { AiItem, AiItemListing, AiItemStat, AiItemType, BiomeId, DemonSiegeEvent, EcosystemState, OreType, ParcelClaim, ParcelRentEvent, RaidEvent, RepairEvent, ResourceType, StoredResourceType, TreeGrowthStage, TreeGrowthState, WalletRelation, WorldState, Building, BuildingType } from '@/lib/types';
 
 /** How much wood the player can carry before they must use/drop some. Raised to
  * support AI-built structures and the pricier builds near the village centre. */
@@ -553,6 +554,10 @@ function normalizeTerrain(raw: unknown): ParcelClaim['terrain'] {
   return raw === 'grove' || raw === 'quarry' ? raw : 'meadow';
 }
 
+function normalizeBiome(raw: unknown, x: number, z: number): BiomeId {
+  return raw === 'sand' || raw === 'snow' || raw === 'dry' || raw === 'meadow' ? raw : biomeAt(x, z);
+}
+
 function normalizeBytes32(raw: unknown): string | null {
   return typeof raw === 'string' && /^0x[a-fA-F0-9]{64}$/.test(raw) ? raw : null;
 }
@@ -583,6 +588,7 @@ function normalizeParcelClaims(raw: unknown): ParcelClaim[] {
       claimCost: Math.max(0, Math.min(999, Math.round(Number(p.claimCost ?? parcelClaimCost(gx, gz))))),
       commissionBps: Math.max(0, Math.min(5000, Math.round(Number(p.commissionBps ?? PARCEL_COMMISSION_BPS)))),
       terrain: normalizeTerrain(p.terrain),
+      biome: normalizeBiome(p.biome, x, z),
       dataRoot: normalizeBytes32(p.dataRoot),
       dataTxHash: normalizeBytes32(p.dataTxHash),
       at: Number.isFinite(at) && at > 0 ? at : Date.now(),
@@ -1517,6 +1523,7 @@ export function previewParcelClaimAt(x: number, z: number, occupiedParcelIds: st
     claimCost,
     commissionBps: PARCEL_COMMISSION_BPS,
     terrain: parcelTerrainForGrid(gx, gz),
+    biome: biomeAt(cx, cz),
     at: Date.now(),
   };
   return { ok: true, claim };
@@ -1527,13 +1534,14 @@ export function commitParcelClaim(claim: ParcelClaim): { ok: boolean; reason?: s
   if (!owner) return { ok: false, reason: 'Connect a wallet first.' };
   if (claim.owner !== owner) return { ok: false, reason: 'Cannot commit another wallet parcel.' };
   if (state.parcelClaims.some((existing) => existing.id === claim.id)) return { ok: false, reason: 'That parcel is already claimed.' };
+  const stableClaim: ParcelClaim = { ...claim, biome: claim.biome ?? biomeAt(claim.x, claim.z) };
   const freeBuild = isLocalhostFreeBuildWallet();
   commit({
     ...state,
-    inventory: { ...state.inventory, coin: freeBuild ? state.inventory.coin : Math.max(0, state.inventory.coin - claim.claimCost) },
-    parcelClaims: [claim, ...state.parcelClaims].slice(0, MAX_PARCEL_CLAIMS),
+    inventory: { ...state.inventory, coin: freeBuild ? state.inventory.coin : Math.max(0, state.inventory.coin - stableClaim.claimCost) },
+    parcelClaims: [stableClaim, ...state.parcelClaims].slice(0, MAX_PARCEL_CLAIMS),
   });
-  return { ok: true, claim };
+  return { ok: true, claim: stableClaim };
 }
 
 export function claimParcelAt(x: number, z: number, occupiedParcelIds: string[] = []): { ok: boolean; reason?: string; claim?: ParcelClaim } {
