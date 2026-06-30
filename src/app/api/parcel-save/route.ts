@@ -8,6 +8,7 @@ import { biomeAt } from '@/lib/biome';
 import { debugLog, debugWarn } from '@/lib/debug-log';
 import { getNetworkConfig } from '@/lib/0g/network';
 import { uploadToStorage } from '@/lib/0g/uploader';
+import { generateParcelLootPack, normalizeParcelLootPack } from '@/lib/parcel-resources';
 import type { ParcelClaim, ParcelDataBundle } from '@/lib/types';
 
 export const runtime = 'nodejs';
@@ -131,10 +132,11 @@ function normalizeParcel(raw: unknown, walletAddress: string): ParcelClaim | nul
   const gx = Math.max(-12, Math.min(12, Math.round(Number(p.gx ?? 0))));
   const gz = Math.max(-12, Math.min(12, Math.round(Number(p.gz ?? 0))));
   const id = `p:${gx}:${gz}`;
-  const terrain = p.terrain === 'grove' || p.terrain === 'quarry' ? p.terrain : 'meadow';
+  const terrain: ParcelClaim['terrain'] = p.terrain === 'grove' || p.terrain === 'quarry' ? p.terrain : 'meadow';
   const x = gx * PARCEL_SIZE;
   const z = gz * PARCEL_SIZE;
   const at = Math.round(Number(p.at ?? 0));
+  const seed = { id, gx, gz, terrain };
 
   return {
     id,
@@ -148,6 +150,7 @@ function normalizeParcel(raw: unknown, walletAddress: string): ParcelClaim | nul
     commissionBps: Math.max(0, Math.min(5000, Math.round(Number(p.commissionBps ?? PARCEL_COMMISSION_BPS)))),
     terrain,
     biome: normalizeBiome(p.biome, x, z),
+    resources: Array.isArray(p.resources) ? normalizeParcelLootPack(seed, p.resources) : generateParcelLootPack(seed),
     at: Number.isFinite(at) && at > 0 ? at : Date.now(),
   };
 }

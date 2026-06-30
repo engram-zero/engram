@@ -17,9 +17,11 @@
 import { useSyncExternalStore } from 'react';
 import { biomeAt } from '@/lib/biome';
 import { computeCommunityActivity } from '@/lib/ecosystem';
-import { BLOCK_SCALE_MAX, BLOCK_SCALE_MIN, BLOCK_UNIT, type AiItem, type AiItemListing, type AiItemStat, type AiItemType, type AldricStandardItemId, type AldricStandardMarketItem, type BiomeId, type CommunityActivityState, type DeathPenaltyState, type DemonSiegeEvent, type EcosystemState, type OreType, type ParcelClaim, type ParcelRentEvent, type RaidEvent, type RepairEvent, type ResourceType, type StoredResourceType, type TreeGrowthStage, type TreeGrowthState, type WalletRelation, type WorldState, type Building, type BuildingType } from '@/lib/types';
+import { generateParcelLootPack, normalizeParcelLootPack } from '@/lib/parcel-resources';
+import { BLOCK_SCALE_MAX, BLOCK_SCALE_MIN, BLOCK_UNIT, type AiItem, type AiItemListing, type AiItemStat, type AiItemType, type AldricStandardItemId, type AldricStandardMarketItem, type BiomeId, type CommunityActivityState, type DeathPenaltyState, type DemonSiegeEvent, type EcosystemState, type OreType, type ParcelClaim, type ParcelRentEvent, type ParcelResourceNode, type ParcelResourceRarity, type RaidEvent, type RepairEvent, type ResourceType, type StoredResourceType, type TreeGrowthStage, type TreeGrowthState, type WalletRelation, type WorldState, type Building, type BuildingType } from '@/lib/types';
 
-export type { AiItem, AiItemListing, AiItemStat, AiItemType, AldricStandardItemId, AldricStandardMarketItem, BiomeId, CommunityActivityState, DeathPenaltyState, DemonSiegeEvent, EcosystemState, OreType, ParcelClaim, ParcelRentEvent, RaidEvent, RepairEvent, ResourceType, StoredResourceType, TreeGrowthStage, TreeGrowthState, WalletRelation, WorldState, Building, BuildingType } from '@/lib/types';
+export type { AiItem, AiItemListing, AiItemStat, AiItemType, AldricStandardItemId, AldricStandardMarketItem, BiomeId, CommunityActivityState, DeathPenaltyState, DemonSiegeEvent, EcosystemState, OreType, ParcelClaim, ParcelRentEvent, ParcelResourceNode, ParcelResourceRarity, RaidEvent, RepairEvent, ResourceType, StoredResourceType, TreeGrowthStage, TreeGrowthState, WalletRelation, WorldState, Building, BuildingType } from '@/lib/types';
+export { generateParcelLootPack, normalizeParcelLootPack } from '@/lib/parcel-resources';
 
 /** How much wood the player can carry before they must use/drop some. Raised to
  * support AI-built structures and the pricier builds near the village centre. */
@@ -646,6 +648,7 @@ function normalizeParcelClaims(raw: unknown): ParcelClaim[] {
       commissionBps: Math.max(0, Math.min(5000, Math.round(Number(p.commissionBps ?? PARCEL_COMMISSION_BPS)))),
       terrain: normalizeTerrain(p.terrain),
       biome: normalizeBiome(p.biome, x, z),
+      resources: normalizeParcelLootPack({ id, gx, gz, terrain: normalizeTerrain(p.terrain) }, p.resources),
       dataRoot: normalizeBytes32(p.dataRoot),
       dataTxHash: normalizeBytes32(p.dataTxHash),
       at: Number.isFinite(at) && at > 0 ? at : Date.now(),
@@ -1503,13 +1506,14 @@ export function isParcelResourceDepleted(resourceId: string): boolean {
   return state.depletedParcelResources.includes(resourceId);
 }
 
-export function harvestParcelResource(resourceId: string, type: Extract<ResourceType, 'wood' | 'stone'>): boolean {
+export function harvestParcelResource(resourceId: string, type: StoredResourceType, amount = 1): boolean {
   if (!resourceId || isParcelResourceDepleted(resourceId)) return false;
-  const cap = type === 'wood' ? MAX_WOOD : MAX_STONE;
+  const cap = type === 'wood' ? MAX_WOOD : ORE_MAX[type];
   if (state.inventory[type] >= cap) return false;
+  const gain = Math.max(1, Math.min(3, Math.round(amount)));
   commit({
     ...state,
-    inventory: { ...state.inventory, [type]: Math.min(cap, state.inventory[type] + 1) },
+    inventory: { ...state.inventory, [type]: Math.min(cap, state.inventory[type] + gain) },
     depletedParcelResources: [resourceId, ...state.depletedParcelResources].slice(0, MAX_DEPLETED_PARCEL_RESOURCES),
   });
   return true;
@@ -1762,6 +1766,7 @@ export function previewParcelClaimAt(x: number, z: number, occupiedParcelIds: st
     commissionBps: PARCEL_COMMISSION_BPS,
     terrain: parcelTerrainForGrid(gx, gz),
     biome: biomeAt(cx, cz),
+    resources: generateParcelLootPack({ id, gx, gz, terrain: parcelTerrainForGrid(gx, gz) }),
     at: Date.now(),
   };
   return { ok: true, claim };
@@ -1772,7 +1777,11 @@ export function commitParcelClaim(claim: ParcelClaim): { ok: boolean; reason?: s
   if (!owner) return { ok: false, reason: 'Connect a wallet first.' };
   if (claim.owner !== owner) return { ok: false, reason: 'Cannot commit another wallet parcel.' };
   if (state.parcelClaims.some((existing) => existing.id === claim.id)) return { ok: false, reason: 'That parcel is already claimed.' };
-  const stableClaim: ParcelClaim = { ...claim, biome: claim.biome ?? biomeAt(claim.x, claim.z) };
+  const stableClaim: ParcelClaim = {
+    ...claim,
+    biome: claim.biome ?? biomeAt(claim.x, claim.z),
+    resources: normalizeParcelLootPack(claim, claim.resources),
+  };
   const freeBuild = isLocalhostFreeBuildWallet();
   commit({
     ...state,

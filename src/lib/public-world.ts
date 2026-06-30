@@ -6,6 +6,7 @@ import type { NetworkType } from '@/app/providers';
 import { downloadByRootHashAPI } from '@/lib/0g/downloader';
 import { getNetworkConfig } from '@/lib/0g/network';
 import { debugInfo, debugWarn } from '@/lib/debug-log';
+import { generateParcelLootPack } from '@/lib/parcel-resources';
 import { ENGRAM_REGISTRY_ABI } from '@/lib/registry/abi';
 import { getRegistryAddress } from '@/lib/registry/registry';
 import { PARCEL_REGISTRY_ABI } from '@/lib/registry/parcel-abi';
@@ -138,6 +139,7 @@ function parcelFromRegistryEvent(log: EventLog): PublicParcelClaim | null {
       commissionBps: Number(log.args?.commissionBps ?? 0),
       terrain: parcelTerrainForGrid(gx, gz),
       biome: biomeAt(gx * PARCEL_SIZE, gz * PARCEL_SIZE),
+      resources: generateParcelLootPack({ id, gx, gz, terrain: parcelTerrainForGrid(gx, gz) }),
       dataRoot: normalizeRoot(log.args?.dataRoot),
       at: Number(log.args?.at ?? 0) * 1000,
     };

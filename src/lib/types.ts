@@ -267,6 +267,26 @@ export interface DemonSiegeEvent {
   capped: boolean;
 }
 
+export type ParcelResourceRarity = 'common' | 'uncommon' | 'rare' | 'legendary';
+
+export interface ParcelResourceNode {
+  /** Stable node ID inside the parcel bundle, e.g. `p:7:0:loot:2`. */
+  id: string;
+  /** Resource granted when this node is exhausted. */
+  type: StoredResourceType;
+  /** Weighted rarity tier used for rendering/UX. */
+  rarity: ParcelResourceRarity;
+  /** Local offset from the parcel center; world position = parcel.x/z + localX/localZ. */
+  localX: number;
+  localZ: number;
+  /** Units granted when depleted. Kept low so parcel loot does not break Prompt 23 scarcity. */
+  amount: number;
+  /** Harvest durability for Scene3D; callers may decrement visually before depletion. */
+  hp: number;
+  /** Suggested collision/interaction radius for render/gameplay. */
+  radius: number;
+}
+
 export interface ParcelClaim {
   /** Stable grid parcel ID, e.g. `p:-1:2`. */
   id: string;
@@ -288,6 +308,8 @@ export interface ParcelClaim {
   terrain: 'meadow' | 'grove' | 'quarry';
   /** Ground biome at parcel center; render can map this to coherent soil textures. */
   biome?: BiomeId;
+  /** Deterministic 0G-persisted surprise loot pack for this parcel. */
+  resources: ParcelResourceNode[];
   /** 0G Storage root for the parcel's standalone data bundle. */
   dataRoot?: string | null;
   /** 0G Storage upload tx/hash for the parcel bundle, when available. */

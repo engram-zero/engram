@@ -1871,3 +1871,17 @@ y lo uso TAMBIÉN en `ParcelGroundTile`. Antes la parcela usaba la textura de UN
 del centro) mientras el terreno MEZCLA por posición → en bordes de bioma se veía un parche verde
 sobre nieve/desierto. Ahora la parcela mezcla por posición igual que el entorno (mismo shader, misma
 iluminación PBR) → sin parche. `tsc` limpio; solo Scene3D.tsx. **Commit:** _(este commit)_
+
+### 2026-06-30 · Parcelas como loot pack con rareza
+**Pedido (humano):** reemplazar los recursos fijos de parcela por un bundle sorpresa determinista y
+persistido en 0G, con pesos de rareza madera > piedra > plata > oro, sin tocar `Scene3D.tsx` ni
+`client-page.tsx`.
+**Prompt sintetizado:** Define un esquema de `ParcelClaim.resources` que exponga nodos `{type,
+rarity, amount, hp, localX, localZ, radius}`. Genera el loot pack de forma determinista por id/grid
+de parcela, normaliza saves viejos con el mismo generador, persiste el resultado en el bundle 0G y
+en el `ParcelDataBundle`, y mantén plata/oro raros para no romper la escasez/precios del Prompt 23.
+Documenta el contrato para que Claude lo renderice/coseche después.
+**Qué se hizo:** nuevo `parcel-resources.ts` con generador/normalizador determinista; `ParcelClaim`
+ahora persiste `resources`; `world.ts`, `parcel-save` y `public-world` normalizan/generan nodos; y
+`harvestParcelResource(node.id, node.type, node.amount)` soporta madera, piedra, plata y oro con
+caps. Esquema documentado en `docs/PARCEL_LOOT_SCHEMA.md`. `tsc` limpio. **Commit:** _(este commit)_
