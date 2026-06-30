@@ -1479,3 +1479,13 @@ en globals.css: scrollbar delgado dorado/oscuro (webkit + firefox). (4) `SableAt
 aditivos por electrón + halo de núcleo + `pointLight` morada → glow mágico. (5) `FACING_MIN`
 0.2→0.85 (cono ~60° frontal). `npx tsc --noEmit` limpio.
 **Commit:** _(este commit)_
+
+### 29 jun 2026 · Fix NPCs miran al jugador al hablar + pulso de atención en el micrófono
+**Pedido (humano):** los NPCs te dan la espalda/miran de lado al hablar (regresión); y dejar el audio
+on por defecto para que los jueces lo noten y prueben el micrófono.
+**Hallazgo/fix:** al estar `active` (en diálogo), el NPC no actualizaba `targetRotY` y caía al branch
+"idle" que oscila alrededor de 0 (mirando al norte) → te daba la espalda. Ahora, si `active`, mira al
+jugador (`atan2(player - npc)`) y la rotación usa ese target con sway mínimo. Audio: ya estaba
+`muted=false` por defecto y arranca al primer gesto (autoplay unlock) — confirmado; añadido un pulso
+`.engram-attention` (borde verde latente) al botón 🎤 para invitar a los jueces a probar la voz.
+`npx tsc --noEmit` limpio. **Commit:** _(este commit)_

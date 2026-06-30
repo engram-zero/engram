@@ -81,6 +81,15 @@ button {
 @keyframes engram-pulse {
   50% { opacity: 0.3; }
 }
+/* Gentle attention pulse — nudges judges to try the voice/mic button. */
+.engram-attention {
+  animation: engram-attention 1.8s ease-in-out infinite;
+}
+@keyframes engram-attention {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(143, 208, 106, 0); }
+  50% { box-shadow: 0 0 0 4px rgba(143, 208, 106, 0.4); }
+}
+
 /* Slim, themed scrollbar for in-game panels (replaces the chunky white default). */
 .engram-scroll {
   scrollbar-width: thin;

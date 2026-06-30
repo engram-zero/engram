@@ -989,8 +989,8 @@ function Game() {
                     disabled={scene.loading || recording}
                     title="Speak your message (it fills the box; you confirm before sending)"
                     aria-label="Dictate message"
-                    className="rounded-md border px-3 py-2 text-sm disabled:opacity-60"
-                    style={{ background: recording ? 'rgba(204,90,74,0.85)' : 'rgba(0,0,0,0.4)', borderColor: recording ? '#ff7a6a' : '#5a4a28' }}
+                    className={`rounded-md border px-3 py-2 text-sm disabled:opacity-60 ${recording ? '' : 'engram-attention'}`}
+                    style={{ background: recording ? 'rgba(204,90,74,0.85)' : 'rgba(0,0,0,0.4)', borderColor: recording ? '#ff7a6a' : '#8fd06a' }}
                   >
                     {recording ? '● Listening…' : '🎤'}
                   </button>

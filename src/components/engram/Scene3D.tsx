@@ -3990,6 +3990,13 @@ function Character({
       }
     }
 
+    // Face the player while in dialogue (don't keep staring at world-north).
+    if (active) {
+      const pdx = dynamicPlayerState.x - dyn.x;
+      const pdz = dynamicPlayerState.z - dyn.z;
+      if (Math.hypot(pdx, pdz) > 0.01) targetRotY = Math.atan2(pdx, pdz);
+    }
+
     const phase = dyn.x * 1.7; // stagger each villager
     const speed = talking ? 6 : (isMoving ? 4.5 : 2.4);
     const amp = talking ? 0.16 : (isMoving ? 0.14 : 0.11);
@@ -4004,6 +4011,9 @@ function Character({
     if (isMoving) {
       // Snap rotation to target direction and add extra walking sway
       group.current.rotation.y = targetRotY + Math.sin(t * 2 + phase) * 0.08;
+    } else if (active) {
+      // Talking: face the player, with only a tiny sway.
+      group.current.rotation.y = targetRotY + Math.sin(t * 0.9 + phase) * 0.04;
     } else {
       // Gentle side-to-side sway when idle
       group.current.rotation.y = Math.sin(t * 0.9 + phase) * 0.16;
