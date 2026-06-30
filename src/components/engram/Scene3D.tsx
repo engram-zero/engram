@@ -3541,7 +3541,7 @@ function SableAtoms() {
     if (r2.current) r2.current.rotation.z = -t * 1.9;
     if (r3.current) r3.current.rotation.z = t * 2.7;
   });
-  const electron = (ref: React.RefObject<THREE.Group>, tilt: [number, number, number], color: string) => (
+  const electron = (ref: React.RefObject<THREE.Group | null>, tilt: [number, number, number], color: string) => (
     <group ref={ref} rotation={tilt}>
       <mesh position={[0.17, 0, 0]}>
         <sphereGeometry args={[0.032, 8, 8]} />
