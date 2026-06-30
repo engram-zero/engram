@@ -63,12 +63,18 @@ export async function transcribeOnce(): Promise<string | null> {
   });
 }
 
-// A distinct neural voice per villager so they don't all sound the same.
-const NPC_VOICE: Record<NPCName, string> = {
-  aldric: 'en-US-DavisNeural',
-  maren: 'en-US-JaneNeural',
-  sable: 'en-US-TonyNeural',
+// A distinct neural voice + prosody per villager. Aldric uses Maren's old voice and
+// vice-versa; Sable is a wise, old wizard — a dignified British voice slowed and
+// lowered via SSML so he reads elderly and sage.
+const NPC_VOICE: Record<NPCName, { name: string; rate?: string; pitch?: string }> = {
+  aldric: { name: 'en-US-JaneNeural' },                          // (was Maren's)
+  maren: { name: 'en-US-DavisNeural' },                          // (was Aldric's)
+  sable: { name: 'en-GB-RyanNeural', rate: '-14%', pitch: '-12%' }, // old wise wizard
 };
+
+function escapeXml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
 
 let synth: import('microsoft-cognitiveservices-speech-sdk').SpeechSynthesizer | null = null;
 
@@ -78,7 +84,13 @@ export async function speakText(text: string, npc?: NPCName): Promise<void> {
   if (!cred || !text.trim()) return;
   const SDK = await import('microsoft-cognitiveservices-speech-sdk');
   const speechConfig = SDK.SpeechConfig.fromAuthorizationToken(cred.token, cred.region);
-  speechConfig.speechSynthesisVoiceName = (npc && NPC_VOICE[npc]) || 'en-US-DavisNeural';
+  const voice = (npc && NPC_VOICE[npc]) || { name: 'en-US-DavisNeural' };
+  speechConfig.speechSynthesisVoiceName = voice.name;
+  const lang = voice.name.slice(0, 5); // e.g. "en-GB"
+  const prosody = voice.rate || voice.pitch
+    ? `<prosody rate="${voice.rate ?? '0%'}" pitch="${voice.pitch ?? '0%'}">${escapeXml(text)}</prosody>`
+    : escapeXml(text);
+  const ssml = `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="${lang}"><voice name="${voice.name}">${prosody}</voice></speak>`;
   try {
     synth?.close();
   } catch {
@@ -87,8 +99,8 @@ export async function speakText(text: string, npc?: NPCName): Promise<void> {
   synth = new SDK.SpeechSynthesizer(speechConfig);
   const active = synth;
   await new Promise<void>((resolve) => {
-    active.speakTextAsync(
-      text,
+    active.speakSsmlAsync(
+      ssml,
       () => {
         try { active.close(); } catch { /* ignore */ }
         resolve();

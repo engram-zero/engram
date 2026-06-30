@@ -774,7 +774,7 @@ function Game() {
         talking={scene.loading}
         onSelect={address ? openDialogue : () => {}}
         interactive={address ? !!memories : true}
-        uiOpen={panelOpen || showIntro}
+        uiOpen={panelOpen || showIntro || active !== null}
       />
 
       {/* One-time onboarding card: names the 0G-backed memory thesis so a first-time
@@ -913,7 +913,7 @@ function Game() {
       {/* JRPG dialogue box */}
       {active && activeNpc && (
         <div className="absolute inset-x-0 bottom-0 z-30 p-4">
-          <div className="engram-dialogue relative max-w-3xl mx-auto rounded-2xl px-6 pt-6 pb-4" style={{ ['--accent' as string]: activeNpc.accent }}>
+          <div className="engram-dialogue relative max-w-3xl mx-auto max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl px-6 pt-6 pb-4" style={{ ['--accent' as string]: activeNpc.accent }}>
             <div
               className="absolute -top-4 left-6 text-[#15110a] font-bold px-4 py-1 rounded-md text-sm tracking-wide"
               style={{ background: activeNpc.accent, boxShadow: '0 2px 6px rgba(0,0,0,0.5)' }}

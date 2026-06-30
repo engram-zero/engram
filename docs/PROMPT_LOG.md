@@ -1403,3 +1403,15 @@ restante, precio mid y zona dominante de Tierra; (5) actualizar docs de Prompt 2
 cadencias económicas, repone rocas, conserva el regrowth de árboles y muestra la tesorería derivada
 del bundle 0G. `npx tsc --noEmit` limpio.
 **Commit:** _(este commit)_
+
+### 29 jun 2026 · Fixes GUI de diálogo (nombre flotante, scroll) + reasignar voces
+**Pedido (humano):** (1) el nombre flotante del NPC pisa el GUI — el GUI debe ir encima; (2) el panel
+se corta arriba (hay que poner zoom 80%) — resolver con scroll; (3) voces: Aldric con la de Maren,
+Maren con la de Aldric, y Sable como un mago viejo/sabio.
+**Prompt sintetizado:** (1) `uiOpen = ... || active !== null` → durante el diálogo se ocultan los
+nametags drei `<Html>` (z-index altísimo) y el GUI queda encima. (2) panel de diálogo
+`max-h-[calc(100dvh-2rem)] overflow-y-auto` → scroll si es alto, ya no se corta. (3) en `speech.ts`,
+`NPC_VOICE` con voz+prosodia por NPC: aldric=en-US-JaneNeural, maren=en-US-DavisNeural,
+sable=en-GB-RyanNeural con SSML `rate -14% / pitch -12%` (viejo y sabio); `speakText` pasa a
+`speakSsmlAsync` con XML escapado. `npx tsc --noEmit` limpio.
+**Commit:** _(este commit)_
