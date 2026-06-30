@@ -1825,3 +1825,19 @@ las parcelas del borde conectan; quita el "muro redondo en mapa cuadrado". (#1c)
 ambiente, `day_ambience` (aves) se silencia cuando el jugador está en bioma snow/sand → no se
 encima con snowfall/desierto. (#1b) `River` anima sus vértices con ondas que viajan río abajo
 (useFrame) → sensación de flujo. `tsc` limpio; solo Scene3D.tsx. **Commit:** _(este commit)_
+
+### 2026-06-30 · Performance pass de datos: public-world incremental + logs debug
+**Pedido (humano):** implementar la parte de datos de la auditoría de eficiencia sin tocar
+`Scene3D.tsx` ni `client-page.tsx`: `public-world` incremental con cache por `latestBlock/root`,
+pool de descargas, pausa de polling con `document.hidden`, e higiene de logs controlada por env.
+**Prompt sintetizado:** Optimiza la lectura pública del mundo para no re-escanear ni re-descargar
+datos si no cambiaron: cachear mundos por `owner/root`, cachear metadata de parcelas por `dataRoot`,
+limitar concurrencia de descargas y suspender el polling mientras la pestaña esté oculta. Añadir un
+helper `debugLog` controlado por `NEXT_PUBLIC_ENGRAM_DEBUG`/`ENGRAM_DEBUG` y mover logs ruidosos de
+API/0G/memoria detrás de esa bandera, manteniendo el comportamiento funcional intacto.
+**Qué se hizo:** `public-world` ahora salta refreshes si `latestBlock` no cambió, reutiliza bundles
+cuando el root del owner es el mismo, hidrata parcelas con cache, descarga con pool de 5, y reanuda
+al volver la pestaña visible. `debug-log.ts` centraliza `debugLog/debugInfo/debugWarn/debugError`;
+logs informativos/repetitivos de `/api/save`, `/api/parcel-save`, `/api/mine`, `memory`,
+`parcel-data`, `public-world` y `0g/downloader` quedan silenciosos por defecto.
+`tsc` limpio. **Commit:** _(este commit)_

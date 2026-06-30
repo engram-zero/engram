@@ -16,6 +16,7 @@ import { join } from 'path';
 import { createBlob, generateMerkleTree, getRootHash } from '@/lib/0g/blob';
 import { uploadToStorage } from '@/lib/0g/uploader';
 import { getNetworkConfig } from '@/lib/0g/network';
+import { debugLog } from '@/lib/debug-log';
 import type { NetworkType } from '@/app/providers';
 
 export const runtime = 'nodejs';
@@ -66,7 +67,7 @@ function resolveSponsorKey(): { key?: string; source: string; debug: Record<stri
 
 export async function POST(req: Request) {
   const { key, source, debug } = resolveSponsorKey();
-  console.log('[api/save] sponsor key resolution', { source, ...debug });
+  debugLog('[api/save] sponsor key resolution', { source, ...debug });
   if (!key) {
     return NextResponse.json(
       {
@@ -90,7 +91,7 @@ export async function POST(req: Request) {
 
   const net = getNetworkConfig((networkType as NetworkType) || 'turbo');
   const world = (bundle as any)?.world;
-  console.log('[api/save] request', {
+  debugLog('[api/save] request', {
     walletAddress,
     networkType: net.name,
     keySource: source,
@@ -119,7 +120,7 @@ export async function POST(req: Request) {
     // no testnet OG. Check up front and return an actionable message (with the
     // address, so a key/account mismatch is obvious too).
     const balance = await provider.getBalance(wallet.address).catch(() => null);
-    console.log('[api/save] sponsor wallet', {
+    debugLog('[api/save] sponsor wallet', {
       address: wallet.address,
       balance: balance?.toString() ?? 'unknown',
       keySource: source,
@@ -142,7 +143,7 @@ export async function POST(req: Request) {
     const [txHash, uploadErr] = await uploadToStorage(blob, net.storageRpc, net.l1Rpc, wallet, gasPrice);
     if (uploadErr) throw uploadErr;
 
-    console.log('[api/save] uploaded to 0G', { rootHash, txHash: txHash || rootHash });
+    debugLog('[api/save] uploaded to 0G', { rootHash, txHash: txHash || rootHash });
     return NextResponse.json({ rootHash, txHash: txHash || rootHash });
   } catch (err) {
     console.error('[api/save]', err);

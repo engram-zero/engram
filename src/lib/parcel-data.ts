@@ -1,4 +1,5 @@
 import type { NetworkType } from '@/app/providers';
+import { debugWarn } from '@/lib/debug-log';
 import type { ParcelClaim } from '@/lib/types';
 
 export interface SaveParcelDataResult {
@@ -32,7 +33,7 @@ export async function saveParcelData(
       body: JSON.stringify({ walletAddress, networkType, parcel }),
     });
   } catch (error) {
-    console.warn('[engram] parcel metadata upload request failed; continuing claim without dataRoot:', error);
+    debugWarn('[engram] parcel metadata upload request failed; continuing claim without dataRoot:', error);
     return pendingParcelResult(
       parcel,
       '0G Storage is temporarily unreachable. The parcel claim can continue; metadata upload is pending.'
@@ -42,7 +43,7 @@ export async function saveParcelData(
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     if (res.status >= 500) {
-      console.warn('[engram] parcel metadata upload failed; continuing claim without dataRoot:', data?.error);
+      debugWarn('[engram] parcel metadata upload failed; continuing claim without dataRoot:', data?.error);
       return pendingParcelResult(
         parcel,
         typeof data?.error === 'string'

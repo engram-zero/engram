@@ -19,6 +19,7 @@
 
 import { downloadByRootHashAPI } from '@/lib/0g/downloader';
 import { getNetworkConfig } from '@/lib/0g/network';
+import { debugInfo, debugWarn } from '@/lib/debug-log';
 import { getRegistryAddress, readRootOnchain, writeRootOnchain } from '@/lib/registry/registry';
 import { normalizeWorldState } from '@/lib/world';
 import type { NetworkType } from '@/app/providers';
@@ -163,7 +164,7 @@ async function downloadBundle(
   const { storageRpc } = getNetworkConfig(effectiveNetworkType);
   const [data, err] = await downloadByRootHashAPI(root, storageRpc);
   if (err || !data) {
-    console.warn('[engram] could not read bundle from 0G:', {
+    debugWarn('[engram] could not read bundle from 0G:', {
       requestedNetworkType: networkType,
       effectiveNetworkType,
       error: err?.message,
@@ -175,7 +176,7 @@ async function downloadBundle(
     const text = new TextDecoder('utf-8').decode(data);
     return normalizeBundle(JSON.parse(text), wallet);
   } catch (e) {
-    console.warn('[engram] bundle parse failed:', e);
+    debugWarn('[engram] bundle parse failed:', e);
     return null;
   }
 }
@@ -202,7 +203,7 @@ export async function readAllMemories(
   try {
     bundle = await withTimeout(readBundle(wallet, networkType), 8000, '0G memory read');
   } catch (error) {
-    console.warn('[engram] memory load timed out or failed; using defaults:', error);
+    debugWarn('[engram] memory load timed out or failed; using defaults:', error);
   }
   return (bundle ?? emptyBundle(wallet)).npcs;
 }
@@ -259,20 +260,20 @@ export async function writeWorldState(
   networkType: NetworkType
 ): Promise<WriteResult> {
   const nextWorld = normalizeWorldState(world);
-  console.info('[engram] writeWorldState start', {
+  debugInfo('[engram] writeWorldState start', {
     wallet,
     networkType,
     buildings: nextWorld.buildings.length,
     choppedTrees: nextWorld.choppedTrees.length,
   });
   const previousRoot = await resolveBundleRoot(wallet, networkType);
-  console.info('[engram] writeWorldState previous root', previousRoot);
+  debugInfo('[engram] writeWorldState previous root', previousRoot);
   const bundle = previousRoot
     ? (await downloadBundle(previousRoot, wallet, networkType)) ?? emptyBundle(wallet)
     : emptyBundle(wallet);
 
   if (previousRoot && sameWorldState(bundle.world, nextWorld)) {
-    console.info('[engram] writeWorldState no-op; world unchanged');
+    debugInfo('[engram] writeWorldState no-op; world unchanged');
     return { rootHash: previousRoot, txHash: previousRoot, skipped: true };
   }
 
@@ -291,7 +292,7 @@ async function uploadBundleAndAnchor(
   previousRoot: string | null
 ): Promise<WriteResult> {
   const effectiveNetworkType = getBundleNetworkType(networkType);
-  console.info('[engram] uploadBundleAndAnchor POST /api/save', {
+  debugInfo('[engram] uploadBundleAndAnchor POST /api/save', {
     wallet,
     networkType,
     effectiveNetworkType,
@@ -306,7 +307,7 @@ async function uploadBundleAndAnchor(
     body: JSON.stringify({ walletAddress: wallet, networkType: effectiveNetworkType, bundle }),
   });
   const data = await res.json().catch(() => ({}));
-  console.info('[engram] uploadBundleAndAnchor /api/save response', {
+  debugInfo('[engram] uploadBundleAndAnchor /api/save response', {
     ok: res.ok,
     status: res.status,
     rootHash: data.rootHash,
@@ -325,12 +326,12 @@ async function uploadBundleAndAnchor(
     try {
       // Future: if storage writes stop being sponsored, collapse storage + registry
       // into one user confirmation via relayer/meta-tx or a unified 0G flow.
-      console.info('[engram] anchoring root in EngramRegistry', data.rootHash);
+      debugInfo('[engram] anchoring root in EngramRegistry', data.rootHash);
       const registryTx = await writeRootOnchain(wallet, data.rootHash);
       registryTxHash = registryTx.txHash;
-      console.info('[engram] registry root anchored', registryTx);
+      debugInfo('[engram] registry root anchored', registryTx);
     } catch (error) {
-      console.warn('[engram] memory saved to 0G, but registry anchor failed:', error);
+      debugWarn('[engram] memory saved to 0G, but registry anchor failed:', error);
     }
   }
 

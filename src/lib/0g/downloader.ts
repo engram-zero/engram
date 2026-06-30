@@ -1,4 +1,5 @@
 import { Indexer } from '@0gfoundation/0g-storage-ts-sdk';
+import { debugLog } from '@/lib/debug-log';
 
 /**
  * Downloads a file from 0G storage by root hash using direct API call
@@ -13,16 +14,16 @@ export async function downloadByRootHashAPI(
   storageRpc: string
 ): Promise<[ArrayBuffer | null, Error | null]> {
   try {
-    console.log(`API Download by root hash: ${rootHash} from ${storageRpc}`);
+    debugLog(`API Download by root hash: ${rootHash} from ${storageRpc}`);
     
     if (!rootHash) {
-      console.log('Root hash is empty or invalid');
+      debugLog('Root hash is empty or invalid');
       return [null, new Error('Root hash is required')];
     }
     
     // Construct API URL
     const apiUrl = `${storageRpc}/file?root=${rootHash}`;
-    console.log(`Downloading from API URL: ${apiUrl}`);
+    debugLog(`Downloading from API URL: ${apiUrl}`);
     
     // Fetch the file
     const response = await fetch(apiUrl);
@@ -34,11 +35,11 @@ export async function downloadByRootHashAPI(
     // Handle JSON responses separately
     if (isJsonResponse) {
       const jsonData = await response.json();
-      console.log('API returned JSON response:', jsonData);
+      debugLog('API returned JSON response:', jsonData);
       
       // If it's an error response
       if (!response.ok || jsonData.code) {
-        console.log('API returned JSON error:', jsonData);
+        debugLog('API returned JSON error:', jsonData);
         
         // Handle specific error codes
         if (jsonData.code === 101) {
@@ -64,7 +65,7 @@ export async function downloadByRootHashAPI(
     if (!response.ok) {
       // For non-JSON errors, use the text response
       const errorText = await response.text();
-      console.log(`API error (${response.status}): ${errorText}`);
+      debugLog(`API error (${response.status}): ${errorText}`);
       return [null, new Error(`Download failed with status ${response.status}: ${errorText}`)];
     }
     
@@ -72,14 +73,14 @@ export async function downloadByRootHashAPI(
     const fileData = await response.arrayBuffer();
     
     if (!fileData || fileData.byteLength === 0) {
-      console.log('Downloaded file data is empty');
+      debugLog('Downloaded file data is empty');
       return [null, new Error('Downloaded file is empty')];
     }
     
-    console.log(`API Download successful, received ${fileData.byteLength} bytes`);
+    debugLog(`API Download successful, received ${fileData.byteLength} bytes`);
     return [fileData, null];
   } catch (error) {
-    console.log('Error in downloadByRootHashAPI:', error);
+    debugLog('Error in downloadByRootHashAPI:', error);
     return [null, error instanceof Error ? error : new Error(String(error))];
   }
 }
@@ -102,17 +103,17 @@ export async function downloadByRootHash(
   filePath?: string
 ): Promise<[ArrayBuffer | null, Error | null]> {
   try {
-    console.log(`Downloading by root hash: ${rootHash} from ${storageRpc} with path: ${filePath || 'using rootHash as path'}`);
+    debugLog(`Downloading by root hash: ${rootHash} from ${storageRpc} with path: ${filePath || 'using rootHash as path'}`);
     
     if (!rootHash) {
-      console.log('Root hash is empty or invalid');
+      debugLog('Root hash is empty or invalid');
       return [null, new Error('Root hash is required')];
     }
     
     const indexer = new Indexer(storageRpc);
-    console.log(`Indexer:`, indexer);
+    debugLog(`Indexer:`, indexer);
     // Log the parameters being passed to indexer.download
-    console.log(`Calling indexer.download with rootHash: ${rootHash}, filePath: ${filePath || rootHash}`);
+    debugLog(`Calling indexer.download with rootHash: ${rootHash}, filePath: ${filePath || rootHash}`);
     
     // Use the provided file path, or fall back to using the root hash as the path
     const path = filePath || rootHash;
@@ -121,31 +122,31 @@ export async function downloadByRootHash(
     try {
       // The second parameter is the file path, not a user address
       // The third parameter is skipVerify (we'll set it to false for now)
-      console.log(`Downloading file from ${storageRpc} with path: ${path}`);
-      console.log(`Downloading file from ${storageRpc} with rootHash: ${rootHash}`);
+      debugLog(`Downloading file from ${storageRpc} with path: ${path}`);
+      debugLog(`Downloading file from ${storageRpc} with rootHash: ${rootHash}`);
       fileData = await indexer.download(rootHash, path, false);
     } catch (downloadError) {
-      console.log('Error from indexer.download:', downloadError);
+      debugLog('Error from indexer.download:', downloadError);
       return [null, new Error(`Download failed: ${downloadError instanceof Error ? downloadError.message : String(downloadError)}`)];
     }
     
     // Log the result of indexer.download
-    console.log(`indexer.download result type:`, fileData ? typeof fileData : 'null');
+    debugLog(`indexer.download result type:`, fileData ? typeof fileData : 'null');
     
     if (!fileData) {
-      console.log('fileData is null or undefined');
+      debugLog('fileData is null or undefined');
       return [null, new Error('File data is null or undefined')];
     }
     
     if (!(fileData instanceof ArrayBuffer)) {
-      console.log('fileData is not an ArrayBuffer:', typeof fileData);
+      debugLog('fileData is not an ArrayBuffer:', typeof fileData);
       return [null, new Error(`Invalid file data type: ${typeof fileData}`)];
     }
     
-    console.log(`Returning fileData of length ${fileData.byteLength}`);
+    debugLog(`Returning fileData of length ${fileData.byteLength}`);
     return [fileData, null];
   } catch (error) {
-    console.log('Error in downloadByRootHash:', error);
+    debugLog('Error in downloadByRootHash:', error);
     return [null, error instanceof Error ? error : new Error(String(error))];
   }
 }
@@ -159,18 +160,18 @@ export function downloadBlobAsFile(fileData: ArrayBuffer, fileName: string): voi
   try {
     // Additional validation to prevent "Cannot read properties of null (reading 'length')" error
     if (!fileData) {
-      console.log('downloadBlobAsFile: fileData is null or undefined');
+      debugLog('downloadBlobAsFile: fileData is null or undefined');
       throw new Error('File data is null or undefined');
     }
     
     if (!(fileData instanceof ArrayBuffer)) {
-      console.log('downloadBlobAsFile: fileData is not an ArrayBuffer:', typeof fileData);
+      debugLog('downloadBlobAsFile: fileData is not an ArrayBuffer:', typeof fileData);
       throw new Error(`Invalid file data type: ${typeof fileData}`);
     }
     
     // Check if the ArrayBuffer has data
     if (fileData.byteLength === 0) {
-      console.log('downloadBlobAsFile: fileData is empty (zero length)');
+      debugLog('downloadBlobAsFile: fileData is empty (zero length)');
       throw new Error('File data is empty');
     }
     
@@ -181,7 +182,7 @@ export function downloadBlobAsFile(fileData: ArrayBuffer, fileName: string): voi
     // Simple check to detect if this might be a JSON error response
     if (firstChars.trim().startsWith('{') && 
         (firstChars.includes('"code"') || firstChars.includes('"message"'))) {
-      console.log('downloadBlobAsFile: Data appears to be a JSON error response:', firstChars);
+      debugLog('downloadBlobAsFile: Data appears to be a JSON error response:', firstChars);
       throw new Error('Received an error response instead of a file');
     }
     
@@ -199,7 +200,7 @@ export function downloadBlobAsFile(fileData: ArrayBuffer, fileName: string): voi
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   } catch (error) {
-    console.log('Error creating downloadable file:', error);
+    debugLog('Error creating downloadable file:', error);
     throw error;
   }
-} 
+}

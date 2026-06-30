@@ -17,6 +17,7 @@
 
 import { NextResponse } from 'next/server';
 import { ethers } from 'ethers';
+import { debugWarn } from '@/lib/debug-log';
 import { reserve } from '@/lib/ratelimit';
 
 export const runtime = 'nodejs';
@@ -129,7 +130,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ verified, chatID: chatID ?? null, provider: providerAddress, model });
   } catch (err) {
     // Any failure degrades gracefully: the game already granted the stone locally.
-    console.warn('[api/mine] compute failed:', err);
+    debugWarn('[api/mine] compute failed:', err);
     return NextResponse.json({ verified: false, reason: err instanceof Error ? err.message : 'compute-error' });
   }
 }

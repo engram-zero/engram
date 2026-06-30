@@ -5,6 +5,7 @@ import { Contract, JsonRpcProvider, ZeroHash, decodeBytes32String, type EventLog
 import type { NetworkType } from '@/app/providers';
 import { downloadByRootHashAPI } from '@/lib/0g/downloader';
 import { getNetworkConfig } from '@/lib/0g/network';
+import { debugInfo, debugWarn } from '@/lib/debug-log';
 import { ENGRAM_REGISTRY_ABI } from '@/lib/registry/abi';
 import { getRegistryAddress } from '@/lib/registry/registry';
 import { PARCEL_REGISTRY_ABI } from '@/lib/registry/parcel-abi';
@@ -46,6 +47,17 @@ const EMPTY_PUBLIC_WORLD: PublicWorldState = { buildings: [], raidEvents: [], re
 const listeners = new Set<() => void>();
 let state = EMPTY_PUBLIC_WORLD;
 let lastKey = '';
+type PublicWorldBundleData = {
+  buildings: PublicBuilding[];
+  raidEvents: PublicRaidEvent[];
+  repairEvents: PublicRepairEvent[];
+  siegeEvents: PublicDemonSiegeEvent[];
+  parcels: PublicParcelClaim[];
+  parcelRentEvents: PublicParcelRentEvent[];
+};
+const worldDataCache = new Map<string, { root: string; data: PublicWorldBundleData }>();
+const parcelDataCache = new Map<string, PublicParcelClaim | null>();
+const lastScannedBlockByKey = new Map<string, number>();
 
 /**
  * Public-world discovery always scans Turbo, regardless of the player's network
@@ -85,6 +97,25 @@ function normalizeRoot(raw: unknown): string | null {
   return typeof raw === 'string' && /^0x[a-fA-F0-9]{64}$/.test(raw) && raw !== ZeroHash ? raw : null;
 }
 
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  mapper: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const workerCount = Math.max(1, Math.min(limit, items.length));
+
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await mapper(items[index], index);
+    }
+  }));
+
+  return results;
+}
+
 function parcelFromRegistryEvent(log: EventLog): PublicParcelClaim | null {
   try {
     const id = decodeBytes32String(String(log.args?.parcelId ?? ''));
@@ -119,17 +150,25 @@ function parcelFromRegistryEvent(log: EventLog): PublicParcelClaim | null {
 async function downloadParcelData(owner: string, root: string | null | undefined, storageRpc: string): Promise<PublicParcelClaim | null> {
   const dataRoot = normalizeRoot(root);
   if (!dataRoot) return null;
+  const cacheKey = `${owner.toLowerCase()}:${dataRoot.toLowerCase()}`;
+  if (parcelDataCache.has(cacheKey)) return parcelDataCache.get(cacheKey) ?? null;
 
   const [data, err] = await downloadByRootHashAPI(dataRoot, storageRpc);
   if (err || !data) return null;
 
   try {
     const raw = JSON.parse(new TextDecoder('utf-8').decode(data));
-    if (raw?.kind !== 'engram-parcel') return null;
+    if (raw?.kind !== 'engram-parcel') {
+      parcelDataCache.set(cacheKey, null);
+      return null;
+    }
     const world = normalizeWorldState({ parcelClaims: [raw.parcel] });
     const parcel = world.parcelClaims.find((claim) => claim.owner === owner);
-    return parcel ? { ...parcel, dataRoot, author: owner } : null;
+    const hydrated = parcel ? { ...parcel, dataRoot, author: owner } : null;
+    parcelDataCache.set(cacheKey, hydrated);
+    return hydrated;
   } catch {
+    parcelDataCache.set(cacheKey, null);
     return null;
   }
 }
@@ -138,14 +177,19 @@ async function downloadWorldData(
   owner: string,
   root: string,
   storageRpc: string
-): Promise<{ buildings: PublicBuilding[]; raidEvents: PublicRaidEvent[]; repairEvents: PublicRepairEvent[]; siegeEvents: PublicDemonSiegeEvent[]; parcels: PublicParcelClaim[]; parcelRentEvents: PublicParcelRentEvent[] }> {
+): Promise<PublicWorldBundleData> {
+  const ownerKey = owner.toLowerCase();
+  const rootKey = root.toLowerCase();
+  const cached = worldDataCache.get(ownerKey);
+  if (cached?.root.toLowerCase() === rootKey) return cached.data;
+
   const [data, err] = await downloadByRootHashAPI(root, storageRpc);
   if (err || !data) return { buildings: [], raidEvents: [], repairEvents: [], siegeEvents: [], parcels: [], parcelRentEvents: [] };
 
   try {
     const raw = JSON.parse(new TextDecoder('utf-8').decode(data));
     const world = normalizeWorldState(raw?.world);
-    return {
+    const parsed = {
       buildings: world.buildings.map((building) => ({ ...building, owner })),
       raidEvents: world.raidEvents
         .filter((event) => event.attacker === owner)
@@ -163,6 +207,8 @@ async function downloadWorldData(
         .filter((event) => event.payer === owner)
         .map((event) => ({ ...event, author: owner })),
     };
+    worldDataCache.set(ownerKey, { root, data: parsed });
+    return parsed;
   } catch {
     return { buildings: [], raidEvents: [], repairEvents: [], siegeEvents: [], parcels: [], parcelRentEvents: [] };
   }
@@ -186,6 +232,7 @@ export async function initPublicWorld(
   const key = `${PUBLIC_WORLD_NETWORK}:${currentWallet?.toLowerCase() ?? ''}`;
   if (!options.force && key === lastKey && state.buildings.length > 0) return;
   lastKey = key;
+  const previousState = state;
   setPublicWorld({
     buildings: options.quiet ? state.buildings : [],
     raidEvents: options.quiet ? state.raidEvents : [],
@@ -198,7 +245,7 @@ export async function initPublicWorld(
   });
 
   try {
-    console.info('[engram] public world refresh start', {
+    debugInfo('[engram] public world refresh start', {
       networkType: PUBLIC_WORLD_NETWORK,
       currentWallet,
       force: !!options.force,
@@ -209,6 +256,11 @@ export async function initPublicWorld(
     const parcelRegistry = getParcelRegistryAddress();
     const parcelContract = parcelRegistry ? new Contract(parcelRegistry, PARCEL_REGISTRY_ABI, provider) : null;
     const latestBlock = await provider.getBlockNumber();
+    if (lastScannedBlockByKey.get(key) === latestBlock) {
+      debugInfo('[engram] public world refresh skipped; latestBlock unchanged', { latestBlock, key });
+      setPublicWorld({ ...previousState, loading: false });
+      return;
+    }
     const fromBlock = Math.max(0, latestBlock - scanLookback());
     const [events, parcelEvents, parcelDataEvents] = await Promise.all([
       contract.queryFilter(contract.filters.RootUpdated(), fromBlock, 'latest'),
@@ -227,7 +279,7 @@ export async function initPublicWorld(
     }
 
     const entries = Array.from(latestRoots.entries()).slice(-32);
-    const worlds = await Promise.all(entries.map(([owner, root]) => downloadWorldData(owner, root, storageRpc)));
+    const worlds = await mapWithConcurrency(entries, 5, ([owner, root]) => downloadWorldData(owner, root, storageRpc));
     const raidEvents = worlds.flatMap((world) => world.raidEvents);
     const repairEvents = worlds.flatMap((world) => world.repairEvents);
     const siegeEvents = worlds.flatMap((world) => world.siegeEvents);
@@ -245,10 +297,10 @@ export async function initPublicWorld(
         at: previous?.at ?? event.at,
       });
     }
-    const registryParcels = await Promise.all(Array.from(registryById.values()).map(async (parcel) => {
+    const registryParcels = await mapWithConcurrency(Array.from(registryById.values()), 5, async (parcel) => {
       const hydrated = await downloadParcelData(parcel.owner, parcel.dataRoot, storageRpc);
       return hydrated ? { ...parcel, ...hydrated, dataRoot: parcel.dataRoot ?? hydrated.dataRoot } : parcel;
-    }));
+    });
     const parcelsById = new Map<string, PublicParcelClaim>();
     for (const parcel of registryParcels) parcelsById.set(parcel.id, parcel);
     for (const parcel of worlds.flatMap((world) => world.parcels)) {
@@ -308,7 +360,9 @@ export async function initPublicWorld(
       .map(([owner, count]) => ({ owner, buildingCount: count.buildingCount, parcelCount: count.parcelCount }))
       .sort((a, b) => (b.buildingCount + b.parcelCount) - (a.buildingCount + a.parcelCount));
 
-    console.info('[engram] public world refresh done', {
+    lastScannedBlockByKey.set(key, latestBlock);
+    debugInfo('[engram] public world refresh done', {
+      latestBlock,
       wallets: entries.length,
       buildings: buildings.length,
       raidEvents: raidEvents.length,
@@ -321,7 +375,7 @@ export async function initPublicWorld(
     });
     setPublicWorld({ buildings, raidEvents, repairEvents, siegeEvents, parcels, parcelRentEvents, owners, loading: false });
   } catch (error) {
-    console.warn('[engram] public world load failed:', error);
+    debugWarn('[engram] public world load failed:', error);
     setPublicWorld({ buildings: state.buildings, raidEvents: state.raidEvents, repairEvents: state.repairEvents, siegeEvents: state.siegeEvents, parcels: state.parcels, parcelRentEvents: state.parcelRentEvents, owners: state.owners, loading: false });
   }
 }
@@ -336,14 +390,20 @@ export function startPublicWorldPolling(
   let stopped = false;
   const refresh = () => {
     if (stopped) return;
+    if (document.hidden) return;
     void initPublicWorld(networkType, currentWallet, { force: true, quiet: true });
+  };
+  const onVisibilityChange = () => {
+    if (!document.hidden) refresh();
   };
 
   refresh();
   const id = window.setInterval(refresh, intervalMs);
+  document.addEventListener('visibilitychange', onVisibilityChange);
   return () => {
     stopped = true;
     window.clearInterval(id);
+    document.removeEventListener('visibilitychange', onVisibilityChange);
   };
 }
 

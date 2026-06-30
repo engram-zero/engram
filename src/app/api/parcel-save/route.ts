@@ -5,6 +5,7 @@ import { join } from 'path';
 import type { NetworkType } from '@/app/providers';
 import { createBlob, generateMerkleTree, getRootHash } from '@/lib/0g/blob';
 import { biomeAt } from '@/lib/biome';
+import { debugLog, debugWarn } from '@/lib/debug-log';
 import { getNetworkConfig } from '@/lib/0g/network';
 import { uploadToStorage } from '@/lib/0g/uploader';
 import type { ParcelClaim, ParcelDataBundle } from '@/lib/types';
@@ -75,7 +76,7 @@ async function uploadParcelBlobWithRetry(
     const [txHash, uploadErr] = await uploadToStorage(blob, net.storageRpc, net.l1Rpc, wallet, gasPrice);
     if (!uploadErr) return { txHash: txHash || '', attempts: attempt + 1 };
     lastError = uploadErr;
-    console.warn('[api/parcel-save] upload attempt failed', {
+    debugWarn('[api/parcel-save] upload attempt failed', {
       parcelId,
       networkType: net.name,
       attempt: attempt + 1,
@@ -102,10 +103,10 @@ function scheduleDeferredUpload(
     const [txHash, uploadErr] = await uploadToStorage(blob, net.storageRpc, net.l1Rpc, wallet, gasPrice);
     if (!uploadErr) {
       pendingDeferredUploads.delete(key);
-      console.log('[api/parcel-save] deferred upload completed', { parcelId, rootHash, txHash: txHash || rootHash });
+      debugLog('[api/parcel-save] deferred upload completed', { parcelId, rootHash, txHash: txHash || rootHash });
       return;
     }
-    console.warn('[api/parcel-save] deferred upload failed', {
+    debugWarn('[api/parcel-save] deferred upload failed', {
       parcelId,
       rootHash,
       attempt: attempt + 1,
@@ -179,7 +180,7 @@ export async function POST(req: Request) {
     updatedAt: Date.now(),
   };
 
-  console.log('[api/parcel-save] request', {
+  debugLog('[api/parcel-save] request', {
     walletAddress,
     requestedNetworkType,
     effectiveNetworkType: net.name,
@@ -234,7 +235,7 @@ export async function POST(req: Request) {
     const { txHash, attempts } = await uploadParcelBlobWithRetry(blob, net, wallet, gasPrice, parcel.id);
 
     const savedParcel = { ...parcel, dataRoot: rootHash, dataTxHash: txHash || rootHash };
-    console.log('[api/parcel-save] uploaded to 0G', { parcelId: parcel.id, rootHash, txHash: txHash || rootHash, attempts });
+    debugLog('[api/parcel-save] uploaded to 0G', { parcelId: parcel.id, rootHash, txHash: txHash || rootHash, attempts });
     return NextResponse.json({ rootHash, txHash: txHash || rootHash, parcel: savedParcel });
   } catch (err) {
     console.error('[api/parcel-save]', err);
