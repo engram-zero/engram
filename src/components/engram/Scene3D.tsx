@@ -3527,6 +3527,41 @@ function AIPreviewGhosts({ pieces, origin }: { pieces: AIPiece[]; origin: { x: n
 
 // ─── NPC characters ───────────────────────────────────────────────────────────
 
+// Glowing "atom" Sable conjures: a bright nucleus with three electrons orbiting on
+// tilted rings — the wizard's arcane flourish.
+function SableAtoms() {
+  const root = useRef<THREE.Group>(null);
+  const r1 = useRef<THREE.Group>(null);
+  const r2 = useRef<THREE.Group>(null);
+  const r3 = useRef<THREE.Group>(null);
+  useFrame(({ clock }) => {
+    const t = clock.elapsedTime;
+    if (root.current) root.current.rotation.y = t * 0.35;
+    if (r1.current) r1.current.rotation.z = t * 2.3;
+    if (r2.current) r2.current.rotation.z = -t * 1.9;
+    if (r3.current) r3.current.rotation.z = t * 2.7;
+  });
+  const electron = (ref: React.RefObject<THREE.Group>, tilt: [number, number, number], color: string) => (
+    <group ref={ref} rotation={tilt}>
+      <mesh position={[0.17, 0, 0]}>
+        <sphereGeometry args={[0.032, 8, 8]} />
+        <meshBasicMaterial color={color} toneMapped={false} />
+      </mesh>
+    </group>
+  );
+  return (
+    <group ref={root} position={[0, 0.96, 0.42]} scale={0.95} renderOrder={20}>
+      <mesh>
+        <sphereGeometry args={[0.05, 10, 10]} />
+        <meshBasicMaterial color="#e9d2ff" toneMapped={false} />
+      </mesh>
+      {electron(r1, [0, 0, 0], '#b98bff')}
+      {electron(r2, [Math.PI / 3, 0.6, 0], '#8fd0ff')}
+      {electron(r3, [-Math.PI / 3, -0.6, 0], '#ffd28f')}
+    </group>
+  );
+}
+
 function CharacterBody({ npc, accent }: { npc: NPCName; accent: string }) {
   const skin = '#e8c4a0';
 
@@ -3637,6 +3672,7 @@ function CharacterBody({ npc, accent }: { npc: NPCName; accent: string }) {
           <octahedronGeometry args={[0.06, 0]} />
           <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={0.5} flatShading />
         </mesh>
+        <SableAtoms />
       </group>
     );
   }
