@@ -1168,4 +1168,62 @@ redespliega. Refuerza "own your world".
 
 ---
 
+## Prompt 24 — Árboles con etapas de crecimiento + almacén (storage) en 0G
+
+**Para:** Codex (nature-AI / economía / 0G).
+
+### Contexto del estado actual
+- Los árboles son estáticos en `src/components/engram/map.ts` (`TREES: TreeDef[]`, sembrados
+  con exclusión del río y dentro de `WORLD_RADIUS`). El jugador talla con **hold-F**; cada fill
+  da `WOOD_PER_CHOP` y a los `TREE_CHOPS = 20` el árbol queda **felled** → su índice entra en
+  `WorldState.choppedTrees` (`src/lib/world.ts`, `harvestTree`/`chopTree`/`isChopped`). Un árbol
+  completo rinde **20 wood**.
+- Hoy un árbol talado **reaparece de golpe en el mismo lugar** (regrow vía sapling), lo cual el
+  humano señaló que se ve abrupto: quiere que **vuelva a crecer por etapas** y que **cada etapa
+  rinda distinta cantidad** (un árbol grande ~**50 wood**).
+- La extracción por-árbol viva es transitoria; solo el resultado final se persiste (índice felled).
+- El acarreo tiene topes: `MAX_WOOD`, `ORE_MAX` (stone/silver/gold). No hay forma de **exceder el
+  cap** guardando recursos — el humano pidió un **almacén** para acumular más allá del bolsillo.
+- La economía de scarcity (Prompt 23) deriva el precio del wood de `map.ts TREES.length` y de los
+  talados; el conteo de árboles "vivos" debe seguir alimentando esa señal.
+
+### Objetivo
+1. **Crecimiento por etapas.** Cada árbol tiene una etapa: `sapling → young → mature` (nombres a
+   tu criterio). El rinde de madera depende de la etapa al talarlo (p. ej. sapling ~8, young ~24,
+   mature ~50 wood). Tras talar, el tocón **vuelve a crecer gradualmente** avanzando de etapa con
+   el tiempo (no reaparición instantánea). El ritmo de regrow debería poder acelerarlo la
+   nature-AI / economía (engancha con la F3 del Prompt 23: más demanda/extracción → repoblar más
+   lento; abundancia → más rápido). El estado por-árbol (etapa + timestamp de próxima etapa) se
+   **persiste en el `WorldState`/`ecosystem` de 0G**, no solo en memoria, para que sobreviva al
+   reload y sea verdaderamente "owned state".
+2. **Almacén (storage).** Una estructura/edificio (o panel) donde el jugador **deposita** wood y
+   menas para **exceder el cap de bolsillo**: el cap de acarreo se mantiene, pero lo guardado en el
+   almacén se suma aparte y se **persiste en 0G**. Permitir depositar y retirar. El total guardado
+   debe poder superar `MAX_WOOD`/`ORE_MAX`.
+
+### Restricciones / cómo encaja
+- **map.ts sigue siendo la fuente de verdad** de posiciones; las etapas son estado dinámico
+  por-índice, no nuevas posiciones.
+- Mantén el seam de persistencia: usa `WorldPersistence`/`world.ts` (`commit`) y la normalización
+  de `WorldState`; respeta `savedAt` (prefer-newer) y el flujo "Leave & save" → escritura a 0G.
+- No rompas la señal de scarcity del Prompt 23 (el precio del wood debe seguir reflejando árboles
+  maduros disponibles).
+- El visual por etapas (escala/altura del modelo del árbol según etapa) lo puede tomar el dev de
+  la escena (`Scene3D.tsx`/`Trees`); **expón la etapa por-árbol de forma que la escena la lea**.
+  Coordina el seam en `docs/COORDINATION.md`.
+- `npx tsc --noEmit` limpio; `pnpm install` si agregas deps; co-author Codex; `git pull --no-edit`
+  antes de push; entrada en `docs/PROMPT_LOG.md`.
+
+### Criterios de aceptación
+1. Un árbol recién talado **no** reaparece de golpe: pasa por etapas con el tiempo, y la etapa +
+   su reloj se **persisten en 0G** (sobreviven al reload).
+2. Talar rinde **distinta** madera por etapa; un árbol maduro ~**50 wood**.
+3. Existe un **almacén** que permite **acumular wood/menas por encima del cap de bolsillo**,
+   con depositar/retirar, persistido en 0G.
+4. La nature-AI/economía puede **modular el ritmo de regrow** (engancha con Prompt 23 F3).
+5. La escena puede **renderizar la etapa** de cada árbol (seam expuesto, documentado en
+   COORDINATION).
+
+---
+
 *Engram — Zero Cup 2026 — Build on 0G. Own your story.*
