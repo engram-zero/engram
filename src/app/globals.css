@@ -81,6 +81,26 @@ button {
 @keyframes engram-pulse {
   50% { opacity: 0.3; }
 }
+/* Slim, themed scrollbar for in-game panels (replaces the chunky white default). */
+.engram-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #6a5832 transparent;
+}
+.engram-scroll::-webkit-scrollbar {
+  width: 7px;
+}
+.engram-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.engram-scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(#7a6336, #4a3c20);
+  border-radius: 6px;
+  border: 1px solid rgba(214, 184, 74, 0.25);
+}
+.engram-scroll::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(#9a7e44, #5e4c28);
+}
+
 /* Prompt 16: floating "+N resource" pickup pop on each gathered unit. */
 .engram-pickup {
   animation: engram-pickup 0.9s ease-out forwards;

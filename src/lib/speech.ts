@@ -67,8 +67,8 @@ export async function transcribeOnce(): Promise<string | null> {
 // vice-versa; Sable is a wise, old wizard — a dignified British voice slowed and
 // lowered via SSML so he reads elderly and sage.
 const NPC_VOICE: Record<NPCName, { name: string; rate?: string; pitch?: string }> = {
-  aldric: { name: 'en-US-JaneNeural' },                          // (was Maren's)
-  maren: { name: 'en-US-TonyNeural' },                           // (was Sable's — male, no female voice)
+  aldric: { name: 'en-US-DavisNeural' },                         // warm male merchant
+  maren: { name: 'en-US-TonyNeural' },                           // (was Sable's — male)
   sable: { name: 'en-GB-RyanNeural', rate: '-14%', pitch: '-12%' }, // old wise wizard
 };
 

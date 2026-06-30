@@ -1467,3 +1467,15 @@ grilla de 1.8 (su ancho) + rotación a 90° (`snapXZ`/`placeRot`) en ghost y pla
 (4) tabla de créditos en `AUDIO_ASSETS.md` (attack-hit/swing, player-hurt/mort). `npx tsc --noEmit`
 limpio.
 **Commit:** _(este commit)_
+
+### 29 jun 2026 · Voz de Aldric masculina, nombre/scrollbar del diálogo, glow de átomos, cono 60°
+**Pedido (humano):** Aldric con voz de hombre (no mujer); el nombre del NPC se corta en el diálogo;
+scrollbar genérico feo → uno temático; átomos de Sable con glow ("magia"); cerrar el cono de
+gathering de ~150° a ~60°.
+**Prompt sintetizado:** (1) `NPC_VOICE.aldric` → `en-US-DavisNeural` (masculina). (2) Reestructurar
+la caja de diálogo: el contenedor `engram-dialogue` ya no scrollea; el body va en un wrapper
+`.engram-scroll` con `overflow`, así el tab del nombre (`-top-4`) no se recorta. (3) `.engram-scroll`
+en globals.css: scrollbar delgado dorado/oscuro (webkit + firefox). (4) `SableAtoms`: halos
+aditivos por electrón + halo de núcleo + `pointLight` morada → glow mágico. (5) `FACING_MIN`
+0.2→0.85 (cono ~60° frontal). `npx tsc --noEmit` limpio.
+**Commit:** _(este commit)_

@@ -938,13 +938,15 @@ function Game() {
       {/* JRPG dialogue box */}
       {active && activeNpc && (
         <div className="absolute inset-x-0 bottom-0 z-30 p-4">
-          <div className="engram-dialogue relative max-w-3xl mx-auto max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl px-6 pt-6 pb-4" style={{ ['--accent' as string]: activeNpc.accent }}>
+          <div className="engram-dialogue relative max-w-3xl mx-auto rounded-2xl" style={{ ['--accent' as string]: activeNpc.accent }}>
             <div
-              className="absolute -top-4 left-6 text-[#15110a] font-bold px-4 py-1 rounded-md text-sm tracking-wide"
+              className="absolute -top-4 left-6 z-10 text-[#15110a] font-bold px-4 py-1 rounded-md text-sm tracking-wide"
               style={{ background: activeNpc.accent, boxShadow: '0 2px 6px rgba(0,0,0,0.5)' }}
             >
               {activeNpc.name}
             </div>
+            {/* Scroll only the body, so the floating name tab above the panel is never clipped. */}
+            <div className="engram-scroll max-h-[calc(100dvh-3rem)] overflow-y-auto rounded-2xl px-6 pt-6 pb-4">
 
             {/* Recall banner: makes the "memory loaded from 0G" moment visible instead
                 of leaving it implicit. Only when this NPC has prior history on-chain. */}
@@ -1192,6 +1194,7 @@ function Game() {
                 {merchantMsg && <div className="mt-2 text-sm text-[#d6b84a]">{merchantMsg}</div>}
               </div>
             )}
+            </div>
           </div>
         </div>
       )}

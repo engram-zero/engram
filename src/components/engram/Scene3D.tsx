@@ -870,7 +870,7 @@ function Player({
     // back to it. A stable interval (not this scan) drives the swing, so requiring
     // facing no longer causes the old flicker. The closest in-front resource wins;
     // facing also disambiguates a tree vs a rock side by side. `forward` = look dir.
-    const FACING_MIN = 0.2; // dot(forward, dirToResource) ≥ this → within ~155° front cone
+    const FACING_MIN = 0.85; // dot(forward, dirToResource) ≥ this → within a ~60° front cone
     const px = camera.position.x;
     const pz = camera.position.z;
     let bestTree = -1, bestTd = Infinity;
@@ -3576,20 +3576,33 @@ function SableAtoms() {
     if (r2.current) r2.current.rotation.z = -t * 1.9;
     if (r3.current) r3.current.rotation.z = t * 2.7;
   });
+  const glow = useMemo(() => makeRadialTexture('rgba(220,190,255,0.95)', 'rgba(150,110,255,0)'), []);
   const electron = (ref: React.RefObject<THREE.Group | null>, tilt: [number, number, number], color: string) => (
     <group ref={ref} rotation={tilt}>
-      <mesh position={[0.17, 0, 0]}>
-        <sphereGeometry args={[0.032, 8, 8]} />
-        <meshBasicMaterial color={color} toneMapped={false} />
-      </mesh>
+      <group position={[0.17, 0, 0]}>
+        <mesh>
+          <sphereGeometry args={[0.032, 8, 8]} />
+          <meshBasicMaterial color={color} toneMapped={false} />
+        </mesh>
+        {/* per-electron glow */}
+        <sprite scale={[0.18, 0.18, 1]}>
+          <spriteMaterial map={glow} color={color} transparent depthWrite={false} blending={THREE.AdditiveBlending} opacity={0.9} />
+        </sprite>
+      </group>
     </group>
   );
   return (
     <group ref={root} position={[0, 0.96, 0.42]} scale={0.95} renderOrder={20}>
+      {/* faint magical light the atom casts on Sable */}
+      <pointLight color="#c9a6ff" intensity={1.4} distance={2.2} decay={2} />
       <mesh>
         <sphereGeometry args={[0.05, 10, 10]} />
-        <meshBasicMaterial color="#e9d2ff" toneMapped={false} />
+        <meshBasicMaterial color="#f0e2ff" toneMapped={false} />
       </mesh>
+      {/* nucleus glow */}
+      <sprite scale={[0.42, 0.42, 1]}>
+        <spriteMaterial map={glow} transparent depthWrite={false} blending={THREE.AdditiveBlending} opacity={0.85} />
+      </sprite>
       {electron(r1, [0, 0, 0], '#b98bff')}
       {electron(r2, [Math.PI / 3, 0.6, 0], '#8fd0ff')}
       {electron(r3, [-Math.PI / 3, -0.6, 0], '#ffd28f')}
