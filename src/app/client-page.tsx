@@ -38,6 +38,12 @@ import {
   AXE_UPGRADE_COST,
   REPAIR_KIT_COST,
   SAPLING_COST,
+  MEDICINAL_HERB_COST,
+  MEDICINAL_HERB_HEAL,
+  buyAldricMarketItem,
+  aldricMarketCatalog,
+  buyAiItemListing,
+  type AiItemListing,
 } from '@/lib/world';
 import { computeEcosystemActivity, computeNatureSnapshot, fingerprintNature, pickRockToRespawn, pickTreeToRegrow } from '@/lib/ecosystem';
 import { TREES, ROCKS } from '@/components/engram/map';
@@ -723,6 +729,30 @@ function Game() {
     setMerchantMsg(`Repair kit acquired — it boosts your next wood repair. (−${REPAIR_KIT_COST} coin)`);
   }
 
+  // Prompt 30: medicinal herbs heal HP (the reason losing HP matters). Uses Codex's
+  // atomic market backend so the coin spend + heal commit together.
+  function buyMedicinalHerbs() {
+    if (!memories || active !== 'aldric' || scene.loading) return;
+    const r = buyAldricMarketItem('medicinal_herbs');
+    if (!r.ok) { setMerchantMsg(r.reason ?? 'Could not buy herbs.'); return; }
+    const next = applyAldricSpend(memories.aldric, `Bought medicinal herbs for ${MEDICINAL_HERB_COST} coin.`, 'Sold the traveller medicinal herbs to mend their wounds.');
+    setMemories((prev) => (prev ? { ...prev, aldric: next } : prev));
+    setDirty((d) => ({ ...d, aldric: true }));
+    void play('save_success');
+    setMerchantMsg(`Medicinal herbs — healed ${r.healed ?? MEDICINAL_HERB_HEAL} HP. (−${MEDICINAL_HERB_COST} coin)`);
+  }
+
+  // Buy another player's AI-forged item that they listed on the market (0G-owned
+  // creation changing hands).
+  function buyPlayerListing(listing: AiItemListing) {
+    if (!memories || active !== 'aldric' || scene.loading) return;
+    const r = buyAiItemListing(listing);
+    if (!r.ok) { setMerchantMsg(r.reason ?? 'Could not buy that item.'); return; }
+    setDirty((d) => ({ ...d, aldric: true }));
+    void play('save_success');
+    setMerchantMsg(`Bought "${r.item?.name ?? 'item'}" for ${listing.priceCoin} coin.`);
+  }
+
   // Leaving an NPC persists that conversation to 0G and anchors the new root if needed.
   async function leave() {
     const npc = active;
@@ -1164,6 +1194,48 @@ function Game() {
                       {world.axeLevel >= 1 ? '🪓 Sharper axe · owned' : `🪓 Sharper axe · ${AXE_UPGRADE_COST} coin`}
                     </button>
                   </div>
+                </div>
+
+                {/* Market (Prompt 30): standard goods (healing herbs) + items other
+                    players forged with AI and listed for sale (0G-owned creations). */}
+                <div className="mt-3 border-t border-[#6a5832]/60 pt-2.5">
+                  <div className="mb-2 flex items-center gap-2 text-sm text-[#d6b84a]">
+                    🏪 Market
+                    <span className="text-[#f4e8d0]/55">· HP <strong style={{ color: world.playerHp < 35 ? '#e06a5f' : '#8fd06a' }}>{world.playerHp}/100</strong></span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={buyMedicinalHerbs}
+                      disabled={scene.loading || world.inventory.coin < MEDICINAL_HERB_COST || world.playerHp >= 100}
+                      className="bg-black/40 border border-[#6a8a4a] hover:border-[#8fd06a] rounded-md px-3 py-2 text-sm disabled:opacity-40"
+                      title={world.playerHp >= 100 ? 'Already at full HP' : `Restore ${MEDICINAL_HERB_HEAL} HP`}
+                    >
+                      🌿 Medicinal herbs · {MEDICINAL_HERB_COST} coin
+                    </button>
+                  </div>
+                  {(() => {
+                    const listings = aldricMarketCatalog(getWorld().aiItemListings).playerListings;
+                    if (listings.length === 0) {
+                      return <div className="mt-2 text-xs text-[#f4e8d0]/45">No player-forged items for sale yet — when others list AI-crafted tools/weapons, they appear here.</div>;
+                    }
+                    return (
+                      <div className="mt-2 space-y-1.5">
+                        <div className="text-xs text-[#f4e8d0]/60">Player-forged items (0G creations for sale):</div>
+                        {listings.map((listing) => (
+                          <div key={listing.id} className="flex flex-wrap items-center gap-2 text-sm">
+                            <span><strong>{listing.item.name}</strong> <span className="text-[#f4e8d0]/55">· {listing.item.stat} +{listing.item.magnitude}</span></span>
+                            <button
+                              onClick={() => buyPlayerListing(listing)}
+                              disabled={scene.loading || world.inventory.coin < listing.priceCoin}
+                              className="bg-black/40 border border-[#8a6a32] hover:border-[#d6b84a] rounded-md px-2.5 py-1.5 text-sm disabled:opacity-40"
+                            >
+                              Buy · {listing.priceCoin} coin
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Ores — gathered by mining rock veins; scarcity price, house edge.

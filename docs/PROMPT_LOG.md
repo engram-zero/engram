@@ -1767,3 +1767,12 @@ parcela está fuera del terreno base (radio > GROUND_RADIUS, antes 132 → causa
 y usa la textura del BIOMA (biomeAt) sin tinte. (muros) `WALL_GRID 1.8 → 0.9` (media celda): permite
 posicionar esquinas (E-O con N-S) y que los 45° se toquen en la diagonal, conservando el tile recto a
 1.8. `tsc` limpio; solo Scene3D.tsx. **Commit:** _(este commit)_
+
+### 2026-06-30 · GUI del Mercado de Aldric (hierbas medicinales + ítems de jugadores)
+**Pedido (humano):** un botón/sección "Mercado" en Aldric con productos estándar (hierbas que curan)
+y los ítems que otros jugadores fabricaron y vendieron.
+**Qué se hizo:** en `client-page.tsx`, sección "🏪 Market" en el panel de Aldric: muestra HP del
+jugador + botón **🌿 Medicinal herbs** (cura, vía `buyAldricMarketItem('medicinal_herbs')` de Codex)
+y lista los **player listings** (`aldricMarketCatalog().playerListings`) con compra (`buyAiItemListing`).
+Cierra el loop del Prompt 30 (curarse importa porque perder HP cuesta). `tsc` limpio; solo client-page.tsx.
+**Commit:** _(este commit)_
