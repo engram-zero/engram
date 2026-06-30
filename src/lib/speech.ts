@@ -68,7 +68,7 @@ export async function transcribeOnce(): Promise<string | null> {
 // lowered via SSML so he reads elderly and sage.
 const NPC_VOICE: Record<NPCName, { name: string; rate?: string; pitch?: string }> = {
   aldric: { name: 'en-US-JaneNeural' },                          // (was Maren's)
-  maren: { name: 'en-US-DavisNeural' },                          // (was Aldric's)
+  maren: { name: 'en-US-TonyNeural' },                           // (was Sable's — male, no female voice)
   sable: { name: 'en-GB-RyanNeural', rate: '-14%', pitch: '-12%' }, // old wise wizard
 };
 
