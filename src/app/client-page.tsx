@@ -205,6 +205,8 @@ function Game() {
       activityScore: world.ecosystem?.activity?.activityScore,
       nextGrowthAt: world.ecosystem?.earth?.nextGrowthAt,
       nextRockAt: world.ecosystem?.earth?.nextRockAt,
+      bankCoin: world.ecosystem?.treasury?.coin ?? 0,
+      paidMiningCount: world.ecosystem?.treasury?.paidMiningCount ?? 0,
     }),
     [world.choppedTrees.length, world.ecosystem, quote.mid, oreTotals, minedByOre, oreQuotes]
   );
@@ -904,6 +906,9 @@ function Game() {
             ))}
           </div>
           <div className="mt-1 border-t border-[#5a4a28]/55 pt-1 text-[#f4e8d0]/58">
+            bank {treasury.bankCoin} coin
+            {treasury.paidMiningCount > 0 && <span> · paid mines {treasury.paidMiningCount}</span>}
+            <br />
             next tree {etaLabel(treasury.nextGrowthAt)} · rock {etaLabel(treasury.nextRockAt)}
           </div>
         </div>

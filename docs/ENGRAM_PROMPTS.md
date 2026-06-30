@@ -1142,13 +1142,15 @@ redespliega. Refuerza "own your world".
    economía versionada si se decide que valga el riesgo antes del torneo.
 3. **🟢 F3 CORE DONE — IA de naturaleza repone oferta.** Prompt 8c ya creó los endpoints
    Tierra/Fauna; ahora Tierra gobierna árboles y rocas. La fórmula persistida es:
-   `activityScore = clamp01(0.45*coin/200 + 0.35*recentExtraction/6 + 0.20*depletedStock)`;
+   `activityScore = clamp01(0.45*(playerCoin+treasuryCoin)/200 + 0.35*recentExtraction/6 + 0.20*depletedStock)`;
    `cadence = base*(1.25 - 0.45*depletedStock)*(1 - 0.45*activityScore)`. Más coin/actividad
    acelera reposición; stock alto la frena. Las rocas reaparecen con `nextRockAt` y fertilidad
    por zona (`regrowthShare`/`fertility`), sin redeploy.
-4. **Minar = pagar por el metal.** Invertir el gathering: minar **descuenta del stock del banco
-   y cuesta coin/tokens** → el metal in-game queda **respaldado**. Cambio de gameplay; va tras
-   2 y 3.
+4. **🟡 F4 CORE GATED — minar = pagar a la tesorería.** Con
+   `NEXT_PUBLIC_ENGRAM_PAID_MINING=1`, minar stone/silver/gold cobra coin in-game derivada del
+   `oreQuote(...).mid` vigente (`mid / HOUSE_SPREAD²`, cap debajo de reventa para evitar
+   arbitraje), entrega la mena solo si el jugador puede pagar, y conserva ese coin en
+   `world.ecosystem.treasury`. OFF por defecto: el demo sigue con minería gratis.
 5. **Respaldo en OG real (post-torneo).** Depositar OG → la tesorería lo custodia on-chain → el
    mineral se "acuña" contra ese valor. Para la ronda: versión **testnet/simulada**, divulgada
    con honestidad.
@@ -1160,7 +1162,9 @@ redespliega. Refuerza "own your world".
    `WorldState`/`ecosystem` persistido en 0G.
 3. (F3 core) Al entrar valor/tokens o aumentar la extracción reciente, la IA repone oferta
    más rápido; con stock alto, frena. Árboles y rocas reaparecen sin redeploy.
-4. (F4) Minar descuenta stock del banco y cuesta tokens; el balance no se mintea de la nada.
+4. (F4 core gated) Con `NEXT_PUBLIC_ENGRAM_PAID_MINING=1`, minar descuenta coin, la suma a
+   `world.ecosystem.treasury`, no entrega mena sin saldo suficiente, y siempre cobra menos que la
+   reventa. Con el flag OFF, el juego se comporta como antes.
 
 ---
 

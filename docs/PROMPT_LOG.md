@@ -1426,3 +1426,19 @@ cinematic (Sky/sol/día-noche de prod) pero subir y blanquear la luz a niveles "
 (1.9,2.2), dir (0.75,2.2)→(1.5,2.6); exposición 1.9→2.05; niebla alejada (30,110)→(70,220) para que
 los colores cercanos no se apaguen. `npx tsc --noEmit` limpio.
 **Commit:** _(este commit)_
+
+### 29 jun 2026 · Prompt 23 F4 — minar = pagar a la tesorería (gateado OFF)
+**Pedido (humano):** cerrar la tesis "mineral respaldado por valor": minar deja de ser gratis y pasa
+a comprar metal a la tesorería del mundo, conservando el coin dentro del bundle 0G y sin tocar F1-F3.
+**Prompt sintetizado:** Añadir cobro opcional al punto único de otorgamiento de mena (`harvestRock`),
+gateado por `NEXT_PUBLIC_ENGRAM_PAID_MINING` (OFF por defecto). El costo se deriva del `oreQuote`
+vigente; como cobrar mid literal haría imposible que el costo sea menor que la reventa (`sell =
+mid / spread`), se usa `mid / HOUSE_SPREAD²` capado debajo de `sell`. Si falta coin, no se entrega
+mena y el HUD avisa "Need N coin...". Si se paga, el coin pasa a `world.ecosystem.treasury`
+(`coin`, `paidMiningRevenue`, `paidMiningCount`, `orePurchased`) y `computeEcosystemActivity` cuenta
+`playerCoin + treasuryCoin`, acelerando reposición de Tierra. HUD "World Treasury" muestra el banco.
+Documentar flag y honestidad: economía in-game/testnet simulada, no custodia de OG real.
+**Qué se hizo:** `WorldTreasuryState` persistido en `EcosystemState`; `harvestRock` soporta cobro
+atómico y feedback de saldo; `Scene3D` calcula el ask dinámico desde `oreQuote` y bloquea extracción
+solo con el flag ON; `client-page` muestra coin del banco; `.env.example` y Prompt 23 actualizados.
+**Commit:** _(este commit)_

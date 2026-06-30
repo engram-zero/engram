@@ -4967,8 +4967,17 @@ export default function Scene3D({ memories = null, active = null, talking = fals
             }
           } else {
             const ore = ROCKS[rock!].ore;
-            const { depleted } = harvestRock(rock!, ore); // grant 1 of the rock's ore
+            const ask = PAID_MINING_ENABLED ? miningAskFor(getWorld(), ore) : null;
+            const result = harvestRock(rock!, ore, ask ? { paidMining: true, cost: ask.cost } : undefined); // grant 1 of the rock's ore
+            if (!result.gained) {
+              if (result.reason) d.showToolFeedback({ text: result.reason, tone: 'bad' });
+              chopRef.current = 0;
+              setChopPct(0);
+              return;
+            }
             d.showPickup(ORE_LABEL[ore], ore === 'gold' ? '#e0c25a' : ore === 'silver' ? '#cdd2de' : '#9aa0a8');
+            if (result.paid && result.cost) d.showToolFeedback({ text: `Paid ${result.cost} coin into the World Treasury for ${ore}.`, tone: 'info' });
+            const { depleted } = result;
             if (depleted) {
               setNearbyRock(null); // rock gone; Player repicks next frame
               if (COMPUTE_ENABLED) void d.runMineReceipt(); // back the batch with 0G Compute
@@ -5899,6 +5908,8 @@ Left-click to look around · right-click to act · WASD to walk · V for aerial
           {controlsArmed && !isTouchDevice && nearbyRock !== null && nearbyTree === null && !nearbyNpc && (() => {
             const ore = ROCKS[nearbyRock].ore;
             const full = world.inventory[ore] >= ORE_MAX[ore];
+            const ask = PAID_MINING_ENABLED && !full ? miningAskFor(world, ore) : null;
+            const lacksCoin = !!ask && world.inventory.coin < ask.cost;
             return (
               <div className="pointer-events-none absolute bottom-28 left-1/2 z-10 -translate-x-1/2">
                 {full ? (
@@ -5907,7 +5918,16 @@ Left-click to look around · right-click to act · WASD to walk · V for aerial
                   </div>
                 ) : (
                   <div className="rounded-2xl border border-[#7a8a9a] px-5 py-2.5 text-center text-sm font-semibold text-[#f4e8d0] shadow-lg" style={{ background: 'rgba(14,16,20,0.9)' }}>
-                    Hold <span className="text-[#bcd0e0]">F</span> to mine {ore !== 'stone' ? <span className="text-[#e0c25a]">{ORE_LABEL[ore]}</span> : null}
+                    {lacksCoin && ask ? (
+                      <>Need <span className="text-[#d6b84a]">{ask.cost} coin</span> to extract {ORE_LABEL[ore]}</>
+                    ) : (
+                      <>Hold <span className="text-[#bcd0e0]">F</span> to mine {ore !== 'stone' ? <span className="text-[#e0c25a]">{ORE_LABEL[ore]}</span> : null}</>
+                    )}
+                    {ask && (
+                      <div className="mt-1 text-[11px] font-normal text-[#f4e8d0]/65">
+                        treasury ask {ask.cost} coin · resale {ask.quote.sell}
+                      </div>
+                    )}
                     <div className="mt-1.5 h-2 w-40 overflow-hidden rounded-full bg-black/55">
                       <div className="h-full rounded-full bg-[#bcd0e0] transition-[width] duration-75" style={{ width: `${chopPct}%` }} />
                     </div>
@@ -5986,7 +6006,10 @@ Left-click to look around · right-click to act · WASD to walk · V for aerial
             )}
             {nearbyRock !== null && nearbyTree === null && !nearbyNpc && (() => {
               const ore = ROCKS[nearbyRock].ore;
-              return world.inventory[ore] >= ORE_MAX[ore] ? (
+              const full = world.inventory[ore] >= ORE_MAX[ore];
+              const ask = PAID_MINING_ENABLED && !full ? miningAskFor(world, ore) : null;
+              const lacksCoin = !!ask && world.inventory.coin < ask.cost;
+              return full ? (
                 <div className="rounded-2xl border border-[#8a8a8a] bg-[rgba(20,16,10,0.92)] px-4 py-3 text-sm font-semibold text-[#f4e8d0]">
                   {ORE_LABEL[ore]} full ({ORE_MAX[ore]})
                 </div>
@@ -6006,7 +6029,8 @@ Left-click to look around · right-click to act · WASD to walk · V for aerial
                   }}
                   className="rounded-2xl border border-[#7a8a9a] bg-[rgba(14,16,20,0.92)] px-4 py-3 text-center text-sm font-semibold text-[#f4e8d0]"
                 >
-                  Hold to mine {ore !== 'stone' ? ORE_LABEL[ore] : ''}
+                  {lacksCoin && ask ? `Need ${ask.cost} coin for ${ORE_LABEL[ore]}` : `Hold to mine ${ore !== 'stone' ? ORE_LABEL[ore] : ''}`}
+                  {ask && <div className="mt-1 text-[11px] font-normal text-[#f4e8d0]/65">ask {ask.cost} · resale {ask.quote.sell}</div>}
                   <div className="mt-1.5 h-2 w-32 overflow-hidden rounded-full bg-black/55">
                     <div className="h-full rounded-full bg-[#bcd0e0] transition-[width] duration-75" style={{ width: `${chopPct}%` }} />
                   </div>
