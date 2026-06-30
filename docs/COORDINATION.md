@@ -40,6 +40,13 @@ export function setWorldPersistence(p: WorldPersistence): void; // register your
   `world.ts` instead of inferring from `choppedTrees` alone. Extra resources live in
   `WorldState.storage` (`wood`/`stone`/`silver`/`gold`) and move only through
   `depositResource`/`withdrawResource`, so carry caps remain separate from 0G storage.
+- **Prompt 25 seam:** AI-forged items live in `WorldState.aiItems`; equipped IDs live in
+  `WorldState.equippedItemIds`; outgoing listings live in `WorldState.aiItemListings`.
+  Scene/UI should call `/api/forge`, then persist the returned item with `addAiItem(...)`.
+  Equip via `equipAiItem(...)`; read effects with `equippedAiItems(...)`,
+  `statModifierFor(stat)` or `allStatModifiers(...)`. Market hooks are
+  `listAiItem(...)`, `cancelAiItemListing(...)` and `buyAiItemListing(...)`. Do not
+  trust raw bundle stats: `world.ts` clamps item magnitude/value on load and add.
 - **martelaxe owns:** the 0G/contract persistence adapter. Current MVP:
   `createBundleWorldPersistence(networkType)` in `src/lib/world-0g.ts`, registered from
   `src/app/client-page.tsx`. **You do not need to touch Scene3D or gameplay code** for

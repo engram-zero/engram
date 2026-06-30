@@ -10,6 +10,9 @@ export type OreType = 'stone' | 'silver' | 'gold';
 export type StoredResourceType = 'wood' | OreType;
 export type TreeGrowthStage = 'sapling' | 'young' | 'mature';
 export type WalletRelation = 'neutral' | 'allied' | 'hostile';
+export type AiItemType = 'tool' | 'weapon' | 'trinket';
+export type AiItemStat = 'woodYield' | 'miningYield' | 'combatDamage' | 'moveSpeed' | 'maxHp';
+export type AiItemRarity = 'common' | 'uncommon' | 'rare';
 export type NatureZoneId = 'north_forest' | 'riverlands' | 'east_hills' | 'south_fields' | 'west_grove';
 export type FaunaMood = 'hostile' | 'wary' | 'neutral';
 export const BLOCK_UNIT = 0.1; // smaller voxels → more detailed, realistic builds
@@ -98,6 +101,39 @@ export interface TreeGrowthState {
   stage: TreeGrowthStage;
   nextStageAt: number;
   updatedAt: number;
+}
+
+export interface AiItem {
+  /** Stable content-ish ID generated from owner + prompt + bounded item stats. */
+  id: string;
+  /** Wallet that currently owns this user-created item. */
+  owner: string;
+  name: string;
+  type: AiItemType;
+  stat: AiItemStat;
+  /** Bounded additive modifier. Scene/gameplay reads this via world.ts helpers. */
+  magnitude: number;
+  rarity: AiItemRarity;
+  /** Suggested market price in in-game coin, bounded server/store-side. */
+  estimatedCoinValue: number;
+  /** Original user prompt that forged the item. */
+  prompt: string;
+  /** Short model/fallback explanation shown by future UI. */
+  lore: string;
+  /** Whether this came from deterministic fallback instead of live AI. */
+  fallback?: boolean;
+  createdAt: number;
+}
+
+export interface AiItemListing {
+  id: string;
+  item: AiItem;
+  seller: string;
+  priceCoin: number;
+  status: 'listed' | 'sold' | 'cancelled' | 'pending';
+  createdAt: number;
+  updatedAt: number;
+  buyer?: string;
 }
 
 export type BuildingType = 'wall' | 'house' | 'block';
@@ -259,6 +295,12 @@ export interface WorldState {
   enemiesKilled: number;
   /** Tool tier bought from Aldric. 0 = base axe, 1 = sharper axe (2× wood/chop). */
   axeLevel: number;
+  /** Prompt-forged tools/weapons/trinkets owned by this wallet, persisted in 0G. */
+  aiItems: AiItem[];
+  /** Equipped item IDs by slot; Scene3D can consume stat modifiers via world.ts helpers. */
+  equippedItemIds: Partial<Record<AiItemType, string>>;
+  /** Outgoing item listings authored by this wallet; public discovery can hydrate these later. */
+  aiItemListings: AiItemListing[];
   /** Consumable building repairs bought from Aldric. */
   repairKits: number;
   /** Outgoing public-world raid/sabotage events authored by this wallet. */
@@ -437,6 +479,19 @@ export interface NPCChatResponse {
   delta: MemoryUpdate;
   /** Aldric's verdict, present only when the request carried an `offer`. */
   trade?: TradeDecision;
+}
+
+export interface ForgeRequest {
+  walletAddress: string;
+  prompt: string;
+  apiKey?: string;
+}
+
+export interface ForgeResponse {
+  items: AiItem[];
+  costUsd: number;
+  fallback?: boolean;
+  byo?: boolean;
 }
 
 export interface EarthAgentRequest {

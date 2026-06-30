@@ -15,9 +15,9 @@
 //     NOT cross-device, NOT on-chain).
 
 import { useSyncExternalStore } from 'react';
-import { BLOCK_SCALE_MAX, BLOCK_SCALE_MIN, BLOCK_UNIT, type DemonSiegeEvent, type EcosystemState, type OreType, type ParcelClaim, type ParcelRentEvent, type RaidEvent, type RepairEvent, type ResourceType, type StoredResourceType, type TreeGrowthStage, type TreeGrowthState, type WalletRelation, type WorldState, type Building, type BuildingType } from '@/lib/types';
+import { BLOCK_SCALE_MAX, BLOCK_SCALE_MIN, BLOCK_UNIT, type AiItem, type AiItemListing, type AiItemStat, type AiItemType, type DemonSiegeEvent, type EcosystemState, type OreType, type ParcelClaim, type ParcelRentEvent, type RaidEvent, type RepairEvent, type ResourceType, type StoredResourceType, type TreeGrowthStage, type TreeGrowthState, type WalletRelation, type WorldState, type Building, type BuildingType } from '@/lib/types';
 
-export type { DemonSiegeEvent, EcosystemState, OreType, ParcelClaim, ParcelRentEvent, RaidEvent, RepairEvent, ResourceType, StoredResourceType, TreeGrowthStage, TreeGrowthState, WalletRelation, WorldState, Building, BuildingType } from '@/lib/types';
+export type { AiItem, AiItemListing, AiItemStat, AiItemType, DemonSiegeEvent, EcosystemState, OreType, ParcelClaim, ParcelRentEvent, RaidEvent, RepairEvent, ResourceType, StoredResourceType, TreeGrowthStage, TreeGrowthState, WalletRelation, WorldState, Building, BuildingType } from '@/lib/types';
 
 /** How much wood the player can carry before they must use/drop some. Raised to
  * support AI-built structures and the pricier builds near the village centre. */
@@ -50,6 +50,9 @@ export const EMPTY_WORLD: WorldState = {
   buildings: [],
   enemiesKilled: 0,
   axeLevel: 0,
+  aiItems: [],
+  equippedItemIds: {},
+  aiItemListings: [],
   repairKits: 0,
   raidEvents: [],
   repairEvents: [],
@@ -149,6 +152,16 @@ export function isReinforcedLabel(label?: string | null): boolean {
   return REINFORCED_WORDS.some((w) => l.includes(w));
 }
 export const STORAGE_RESOURCES: StoredResourceType[] = ['wood', 'stone', 'silver', 'gold'];
+export const AI_ITEM_STAT_LIMITS: Record<AiItemStat, { min: number; max: number }> = {
+  woodYield: { min: 1, max: 5 },
+  miningYield: { min: 1, max: 4 },
+  combatDamage: { min: 2, max: 18 },
+  moveSpeed: { min: 0.02, max: 0.18 },
+  maxHp: { min: 5, max: 45 },
+};
+export const AI_ITEM_VALUE_LIMIT = { min: 12, max: 260 };
+export const MAX_AI_ITEMS = 48;
+export const MAX_AI_ITEM_LISTINGS = 80;
 
 export interface WoodQuote {
   /** Fair mid price (coin/unit) before the house spread. */
@@ -653,6 +666,111 @@ function normalizeTreeGrowth(raw: unknown): Record<number, TreeGrowthState> {
   return out;
 }
 
+function cleanAiItemType(raw: unknown): AiItemType {
+  return raw === 'weapon' || raw === 'trinket' ? raw : 'tool';
+}
+
+function cleanAiItemStat(raw: unknown): AiItemStat {
+  return raw === 'miningYield' || raw === 'combatDamage' || raw === 'moveSpeed' || raw === 'maxHp' ? raw : 'woodYield';
+}
+
+function cleanAiItemRarity(raw: unknown): AiItem['rarity'] {
+  return raw === 'uncommon' || raw === 'rare' ? raw : 'common';
+}
+
+function cleanWallet(raw: unknown, fallback = ''): string {
+  const value = typeof raw === 'string' ? raw.toLowerCase() : '';
+  return /^0x[a-f0-9]{40}$/.test(value) ? value : fallback.toLowerCase();
+}
+
+function cleanShortText(raw: unknown, fallback: string, max = 80): string {
+  const value = typeof raw === 'string' ? raw.trim().replace(/\s+/g, ' ') : '';
+  return (value || fallback).slice(0, max);
+}
+
+function clampAiItemMagnitude(stat: AiItemStat, raw: unknown): number {
+  const limits = AI_ITEM_STAT_LIMITS[stat];
+  const value = Number(raw);
+  const clamped = Math.max(limits.min, Math.min(limits.max, Number.isFinite(value) ? value : limits.min));
+  return stat === 'moveSpeed' ? Math.round(clamped * 1000) / 1000 : Math.round(clamped);
+}
+
+export function normalizeAiItem(raw: unknown, fallbackOwner = ''): AiItem | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const p = raw as Record<string, unknown>;
+  const stat = cleanAiItemStat(p.stat);
+  const owner = cleanWallet(p.owner, fallbackOwner);
+  if (!owner) return null;
+  const id = cleanId(p.id, '');
+  if (!id) return null;
+  const estimatedCoinValue = Math.max(
+    AI_ITEM_VALUE_LIMIT.min,
+    Math.min(AI_ITEM_VALUE_LIMIT.max, Math.round(Number(p.estimatedCoinValue ?? AI_ITEM_VALUE_LIMIT.min)))
+  );
+  return {
+    id,
+    owner,
+    name: cleanShortText(p.name, 'Forged item', 48),
+    type: cleanAiItemType(p.type),
+    stat,
+    magnitude: clampAiItemMagnitude(stat, p.magnitude),
+    rarity: cleanAiItemRarity(p.rarity),
+    estimatedCoinValue,
+    prompt: cleanShortText(p.prompt, 'forged by AI', 300),
+    lore: cleanShortText(p.lore, 'A bounded 0G-forged item.', 180),
+    fallback: p.fallback === true,
+    createdAt: Math.max(0, Math.round(Number(p.createdAt ?? Date.now()))) || Date.now(),
+  };
+}
+
+function normalizeAiItems(raw: unknown, owner = ''): AiItem[] {
+  if (!Array.isArray(raw)) return [];
+  const byId = new Map<string, AiItem>();
+  for (const value of raw) {
+    const item = normalizeAiItem(value, owner);
+    if (item) byId.set(item.id, item);
+  }
+  return [...byId.values()].slice(0, MAX_AI_ITEMS);
+}
+
+function normalizeEquippedItemIds(raw: unknown, items: AiItem[]): Partial<Record<AiItemType, string>> {
+  const p = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
+  const ids = new Set(items.map((item) => item.id));
+  const out: Partial<Record<AiItemType, string>> = {};
+  for (const slot of ['tool', 'weapon', 'trinket'] as const) {
+    const id = cleanId(p[slot], '');
+    if (id && ids.has(id) && items.find((item) => item.id === id)?.type === slot) out[slot] = id;
+  }
+  return out;
+}
+
+function normalizeAiItemListings(raw: unknown, owner = ''): AiItemListing[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((value): AiItemListing | null => {
+      if (!value || typeof value !== 'object') return null;
+      const p = value as Record<string, unknown>;
+      const item = normalizeAiItem(p.item, owner);
+      if (!item) return null;
+      const seller = cleanWallet(p.seller, item.owner);
+      if (!seller) return null;
+      const id = cleanId(p.id, `listing:${item.id}`);
+      const status = p.status === 'sold' || p.status === 'cancelled' || p.status === 'pending' ? p.status : 'listed';
+      return {
+        id,
+        item: { ...item, owner: seller },
+        seller,
+        priceCoin: Math.max(1, Math.min(9999, Math.round(Number(p.priceCoin ?? item.estimatedCoinValue)))),
+        status,
+        createdAt: Math.max(0, Math.round(Number(p.createdAt ?? Date.now()))) || Date.now(),
+        updatedAt: Math.max(0, Math.round(Number(p.updatedAt ?? Date.now()))) || Date.now(),
+        buyer: cleanWallet(p.buyer, '') || undefined,
+      };
+    })
+    .filter((listing): listing is AiItemListing => !!listing)
+    .slice(0, MAX_AI_ITEM_LISTINGS);
+}
+
 function normalizeTreasury(raw: unknown, baseUpdatedAt: number): NonNullable<EcosystemState['treasury']> | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
   const p = raw as Record<string, unknown>;
@@ -769,6 +887,8 @@ export function normalizeWorldState(raw: unknown): WorldState {
       : [];
   const choppedTrees = intIndexSet(p?.choppedTrees);
   const minedRocks = intIndexSet(p?.minedRocks);
+  const owner = cleanWallet(p?.owner, wallet ?? '');
+  const aiItems = normalizeAiItems(p?.aiItems, owner);
 
   return {
     inventory: {
@@ -785,6 +905,9 @@ export function normalizeWorldState(raw: unknown): WorldState {
     buildings: normalizeBuildings(p?.buildings),
     enemiesKilled: Math.max(0, Number(p?.enemiesKilled ?? 0)),
     axeLevel: Math.max(0, Math.round(Number(p?.axeLevel ?? 0))),
+    aiItems,
+    equippedItemIds: normalizeEquippedItemIds(p?.equippedItemIds, aiItems),
+    aiItemListings: normalizeAiItemListings(p?.aiItemListings, owner),
     repairKits: Math.max(0, Math.round(Number(p?.repairKits ?? 0))),
     raidEvents: normalizeRaidEvents(p?.raidEvents),
     repairEvents: normalizeRepairEvents(p?.repairEvents),
@@ -809,6 +932,9 @@ export function cloneWorldState(value: WorldState = EMPTY_WORLD): WorldState {
     buildings: value.buildings.map((b) => ({ ...b })),
     enemiesKilled: value.enemiesKilled,
     axeLevel: value.axeLevel,
+    aiItems: value.aiItems.map((item) => ({ ...item })),
+    equippedItemIds: { ...value.equippedItemIds },
+    aiItemListings: value.aiItemListings.map((listing) => ({ ...listing, item: { ...listing.item } })),
     repairKits: value.repairKits,
     raidEvents: value.raidEvents.map((event) => ({ ...event })),
     repairEvents: value.repairEvents.map((event) => ({ ...event })),
@@ -934,6 +1060,114 @@ export function setEcosystemState(ecosystem: EcosystemState | undefined) {
 
 export function addResource(type: ResourceType, amount: number) {
   return commit({ ...state, inventory: { ...state.inventory, [type]: Math.max(0, state.inventory[type] + amount) } });
+}
+
+export function equippedAiItems(value: WorldState = state): Partial<Record<AiItemType, AiItem>> {
+  const out: Partial<Record<AiItemType, AiItem>> = {};
+  for (const slot of ['tool', 'weapon', 'trinket'] as const) {
+    const id = value.equippedItemIds[slot];
+    if (!id) continue;
+    const item = value.aiItems.find((candidate) => candidate.id === id && candidate.type === slot);
+    if (item) out[slot] = item;
+  }
+  return out;
+}
+
+export function statModifierFor(stat: AiItemStat, value: WorldState = state): number {
+  return Object.values(equippedAiItems(value))
+    .filter((item): item is AiItem => !!item && item.stat === stat)
+    .reduce((sum, item) => sum + item.magnitude, 0);
+}
+
+export function allStatModifiers(value: WorldState = state): Record<AiItemStat, number> {
+  return {
+    woodYield: statModifierFor('woodYield', value),
+    miningYield: statModifierFor('miningYield', value),
+    combatDamage: statModifierFor('combatDamage', value),
+    moveSpeed: statModifierFor('moveSpeed', value),
+    maxHp: statModifierFor('maxHp', value),
+  };
+}
+
+export function addAiItem(raw: AiItem): { ok: boolean; item?: AiItem; reason?: string } {
+  const owner = wallet?.toLowerCase();
+  if (!owner) return { ok: false, reason: 'Connect a wallet before forging items.' };
+  const item = normalizeAiItem({ ...raw, owner }, owner);
+  if (!item) return { ok: false, reason: 'Invalid forged item.' };
+  if (state.aiItems.some((existing) => existing.id === item.id)) return { ok: true, item };
+  commit({ ...state, aiItems: [item, ...state.aiItems].slice(0, MAX_AI_ITEMS) });
+  return { ok: true, item };
+}
+
+export function equipAiItem(itemId: string | null, slot?: AiItemType): { ok: boolean; reason?: string } {
+  if (!itemId) {
+    if (!slot) return { ok: false, reason: 'Choose a slot to unequip.' };
+    const next = { ...state.equippedItemIds };
+    delete next[slot];
+    commit({ ...state, equippedItemIds: next });
+    return { ok: true };
+  }
+  const item = state.aiItems.find((candidate) => candidate.id === itemId);
+  if (!item) return { ok: false, reason: 'You do not own that item.' };
+  const targetSlot = slot ?? item.type;
+  if (targetSlot !== item.type) return { ok: false, reason: `A ${item.type} cannot equip into ${targetSlot}.` };
+  commit({ ...state, equippedItemIds: { ...state.equippedItemIds, [targetSlot]: item.id } });
+  return { ok: true };
+}
+
+export function listAiItem(itemId: string, priceCoin?: number): { ok: boolean; listing?: AiItemListing; reason?: string } {
+  const owner = wallet?.toLowerCase();
+  if (!owner) return { ok: false, reason: 'Connect a wallet before listing items.' };
+  const item = state.aiItems.find((candidate) => candidate.id === itemId && candidate.owner === owner);
+  if (!item) return { ok: false, reason: 'You do not own that item.' };
+  if (state.aiItemListings.some((listing) => listing.item.id === itemId && listing.status === 'listed')) {
+    return { ok: false, reason: 'That item is already listed.' };
+  }
+  const now = Date.now();
+  const listing: AiItemListing = {
+    id: createId('item_listing'),
+    item,
+    seller: owner,
+    priceCoin: Math.max(1, Math.min(9999, Math.round(Number(priceCoin ?? item.estimatedCoinValue)))),
+    status: 'listed',
+    createdAt: now,
+    updatedAt: now,
+  };
+  commit({ ...state, aiItemListings: [listing, ...state.aiItemListings].slice(0, MAX_AI_ITEM_LISTINGS) });
+  return { ok: true, listing };
+}
+
+export function cancelAiItemListing(listingId: string): { ok: boolean; reason?: string } {
+  const owner = wallet?.toLowerCase();
+  if (!owner) return { ok: false, reason: 'Connect a wallet first.' };
+  const listing = state.aiItemListings.find((candidate) => candidate.id === listingId);
+  if (!listing) return { ok: false, reason: 'Listing not found.' };
+  if (listing.seller !== owner) return { ok: false, reason: 'Only the seller can cancel this listing.' };
+  const now = Date.now();
+  commit({
+    ...state,
+    aiItemListings: state.aiItemListings.map((candidate) =>
+      candidate.id === listingId ? { ...candidate, status: 'cancelled', updatedAt: now } : candidate
+    ),
+  });
+  return { ok: true };
+}
+
+export function buyAiItemListing(raw: AiItemListing): { ok: boolean; item?: AiItem; reason?: string } {
+  const buyer = wallet?.toLowerCase();
+  if (!buyer) return { ok: false, reason: 'Connect a wallet before buying items.' };
+  const listing = normalizeAiItemListings([raw], raw?.seller)[0];
+  if (!listing || listing.status !== 'listed') return { ok: false, reason: 'Listing is not available.' };
+  if (listing.seller === buyer) return { ok: false, reason: 'You already own this item.' };
+  if (state.inventory.coin < listing.priceCoin) return { ok: false, reason: `Need ${listing.priceCoin} coin to buy this item.` };
+  const purchased = normalizeAiItem({ ...listing.item, owner: buyer, id: `${listing.item.id}:owned:${buyer.slice(2, 8)}` }, buyer);
+  if (!purchased) return { ok: false, reason: 'Invalid listed item.' };
+  commit({
+    ...state,
+    inventory: { ...state.inventory, coin: Math.max(0, state.inventory.coin - listing.priceCoin) },
+    aiItems: [purchased, ...state.aiItems.filter((item) => item.id !== purchased.id)].slice(0, MAX_AI_ITEMS),
+  });
+  return { ok: true, item: purchased };
 }
 
 function carryCapFor(type: StoredResourceType): number {

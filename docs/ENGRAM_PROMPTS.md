@@ -1238,6 +1238,13 @@ redespliega. Refuerza "own your world".
 
 **Para:** Codex (backend/0G). Punto FUERTE para la tesis 0G.
 
+> **🟢 BACKEND CORE DONE — 30 jun 2026.** `AiItem`/`AiItemListing` viven en
+> `WorldState` (`aiItems`, `equippedItemIds`, `aiItemListings`) y se normalizan/clampan
+> en `world.ts`. Nuevo `/api/forge` genera 1 ítem acotado con Claude o fallback
+> determinista; `addAiItem`, `equipAiItem`, `statModifierFor`, `allStatModifiers`,
+> `listAiItem`, `cancelAiItemListing` y `buyAiItemListing` dejan el seam listo para
+> Claude/Scene3D. Falta UI/render/equip visual y descubrimiento público rico del mercado.
+
 ### La idea
 Igual que el jugador construye estructuras con IA, que pueda **diseñar ítems con IA**:
 herramientas de recolección (hacha/pico mejorados), armas para enemigos, o ítems que **mejoran

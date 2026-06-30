@@ -1594,6 +1594,21 @@ claro. `saveParcelData` acepta ese estado pendiente y también degrada fallos de
 resultado local con `dataRoot=null`, evitando "request failed". Sin cambios en `Scene3D.tsx`.
 **Commit:** _(este commit)_
 
+### 2026-06-30 · Prompt 25 backend — herramientas/armas IA vendibles
+**Pedido (humano):** implementar Prompt 25 en scope backend-only: ítems diseñados con IA,
+persistibles en 0G, listables/comprables, y exponer ítem equipado + modificador de stat para que
+Claude conecte `Scene3D.tsx` después. No tocar la escena.
+**Prompt sintetizado:** Añadir un esquema acotado `AiItem`/`AiItemListing` al `WorldState`; crear
+`/api/forge` como espejo de `/api/build` para prompt → ítem con stats clampados y fallback
+determinista; persistir ítems/listings/equip en el bundle del mundo; exponer helpers de stat y
+acciones de mercado sin romper economía/scarcity.
+**Qué se hizo:** tipos `AiItem`, `AiItemListing`, `ForgeRequest/Response`; `WorldState.aiItems`,
+`equippedItemIds`, `aiItemListings`; normalización anti-exploit en `world.ts`; endpoint
+`/api/forge`; helpers `addAiItem`, `equipAiItem`, `equippedAiItems`, `statModifierFor`,
+`allStatModifiers`, `listAiItem`, `cancelAiItemListing`, `buyAiItemListing`; seam documentado en
+`COORDINATION.md` y estado del Prompt 25 actualizado. Sin cambios en `Scene3D.tsx`.
+**Commit:** _(este commit)_
+
 ### 2026-06-29 · Lote de pulido aéreo/combate (deselección, muros, sombras, casas, cono de ataque)
 **Pedido (humano):** del playtest — #9 click izq. no deselecciona en aérea; #10 no se pueden rotar
 muros a 45° y a veces no se puede colocar otro muro; #2 árboles sin sombra; #8 casas muy chicas;
