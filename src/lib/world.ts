@@ -16,9 +16,9 @@
 
 import { useSyncExternalStore } from 'react';
 import { biomeAt } from '@/lib/biome';
-import { BLOCK_SCALE_MAX, BLOCK_SCALE_MIN, BLOCK_UNIT, type AiItem, type AiItemListing, type AiItemStat, type AiItemType, type BiomeId, type DemonSiegeEvent, type EcosystemState, type OreType, type ParcelClaim, type ParcelRentEvent, type RaidEvent, type RepairEvent, type ResourceType, type StoredResourceType, type TreeGrowthStage, type TreeGrowthState, type WalletRelation, type WorldState, type Building, type BuildingType } from '@/lib/types';
+import { BLOCK_SCALE_MAX, BLOCK_SCALE_MIN, BLOCK_UNIT, type AiItem, type AiItemListing, type AiItemStat, type AiItemType, type AldricStandardItemId, type AldricStandardMarketItem, type BiomeId, type DeathPenaltyState, type DemonSiegeEvent, type EcosystemState, type OreType, type ParcelClaim, type ParcelRentEvent, type RaidEvent, type RepairEvent, type ResourceType, type StoredResourceType, type TreeGrowthStage, type TreeGrowthState, type WalletRelation, type WorldState, type Building, type BuildingType } from '@/lib/types';
 
-export type { AiItem, AiItemListing, AiItemStat, AiItemType, BiomeId, DemonSiegeEvent, EcosystemState, OreType, ParcelClaim, ParcelRentEvent, RaidEvent, RepairEvent, ResourceType, StoredResourceType, TreeGrowthStage, TreeGrowthState, WalletRelation, WorldState, Building, BuildingType } from '@/lib/types';
+export type { AiItem, AiItemListing, AiItemStat, AiItemType, AldricStandardItemId, AldricStandardMarketItem, BiomeId, DeathPenaltyState, DemonSiegeEvent, EcosystemState, OreType, ParcelClaim, ParcelRentEvent, RaidEvent, RepairEvent, ResourceType, StoredResourceType, TreeGrowthStage, TreeGrowthState, WalletRelation, WorldState, Building, BuildingType } from '@/lib/types';
 
 /** How much wood the player can carry before they must use/drop some. Raised to
  * support AI-built structures and the pricier builds near the village centre. */
@@ -51,6 +51,10 @@ export const EMPTY_WORLD: WorldState = {
   buildings: [],
   enemiesKilled: 0,
   axeLevel: 0,
+  playerHp: 100,
+  playerMaxHp: 100,
+  deathCount: 0,
+  lastDeathPenalty: undefined,
   aiItems: [],
   equippedItemIds: {},
   aiItemListings: [],
@@ -95,6 +99,12 @@ export const AXE_UPGRADE_COST = 70;
 export const SAPLING_COST = 5;
 /** Cost in coin of one repair kit. */
 export const REPAIR_KIT_COST = 12;
+export const MEDICINAL_HERB_COST = 9;
+export const MEDICINAL_HERB_HEAL = 35;
+export const PLAYER_BASE_MAX_HP = 100;
+export const PLAYER_DEATH_REVIVE_HP_FRACTION = 0.6;
+export const PLAYER_DEATH_COIN_LOSS_FRACTION = 0.2;
+export const PLAYER_DEATH_RESOURCE_LOSS_FRACTION = 0.1;
 /** Wood spent by any repair action. Repair kits boost the same wood repair. */
 export const REPAIR_WOOD_COST = 2;
 /** HP restored by a wood-only repair. */
@@ -105,7 +115,7 @@ export const REPAIR_KIT_HEAL = 60;
 export const RAID_STONE_COST = 2;
 export const RAID_BASE_DAMAGE = 18;
 export const RAID_COOLDOWN_MS = 1000 * 60 * 10;
-export const DEMON_SIEGE_DAMAGE = 2;
+export const DEMON_SIEGE_DAMAGE = 1;
 export const DEMON_SIEGE_COOLDOWN_MS = 1000 * 60;
 export const DEMON_SIEGE_WINDOW_MS = 1000 * 60 * 10;
 export const DEMON_SIEGE_WINDOW_DAMAGE_CAP = 8;
@@ -119,6 +129,41 @@ export const PARCEL_GATHER_RENT_COIN = 1;
 export const PARCEL_COMMISSION_BPS = 1200;
 export const PARCEL_BASE_WORLD_RADIUS = 132;
 export const PARCEL_HARD_WORLD_RADIUS = 260;
+
+export const ALDRIC_STANDARD_CATALOG: Record<AldricStandardItemId, AldricStandardMarketItem> = {
+  medicinal_herbs: {
+    id: 'medicinal_herbs',
+    name: 'Medicinal herbs',
+    description: `Restores ${MEDICINAL_HERB_HEAL} HP. A cheap reason to care about staying alive.`,
+    priceCoin: MEDICINAL_HERB_COST,
+    category: 'healing',
+    stock: 'unlimited',
+  },
+  repair_kit: {
+    id: 'repair_kit',
+    name: 'Repair kit',
+    description: `Boosts the next building repair to ${REPAIR_KIT_HEAL} HP.`,
+    priceCoin: REPAIR_KIT_COST,
+    category: 'repair',
+    stock: 'unlimited',
+  },
+  sapling: {
+    id: 'sapling',
+    name: 'Sapling',
+    description: 'Starts regrowth for one felled tree.',
+    priceCoin: SAPLING_COST,
+    category: 'utility',
+    stock: 'unlimited',
+  },
+  sharper_axe: {
+    id: 'sharper_axe',
+    name: 'Sharper axe',
+    description: 'Permanent wood gathering upgrade.',
+    priceCoin: AXE_UPGRADE_COST,
+    category: 'upgrade',
+    stock: 1,
+  },
+};
 
 // ── Dynamic wood pricing (Phase 2) ────────────────────────────────────────────
 // A relative market: wood's coin value rises with scarcity (fewer trees left on
@@ -777,6 +822,25 @@ function normalizeAiItemListings(raw: unknown, owner = ''): AiItemListing[] {
     .slice(0, MAX_AI_ITEM_LISTINGS);
 }
 
+function normalizeDeathPenalty(raw: unknown): DeathPenaltyState | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const p = raw as Record<string, unknown>;
+  const resourcesRaw = p.resourcesLost && typeof p.resourcesLost === 'object' ? p.resourcesLost as Record<string, unknown> : {};
+  const resourcesLost: Partial<Record<ResourceType, number>> = {};
+  for (const resource of ['wood', 'stone', 'coin', 'silver', 'gold'] as const) {
+    const lost = Math.max(0, Math.min(9999, Math.round(Number(resourcesRaw[resource] ?? 0))));
+    if (lost > 0) resourcesLost[resource] = lost;
+  }
+  const coinLost = Math.max(0, Math.min(9999, Math.round(Number(p.coinLost ?? 0))));
+  if (coinLost > 0) resourcesLost.coin = coinLost;
+  return {
+    at: Math.max(0, Math.round(Number(p.at ?? Date.now()))) || Date.now(),
+    coinLost,
+    resourcesLost,
+    reason: p.reason === 'damage' ? 'damage' : 'death',
+  };
+}
+
 function normalizeTreasury(raw: unknown, baseUpdatedAt: number): NonNullable<EcosystemState['treasury']> | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
   const p = raw as Record<string, unknown>;
@@ -895,6 +959,8 @@ export function normalizeWorldState(raw: unknown): WorldState {
   const minedRocks = intIndexSet(p?.minedRocks);
   const owner = cleanWallet(p?.owner, wallet ?? '');
   const aiItems = normalizeAiItems(p?.aiItems, owner);
+  const playerMaxHp = Math.max(1, Math.min(999, Math.round(Number(p?.playerMaxHp ?? PLAYER_BASE_MAX_HP))));
+  const playerHp = Math.max(0, Math.min(playerMaxHp, Math.round(Number(p?.playerHp ?? playerMaxHp))));
 
   return {
     inventory: {
@@ -911,6 +977,10 @@ export function normalizeWorldState(raw: unknown): WorldState {
     buildings: normalizeBuildings(p?.buildings),
     enemiesKilled: Math.max(0, Number(p?.enemiesKilled ?? 0)),
     axeLevel: Math.max(0, Math.round(Number(p?.axeLevel ?? 0))),
+    playerHp,
+    playerMaxHp,
+    deathCount: Math.max(0, Math.round(Number(p?.deathCount ?? 0))),
+    lastDeathPenalty: normalizeDeathPenalty(p?.lastDeathPenalty),
     aiItems,
     equippedItemIds: normalizeEquippedItemIds(p?.equippedItemIds, aiItems),
     aiItemListings: normalizeAiItemListings(p?.aiItemListings, owner),
@@ -938,6 +1008,12 @@ export function cloneWorldState(value: WorldState = EMPTY_WORLD): WorldState {
     buildings: value.buildings.map((b) => ({ ...b })),
     enemiesKilled: value.enemiesKilled,
     axeLevel: value.axeLevel,
+    playerHp: value.playerHp,
+    playerMaxHp: value.playerMaxHp,
+    deathCount: value.deathCount,
+    lastDeathPenalty: value.lastDeathPenalty
+      ? { ...value.lastDeathPenalty, resourcesLost: { ...value.lastDeathPenalty.resourcesLost } }
+      : undefined,
     aiItems: value.aiItems.map((item) => ({ ...item })),
     equippedItemIds: { ...value.equippedItemIds },
     aiItemListings: value.aiItemListings.map((listing) => ({ ...listing, item: { ...listing.item } })),
@@ -1066,6 +1142,112 @@ export function setEcosystemState(ecosystem: EcosystemState | undefined) {
 
 export function addResource(type: ResourceType, amount: number) {
   return commit({ ...state, inventory: { ...state.inventory, [type]: Math.max(0, state.inventory[type] + amount) } });
+}
+
+export function playerHpWithEquipment(value: WorldState = state): { hp: number; maxHp: number } {
+  const maxHp = Math.max(1, value.playerMaxHp + statModifierFor('maxHp', value));
+  return { hp: Math.max(0, Math.min(maxHp, value.playerHp)), maxHp };
+}
+
+function spendCoin(cost: number, value: WorldState = state): { ok: boolean; reason?: string; next?: WorldState } {
+  const price = Math.max(0, Math.round(cost));
+  if (value.inventory.coin < price) return { ok: false, reason: `Need ${price} coin.` };
+  return { ok: true, next: { ...value, inventory: { ...value.inventory, coin: value.inventory.coin - price } } };
+}
+
+function deathPenaltyFor(value: WorldState): DeathPenaltyState {
+  const resourcesLost: Partial<Record<ResourceType, number>> = {};
+  const coinLost = Math.floor(value.inventory.coin * PLAYER_DEATH_COIN_LOSS_FRACTION);
+  if (coinLost > 0) resourcesLost.coin = coinLost;
+  for (const resource of ['wood', 'stone', 'silver', 'gold'] as const) {
+    const lost = Math.floor(value.inventory[resource] * PLAYER_DEATH_RESOURCE_LOSS_FRACTION);
+    if (lost > 0) resourcesLost[resource] = lost;
+  }
+  return { at: Date.now(), coinLost, resourcesLost, reason: 'death' };
+}
+
+function applyDeathPenalty(value: WorldState, penalty: DeathPenaltyState): WorldState {
+  const nextInventory = { ...value.inventory };
+  for (const [resource, lost] of Object.entries(penalty.resourcesLost) as Array<[ResourceType, number]>) {
+    nextInventory[resource] = Math.max(0, nextInventory[resource] - lost);
+  }
+  return {
+    ...value,
+    inventory: nextInventory,
+    playerHp: Math.max(1, Math.round(value.playerMaxHp * PLAYER_DEATH_REVIVE_HP_FRACTION)),
+    deathCount: value.deathCount + 1,
+    lastDeathPenalty: penalty,
+  };
+}
+
+export function applyPlayerDamage(amount: number, reason: 'damage' | 'death' = 'death'): { ok: boolean; died: boolean; hp: number; maxHp: number; penalty?: DeathPenaltyState; reason?: string } {
+  const damage = Math.max(0, Math.round(Number(amount)));
+  if (damage <= 0) {
+    const hp = playerHpWithEquipment(state);
+    return { ok: false, died: false, ...hp, reason: 'No damage applied.' };
+  }
+  const { maxHp } = playerHpWithEquipment(state);
+  const nextHp = Math.max(0, Math.min(maxHp, state.playerHp) - damage);
+  if (nextHp > 0) {
+    commit({ ...state, playerHp: nextHp });
+    return { ok: true, died: false, hp: nextHp, maxHp };
+  }
+  const penalty = deathPenaltyFor(state);
+  const next = applyDeathPenalty({ ...state, playerHp: 0 }, { ...penalty, reason });
+  commit(next);
+  return { ok: true, died: true, hp: next.playerHp, maxHp: next.playerMaxHp, penalty };
+}
+
+export function healPlayer(amount: number): { ok: boolean; healed: number; hp: number; maxHp: number; reason?: string } {
+  const heal = Math.max(0, Math.round(Number(amount)));
+  const { hp, maxHp } = playerHpWithEquipment(state);
+  const healed = Math.max(0, Math.min(heal, maxHp - hp));
+  if (healed <= 0) return { ok: false, healed: 0, hp, maxHp, reason: 'Already at full HP.' };
+  commit({ ...state, playerHp: hp + healed });
+  return { ok: true, healed, hp: hp + healed, maxHp };
+}
+
+export function aldricMarketCatalog(playerListings: AiItemListing[] = []): {
+  standard: AldricStandardMarketItem[];
+  playerListings: AiItemListing[];
+} {
+  const buyer = wallet?.toLowerCase();
+  return {
+    standard: Object.values(ALDRIC_STANDARD_CATALOG),
+    playerListings: playerListings
+      .map((listing) => normalizeAiItemListings([listing], listing.seller)[0])
+      .filter((listing): listing is AiItemListing => !!listing && listing.status === 'listed' && listing.seller !== buyer),
+  };
+}
+
+export function buyAldricMarketItem(itemId: AldricStandardItemId): { ok: boolean; reason?: string; healed?: number } {
+  const item = ALDRIC_STANDARD_CATALOG[itemId];
+  if (!item) return { ok: false, reason: 'Unknown market item.' };
+  if (itemId === 'sharper_axe' && state.axeLevel >= 1) return { ok: false, reason: 'Sharper axe already owned.' };
+  const payment = spendCoin(item.priceCoin);
+  if (!payment.ok || !payment.next) return { ok: false, reason: payment.reason };
+  if (itemId === 'medicinal_herbs') {
+    const { hp, maxHp } = playerHpWithEquipment(payment.next);
+    const healed = Math.max(0, Math.min(MEDICINAL_HERB_HEAL, maxHp - hp));
+    if (healed <= 0) return { ok: false, reason: 'Already at full HP.' };
+    commit({ ...payment.next, playerHp: hp + healed });
+    return { ok: true, healed };
+  }
+  if (itemId === 'repair_kit') {
+    commit({ ...payment.next, repairKits: payment.next.repairKits + 1 });
+    return { ok: true };
+  }
+  if (itemId === 'sapling') {
+    if (payment.next.choppedTrees.length === 0) return { ok: false, reason: 'No felled trees need saplings.' };
+    const index = payment.next.choppedTrees[payment.next.choppedTrees.length - 1];
+    commit(startTreeRegrowth(index, payment.next));
+    return { ok: true };
+  }
+  if (itemId === 'sharper_axe') {
+    commit({ ...payment.next, axeLevel: 1 });
+    return { ok: true };
+  }
+  return { ok: false, reason: 'Unsupported market item.' };
 }
 
 export function equippedAiItems(value: WorldState = state): Partial<Record<AiItemType, AiItem>> {

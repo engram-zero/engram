@@ -1363,6 +1363,12 @@ El pasto hoy mezcla variantes de textura por tile de forma cuasi-aleatoria → s
 
 **Para:** Codex (economía/world.ts) + Claude (UI del mercado). Ver `docs/DESIGN_PILLARS.md` (1 y 2).
 
+> **🟢 BACKEND CORE DONE — 30 jun 2026.** `WorldState` persiste `playerHp`,
+> `playerMaxHp`, `deathCount` y `lastDeathPenalty`; `applyPlayerDamage` revive al
+> morir y descuenta 20% coin + 10% recursos de bolsillo. Demon siege damage = 1.
+> `ALDRIC_STANDARD_CATALOG`, `aldricMarketCatalog`, `buyAldricMarketItem` y
+> `healPlayer` dejan el mercado/curación listo para que Claude conecte la GUI.
+
 ### Por qué
 El kit de hierbas medicinales **no tiene razón de ser** mientras perder vida no cueste nada. Damos
 peso a la vida → curarse importa → defenderse importa.

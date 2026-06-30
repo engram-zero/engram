@@ -52,6 +52,11 @@ export function setWorldPersistence(p: WorldPersistence): void; // register your
   `meadow|sand|snow|dry` to texture slots. Parcels persist `ParcelClaim.biome`; old
   claims derive it from their centre via `biomeAt(...)`. Do not create a second
   biome map inside `Scene3D.tsx`.
+- **Prompt 30 seam:** player vitality/economy consequences live in `WorldState.playerHp`,
+  `playerMaxHp`, `deathCount` and `lastDeathPenalty`. Gameplay should call
+  `applyPlayerDamage(amount)` and `healPlayer(amount)`; Aldric UI should read
+  `ALDRIC_STANDARD_CATALOG` / `aldricMarketCatalog(publicListings)` and buy via
+  `buyAldricMarketItem(id)` or `buyAiItemListing(listing)`.
 - **martelaxe owns:** the 0G/contract persistence adapter. Current MVP:
   `createBundleWorldPersistence(networkType)` in `src/lib/world-0g.ts`, registered from
   `src/app/client-page.tsx`. **You do not need to touch Scene3D or gameplay code** for

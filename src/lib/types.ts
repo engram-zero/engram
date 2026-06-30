@@ -137,6 +137,28 @@ export interface AiItemListing {
   buyer?: string;
 }
 
+export interface DeathPenaltyState {
+  at: number;
+  coinLost: number;
+  resourcesLost: Partial<Record<ResourceType, number>>;
+  reason: 'death' | 'damage';
+}
+
+export type AldricStandardItemId =
+  | 'medicinal_herbs'
+  | 'repair_kit'
+  | 'sapling'
+  | 'sharper_axe';
+
+export interface AldricStandardMarketItem {
+  id: AldricStandardItemId;
+  name: string;
+  description: string;
+  priceCoin: number;
+  category: 'healing' | 'repair' | 'upgrade' | 'utility';
+  stock: number | 'unlimited';
+}
+
 export type BuildingType = 'wall' | 'house' | 'block';
 /** A structure the player has placed in the world. `block` is a small coloured
  * voxel the AI stacks/colours to sculpt arbitrary shapes (trees, statues…);
@@ -298,6 +320,11 @@ export interface WorldState {
   enemiesKilled: number;
   /** Tool tier bought from Aldric. 0 = base axe, 1 = sharper axe (2× wood/chop). */
   axeLevel: number;
+  /** Persistent player HP used by death/economy consequences. */
+  playerHp: number;
+  playerMaxHp: number;
+  deathCount: number;
+  lastDeathPenalty?: DeathPenaltyState;
   /** Prompt-forged tools/weapons/trinkets owned by this wallet, persisted in 0G. */
   aiItems: AiItem[];
   /** Equipped item IDs by slot; Scene3D can consume stat modifiers via world.ts helpers. */

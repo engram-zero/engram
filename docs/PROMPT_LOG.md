@@ -1623,6 +1623,20 @@ claims nuevos, bundles dedicados y eventos on-chain sin metadata. Seam documenta
 `COORDINATION.md`; estado de Prompt 29 actualizado. Sin cambios en `Scene3D.tsx` ni `textures.ts`.
 **Commit:** _(este commit)_
 
+### 2026-06-30 · Prompt 30 backend — muerte cuesta recursos + mercado de Aldric
+**Pedido (humano):** implementar backend de consecuencias de daño/muerte y mercado de Aldric:
+morir debe restar recursos/coin persistidos, demonios deben pegar ~1, y el mercado debe exponer
+hierbas, kits, mejoras e ítems de jugadores para que Claude cablee la GUI.
+**Prompt sintetizado:** En `world.ts` añadir vida persistida del jugador, regla de muerte con
+penalización económica, catálogo estándar de Aldric y acciones de compra/curación. Integrar el
+catálogo con listings de ítems del Prompt 25 sin tocar `Scene3D.tsx` ni `client-page.tsx`.
+**Qué se hizo:** `WorldState.playerHp/playerMaxHp/deathCount/lastDeathPenalty`; `applyPlayerDamage`
+revive a 60% HP y descuenta 20% de coin + 10% de recursos de bolsillo; `healPlayer`;
+`DEMON_SIEGE_DAMAGE=1`; `ALDRIC_STANDARD_CATALOG` con hierbas medicinales, repair kit, sapling y
+sharper axe; `aldricMarketCatalog` combina estándar + listings de jugadores y `buyAldricMarketItem`
+aplica compras/curación. Seam documentado en `COORDINATION.md`; sin tocar escena ni client-page.
+**Commit:** _(este commit)_
+
 ### 2026-06-29 · Lote de pulido aéreo/combate (deselección, muros, sombras, casas, cono de ataque)
 **Pedido (humano):** del playtest — #9 click izq. no deselecciona en aérea; #10 no se pueden rotar
 muros a 45° y a veces no se puede colocar otro muro; #2 árboles sin sombra; #8 casas muy chicas;
