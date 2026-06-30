@@ -281,15 +281,15 @@ const AUDIO_EMITTERS: AudioEmitter[] = [
   ...makeCricketEmitters(),
 ];
 const SPATIAL_AUDIO_CUES = Array.from(new Set(AUDIO_EMITTERS.map((e) => e.cue)));
-const HOUSE_WIDTH = 2.4;
-const HOUSE_DEPTH = 2.0;
+const HOUSE_WIDTH = 3.0;
+const HOUSE_DEPTH = 2.6;
 const HOUSE_WALL_HEIGHT = 1.8;
 const HOUSE_WALL_THICKNESS = 0.16;
-const HOUSE_DOOR_WIDTH = 0.82;
+const HOUSE_DOOR_WIDTH = 1.1; // player diameter is 0.9, so this is a comfortable entry
 const HOUSE_DOOR_OFFSET_Z = HOUSE_DEPTH / 2 - HOUSE_WALL_THICKNESS / 2;
 const HOUSE_PORCH_DEPTH = 0.42;
 const HOUSE_ROOF_Y = 1.94;
-const HOUSE_RIDGE_Y = 2.38;
+const HOUSE_RIDGE_Y = 2.5;
 const HOUSE_GABLE_HEIGHT = HOUSE_RIDGE_Y - HOUSE_WALL_HEIGHT;
 const HOUSE_CEILING_Y = HOUSE_WALL_HEIGHT - 0.04;
 const HOUSE_GABLE_X = HOUSE_WIDTH / 2 - HOUSE_WALL_THICKNESS * 0.18;
@@ -942,10 +942,15 @@ function Player({
       marenMem.trust_level < 40 ||
       ['furious', 'angry', 'hostile', 'upset', 'cold'].includes(marenMem.emotional_state?.toLowerCase())
     );
+    // Like harvesting, you must be FACING a foe (within the ~60° front cone) for it
+    // to become your attack target — so the attack panel/strike lands on the enemy
+    // you're looking at, not on whatever happens to be nearest behind you.
+    const facingEnemy = (ex: number, ez: number, dd: number) =>
+      dd > 1e-3 && (forward.x * (ex - px) + forward.z * (ez - pz)) / dd >= FACING_MIN;
     if (isMarenUpset && !dynamicNpcState['maren']?.knockedOut) {
       const maren = dynamicNpcState['maren'];
       const dd = Math.hypot(camera.position.x - maren.x, camera.position.z - maren.z);
-      if (dd < 4.0 && dd < bestEd) {
+      if (dd < 4.0 && dd < bestEd && facingEnemy(maren.x, maren.z, dd)) {
         bestEd = dd;
         bestEnemy = 'maren';
       }
@@ -954,7 +959,7 @@ function Player({
     for (const [id, enemy] of Object.entries(dynamicEnemyState)) {
       if (enemy.dead) continue;
       const dd = Math.hypot(camera.position.x - enemy.x, camera.position.z - enemy.z);
-      if (dd < 4.0 && dd < bestEd) {
+      if (dd < 4.0 && dd < bestEd && facingEnemy(enemy.x, enemy.z, dd)) {
         bestEd = dd;
         bestEnemy = id;
       }
@@ -3302,7 +3307,11 @@ function canPlaceBuilding(type: BuildingType, x: number, z: number, candidate?: 
     }
     return true;
   }
-  const r = BUILD_RADIUS[type];
+  // Walls are thin fences: use a tighter placement clearance than their physics
+  // radius so you can actually run a fence right up against a house or another
+  // wall (the old 0.9 radius blocked walls ~2.7 away from a house). Houses/tools
+  // keep their full footprint.
+  const r = type === 'wall' ? 0.55 : BUILD_RADIUS[type];
   const obstacles = [
     ...COTTAGES.map((c) => ({ x: c.x, z: c.z, r: c.scale * 1.5 })),
     { x: CAMPFIRE.x, z: CAMPFIRE.z, r: 1.0 },
@@ -3405,14 +3414,15 @@ function BuildController({
   void world;
   const valid = isBuild && !!ghost && canPlaceBuilding(mode, ghost[0], ghost[1]);
 
-  // Walls (1.8 wide) snap to a 1.8 grid + 90° rotation so they tile edge-to-edge
-  // into continuous fences instead of leaving gaps; houses/tools stay on the 1-grid.
+  // Walls (1.8 wide) snap to a 1.8 grid so they tile edge-to-edge into continuous
+  // fences instead of leaving gaps; houses/tools stay on the 1-grid. Wall rotation
+  // snaps to 45° steps so you can run fences straight AND on diagonals (R rotates).
   const WALL_GRID = 1.8;
   const snapXZ = (px: number, pz: number): [number, number] =>
     mode === 'wall'
       ? [Math.round(px / WALL_GRID) * WALL_GRID, Math.round(pz / WALL_GRID) * WALL_GRID]
       : [Math.round(px), Math.round(pz)];
-  const placeRot = mode === 'wall' ? Math.round(rot / (Math.PI / 2)) * (Math.PI / 2) : rot;
+  const placeRot = mode === 'wall' ? Math.round(rot / (Math.PI / 4)) * (Math.PI / 4) : rot;
 
   const place = (px: number, pz: number) => {
     const [x, z] = snapXZ(px, pz);
@@ -3487,7 +3497,7 @@ function BuildController({
           position={[ghost[0], getHeightAt(ghost[0], ghost[1]) + (mode === 'house' ? HOUSE_WALL_HEIGHT / 2 : 0.75), ghost[1]]}
           rotation={[0, placeRot, 0]}
         >
-          {mode === 'house' ? <boxGeometry args={[2.4, 1.8, 2.0]} /> : <boxGeometry args={[1.8, 1.5, 0.3]} />}
+          {mode === 'house' ? <boxGeometry args={[HOUSE_WIDTH, 1.8, HOUSE_DEPTH]} /> : <boxGeometry args={[1.8, 1.5, 0.3]} />}
           <meshStandardMaterial color={valid ? '#5fd06a' : '#d05a4a'} transparent opacity={0.4} depthWrite={false} />
         </mesh>
       )}
@@ -3516,7 +3526,7 @@ function MobileBuildGhost({ mode, posRef, rot }: { mode: BuildingType; posRef: P
   return (
     <group ref={ref}>
       <mesh>
-        {mode === 'house' ? <boxGeometry args={[2.4, 1.8, 2.0]} /> : <boxGeometry args={[1.8, 1.5, 0.3]} />}
+        {mode === 'house' ? <boxGeometry args={[HOUSE_WIDTH, 1.8, HOUSE_DEPTH]} /> : <boxGeometry args={[1.8, 1.5, 0.3]} />}
         <meshStandardMaterial ref={matRef} color="#5fd06a" transparent opacity={0.45} depthWrite={false} />
       </mesh>
     </group>
@@ -3570,7 +3580,7 @@ function AIPreviewGhosts({ pieces, origin }: { pieces: AIPiece[]; origin: { x: n
         }
         return (
           <mesh key={i} position={[x, gy + (b.type === 'house' ? HOUSE_WALL_HEIGHT / 2 : 0.75), z]} rotation={[0, b.rot, 0]}>
-            {b.type === 'house' ? <boxGeometry args={[2.4, 1.8, 2.0]} /> : <boxGeometry args={[1.8, 1.5, 0.3]} />}
+            {b.type === 'house' ? <boxGeometry args={[HOUSE_WIDTH, 1.8, HOUSE_DEPTH]} /> : <boxGeometry args={[1.8, 1.5, 0.3]} />}
             <meshStandardMaterial color={ok ? '#7a6ad6' : '#d05a4a'} transparent opacity={0.45} depthWrite={false} />
           </mesh>
         );
@@ -5427,13 +5437,13 @@ export default function Scene3D({ memories = null, active = null, talking = fals
             intensity={forceBrightTestLighting ? 2.6 : dn.dirIntensity}
             color={forceBrightTestLighting ? '#fff4dd' : dn.dirColor}
             castShadow={!forceBrightTestLighting}
-            shadow-mapSize={[2048, 2048]}
+            shadow-mapSize={[3072, 3072]}
             shadow-camera-near={1}
-            shadow-camera-far={80}
-            shadow-camera-left={-26}
-            shadow-camera-right={26}
-            shadow-camera-top={26}
-            shadow-camera-bottom={-26}
+            shadow-camera-far={140}
+            shadow-camera-left={-52}
+            shadow-camera-right={52}
+            shadow-camera-top={52}
+            shadow-camera-bottom={-52}
           />
           <NightFillLight active={!forceBrightTestLighting && dn.torchesLit} />
 
@@ -5497,6 +5507,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
                   onClick={(e) => {
                     e.stopPropagation();
                     setAvatarSelected(false);
+                    setSelectedBuilding(null); // left-click empty ground clears the building selection
                   }}
                 >
                   <planeGeometry args={[PARCEL_HARD_WORLD_RADIUS * 2, PARCEL_HARD_WORLD_RADIUS * 2]} />

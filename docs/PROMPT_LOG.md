@@ -1580,3 +1580,17 @@ subir el clamp mínimo de `spawnIntervalMs` para que fauna/demonios no aparezcan
 de 10min y piso seguro `max(24 HP, 35% maxHp)` para que el asedio no pueda borrar estructuras por
 sí solo. `nature-agents.ts` ahora clampa spawns a 2-6min y el normalizador de mundo eleva bundles
 viejos a mínimo 2min. Sin cambios en `Scene3D.tsx`. **Commit:** _(este commit)_
+
+### 2026-06-29 · Lote de pulido aéreo/combate (deselección, muros, sombras, casas, cono de ataque)
+**Pedido (humano):** del playtest — #9 click izq. no deselecciona en aérea; #10 no se pueden rotar
+muros a 45° y a veces no se puede colocar otro muro; #2 árboles sin sombra; #8 casas muy chicas;
+#6 que atacar use un cono de 60° hacia el enemigo (como recolección).
+**Prompt sintetizado:** Solo en `src/components/engram/Scene3D.tsx` (Codex trabaja en world.ts en
+paralelo, no tocar): (#9) el "ground catcher" aéreo onClick debe `setSelectedBuilding(null)`.
+(#10a) `placeRot` de muros snap a 45° (`Math.PI/4`) en vez de 90°. (#10b) en `canPlaceBuilding`
+los muros usan un clearance menor (0.55) para poder pegarse a casas/otros muros. (#2) ampliar el
+frustum del shadow-map de la luz direccional (±26→±52, far 80→140, mapSize 2048→3072) para que
+todos los árboles proyecten sombra. (#8) subir HOUSE_WIDTH 2.4→3.0, HOUSE_DEPTH 2.0→2.6, puerta
+0.82→1.1 (colisión y modelo derivan de estas constantes; actualizar los ghosts). (#6) en el scan
+de enemigos (Maren + demonios) exigir el cono frontal `FACING_MIN` antes de fijar objetivo.
+**Qué se hizo:** lo anterior; `tsc` limpio; sin tocar archivos de Codex. **Commit:** _(este commit)_
