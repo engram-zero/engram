@@ -1637,6 +1637,21 @@ sharper axe; `aldricMarketCatalog` combina estándar + listings de jugadores y `
 aplica compras/curación. Seam documentado en `COORDINATION.md`; sin tocar escena ni client-page.
 **Commit:** _(este commit)_
 
+### 2026-06-30 · Prompt 31 backend — actividad comunitaria alimenta a Tierra
+**Pedido (humano):** definir una métrica agregada de actividad/juego conectado, persistirla en 0G
+y hacer que acelere la regeneración de recursos sin romper la escasez del Prompt 23. No tocar
+`Scene3D.tsx` ni `client-page.tsx`.
+**Prompt sintetizado:** Guardar playtime agregado en `WorldState.ecosystem.communityActivity`;
+derivar `communitySignal` desde tiempo total + tiempo reciente con decaimiento; aplicar un factor
+acotado a cadencias de árboles/rocas y al Agente Tierra. Exponer helper para que la UI registre
+sesiones luego.
+**Qué se hizo:** `CommunityActivityState`; `computeCommunityActivity` con fórmula
+`0.55*totalPlay/4h + 0.45*recentPlay/45m`; `recordCommunityPlaytime(sessionMs)` persiste la métrica
+en el bundle del mundo; `computeEcosystemActivity` aplica `regenCadenceMultiplier` clampado
+`0.75..1` a `treeCadenceMs`/`rockCadenceMs`; `nature-agents` también aplica el multiplicador a
+`cadenceMs` del Agente Tierra y lo incluye en su prompt. Seam documentado en `COORDINATION.md`.
+**Commit:** _(este commit)_
+
 ### 2026-06-29 · Lote de pulido aéreo/combate (deselección, muros, sombras, casas, cono de ataque)
 **Pedido (humano):** del playtest — #9 click izq. no deselecciona en aérea; #10 no se pueden rotar
 muros a 45° y a veces no se puede colocar otro muro; #2 árboles sin sombra; #8 casas muy chicas;

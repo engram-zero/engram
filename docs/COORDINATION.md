@@ -57,6 +57,11 @@ export function setWorldPersistence(p: WorldPersistence): void; // register your
   `applyPlayerDamage(amount)` and `healPlayer(amount)`; Aldric UI should read
   `ALDRIC_STANDARD_CATALOG` / `aldricMarketCatalog(publicListings)` and buy via
   `buyAldricMarketItem(id)` or `buyAiItemListing(listing)`.
+- **Prompt 31 seam:** community playtime lives in `WorldState.ecosystem.communityActivity`
+  and is updated through `recordCommunityPlaytime(sessionMs)`. Nature regen reads
+  `communitySignal`/`regenCadenceMultiplier`; the multiplier is clamped to `0.75..1`
+  so community activity can make trees/rocks at most 25% faster without breaking
+  scarcity pricing.
 - **martelaxe owns:** the 0G/contract persistence adapter. Current MVP:
   `createBundleWorldPersistence(networkType)` in `src/lib/world-0g.ts`, registered from
   `src/app/client-page.tsx`. **You do not need to touch Scene3D or gameplay code** for

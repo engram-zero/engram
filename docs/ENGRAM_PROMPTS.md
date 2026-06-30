@@ -1397,6 +1397,12 @@ peso a la vida → curarse importa → defenderse importa.
 
 **Para:** Codex (nature-AI) — futuro. Ver pilar 5.
 
+> **🟢 BACKEND CORE DONE — 30 jun 2026.** `CommunityActivityState` vive en
+> `WorldState.ecosystem.communityActivity`; `recordCommunityPlaytime(sessionMs)` acumula
+> `totalPlayMs`, `recentPlayMs`, `sessionCount` y deriva `communitySignal`. La regen usa
+> `regenCadenceMultiplier = 1 - 0.25*communitySignal` clampado a `0.75..1`, aplicado a
+> `treeCadenceMs`/`rockCadenceMs` y a la cadencia del Agente Tierra.
+
 Que un **factor de regeneración** de recursos (árboles/rocas) dependa del **tiempo jugado/conectado**
 por la comunidad: entre más se juega, más vivo y abundante el mundo. Atarlo a 0G (registrar
 actividad agregada como estado on-chain/0G y derivar de ahí la cadencia de la nature-AI). Cuidar

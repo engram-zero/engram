@@ -27,6 +27,11 @@ const FAUNA_SPAWN_INTERVAL_MAX_MS = 1000 * 60 * 6;
 const anthropic = anthropicKey ? new Anthropic({ apiKey: anthropicKey }) : null;
 const genAI = googleKey ? new GoogleGenerativeAI(googleKey) : null;
 
+function communityCadenceMultiplier(input: EarthAgentRequest | { world: EarthAgentRequest['world'] }): number {
+  const multiplier = input.world.ecosystem?.communityActivity?.regenCadenceMultiplier;
+  return clampFloat(typeof multiplier === 'number' ? multiplier : 1, 0.75, 1);
+}
+
 function zoneDigest(snapshot: NatureZoneSnapshot[]): string {
   return snapshot
     .map(
@@ -95,7 +100,7 @@ function fallbackEarth(input: EarthAgentRequest): EarthAgentResponse {
     };
   });
   const dominantZone = dominantZoneBy(zones, (zone) => zone.fertility);
-  const cadenceMs = clampInt(1000 * 60 * (6 - Math.min(3.2, pressure / 35)), 1000 * 60 * 2, 1000 * 60 * 8);
+  const cadenceMs = clampInt(1000 * 60 * (6 - Math.min(3.2, pressure / 35)) * communityCadenceMultiplier(input), 1000 * 60 * 2, 1000 * 60 * 8);
   return {
     earth: {
       updatedAt: Date.now(),
@@ -147,7 +152,7 @@ function fallbackFauna(input: FaunaAgentRequest): FaunaAgentResponse {
   };
 }
 
-function normalizeEarth(raw: any, fallback: EarthAgentResponse): EarthAgentResponse {
+function normalizeEarth(raw: any, fallback: EarthAgentResponse, cadenceMultiplier = 1): EarthAgentResponse {
   const zones = Array.isArray(raw?.zones) ? raw.zones : fallback.earth.zones;
   const normalizedZones: EarthZoneDirective[] = zones
     .map((zone: any, index: number) => ({
@@ -158,7 +163,7 @@ function normalizeEarth(raw: any, fallback: EarthAgentResponse): EarthAgentRespo
     }))
     .slice(0, NATURE_ZONES.length);
   const dominantZone = fallback.earth.zones.find((zone) => zone.id === raw?.dominantZone)?.id ?? dominantZoneBy(normalizedZones, (zone) => zone.fertility);
-  const cadenceMs = clampInt(raw?.cadenceMs ?? fallback.earth.cadenceMs, 1000 * 60 * 2, 1000 * 60 * 8);
+  const cadenceMs = clampInt(raw?.cadenceMs !== undefined ? raw.cadenceMs * cadenceMultiplier : fallback.earth.cadenceMs, 1000 * 60 * 2, 1000 * 60 * 8);
   return {
     earth: {
       updatedAt: Date.now(),
@@ -211,13 +216,13 @@ You are not writing lore for its own sake. You are tuning live simulation parame
 Higher fertility = faster tree recovery. RegrowthShare should be higher where the soil should heal next.
 Stay grounded in the snapshot and keep the world feeling alive, not RTS-generic.`;
   const userContent = `Wallet: ${input.walletAddress}
-World: choppedTrees=${input.world.choppedTrees.length}, minedRocks=${input.world.minedRocks.length}, playerBuilds=${input.world.buildings.length}, parcelClaims=${input.world.parcelClaims.length}, coin=${input.world.inventory.coin}
+World: choppedTrees=${input.world.choppedTrees.length}, minedRocks=${input.world.minedRocks.length}, playerBuilds=${input.world.buildings.length}, parcelClaims=${input.world.parcelClaims.length}, coin=${input.world.inventory.coin}, communitySignal=${input.world.ecosystem?.communityActivity?.communitySignal ?? 0}, regenCadenceMultiplier=${input.world.ecosystem?.communityActivity?.regenCadenceMultiplier ?? 1}
 Zone snapshot:
 ${zoneDigest(input.snapshot)}`;
 
   try {
     const raw = await runAI(system, userContent);
-    return raw ? normalizeEarth(raw, fallback) : fallback;
+    return raw ? normalizeEarth(raw, fallback, communityCadenceMultiplier(input)) : fallback;
   } catch {
     return fallback;
   }

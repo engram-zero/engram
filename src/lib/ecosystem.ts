@@ -1,5 +1,6 @@
 import { TREES, ROCKS, riverCenterZ } from '@/components/engram/map';
 import type {
+  CommunityActivityState,
   EarthAgentState,
   EcosystemActivityState,
   FaunaAgentState,
@@ -118,8 +119,14 @@ const ACTIVITY_COIN_REF = 200;
 const RECENT_EXTRACTION_REF = 6;
 const MIN_RESTOCK_CADENCE_MS = 1000 * 45;
 const MAX_RESTOCK_CADENCE_MS = 1000 * 60 * 12;
+const COMMUNITY_TOTAL_PLAY_REF_MS = 1000 * 60 * 60 * 4;
+const COMMUNITY_RECENT_PLAY_REF_MS = 1000 * 60 * 45;
+const COMMUNITY_RECENT_DECAY_MS = 1000 * 60 * 60 * 6;
+const COMMUNITY_MAX_REGEN_BOOST = 0.25;
 export const ECOSYSTEM_ACTIVITY_FORMULA =
-  'activityScore = clamp01(0.45*(playerCoin+treasuryCoin)/200 + 0.35*recentExtraction/6 + 0.20*depletedStock); cadence = base*(1.25 - 0.45*depletedStock)*(1 - 0.45*activityScore)';
+  'activityScore = clamp01(0.45*(playerCoin+treasuryCoin)/200 + 0.35*recentExtraction/6 + 0.20*depletedStock); communitySignal = clamp01(0.55*totalPlay/4h + 0.45*recentPlay/45m); cadence = base*(1.25 - 0.45*depletedStock)*(1 - 0.45*activityScore)*(1 - 0.25*communitySignal)';
+export const COMMUNITY_ACTIVITY_FORMULA =
+  'communitySignal = clamp01(0.55*totalPlayMs/4h + 0.45*recentPlayMs/45m); regenCadenceMultiplier = 1 - 0.25*communitySignal';
 
 function clamp01(value: number): number {
   return clampFloat(value, 0, 1);
@@ -129,11 +136,41 @@ function validIndexCount(indexes: number[], total: number): number {
   return new Set(indexes.filter((index) => Number.isInteger(index) && index >= 0 && index < total)).size;
 }
 
-function restockCadenceMs(baseCadenceMs: number, stockPressure: number, activityScore: number, multiplier = 1): number {
+function restockCadenceMs(baseCadenceMs: number, stockPressure: number, activityScore: number, multiplier = 1, communityMultiplier = 1): number {
   const safeBase = Number.isFinite(baseCadenceMs) && baseCadenceMs > 0 ? baseCadenceMs : 1000 * 60 * 4;
   const stockBrake = 1.25 - 0.45 * stockPressure;
   const activityBoost = 1 - 0.45 * activityScore;
-  return clampInt(safeBase * stockBrake * activityBoost * multiplier, MIN_RESTOCK_CADENCE_MS, MAX_RESTOCK_CADENCE_MS);
+  return clampInt(safeBase * stockBrake * activityBoost * communityMultiplier * multiplier, MIN_RESTOCK_CADENCE_MS, MAX_RESTOCK_CADENCE_MS);
+}
+
+function decayedRecentPlayMs(previous: CommunityActivityState | null | undefined, now: number): number {
+  if (!previous) return 0;
+  const elapsed = Math.max(0, now - previous.updatedAt);
+  const decay = Math.exp(-elapsed / COMMUNITY_RECENT_DECAY_MS);
+  return Math.max(0, previous.recentPlayMs * decay);
+}
+
+export function computeCommunityActivity(
+  previous: CommunityActivityState | null | undefined,
+  sessionMs: number,
+  now = Date.now()
+): CommunityActivityState {
+  const safeSession = Math.max(0, Math.min(1000 * 60 * 60 * 2, Math.round(Number(sessionMs) || 0)));
+  const totalPlayMs = Math.max(0, (previous?.totalPlayMs ?? 0) + safeSession);
+  const recentPlayMs = Math.max(0, Math.min(COMMUNITY_RECENT_PLAY_REF_MS * 3, decayedRecentPlayMs(previous, now) + safeSession));
+  const totalSignal = clamp01(totalPlayMs / COMMUNITY_TOTAL_PLAY_REF_MS);
+  const recentSignal = clamp01(recentPlayMs / COMMUNITY_RECENT_PLAY_REF_MS);
+  const communitySignal = clamp01(totalSignal * 0.55 + recentSignal * 0.45);
+  return {
+    updatedAt: now,
+    formulaVersion: 'prompt31-community-v1',
+    totalPlayMs,
+    recentPlayMs,
+    sessionCount: (previous?.sessionCount ?? 0) + (safeSession > 0 ? 1 : 0),
+    lastSessionAt: safeSession > 0 ? now : previous?.lastSessionAt ?? 0,
+    communitySignal,
+    regenCadenceMultiplier: Math.max(1 - COMMUNITY_MAX_REGEN_BOOST, 1 - COMMUNITY_MAX_REGEN_BOOST * communitySignal),
+  };
 }
 
 export function computeEcosystemActivity(
@@ -153,19 +190,24 @@ export function computeEcosystemActivity(
   const tokenSignal = clamp01(tokensInCirculation / ACTIVITY_COIN_REF);
   const recentSignal = clamp01(recentExtraction / RECENT_EXTRACTION_REF);
   const activityScore = clamp01(tokenSignal * 0.45 + recentSignal * 0.35 + stockPressure * 0.2);
-  const treeCadenceMs = restockCadenceMs(baseCadenceMs, stockPressure, activityScore);
+  const community = world.ecosystem?.communityActivity;
+  const communitySignal = clamp01(community?.communitySignal ?? 0);
+  const communityRegenMultiplier = Math.max(1 - COMMUNITY_MAX_REGEN_BOOST, Math.min(1, community?.regenCadenceMultiplier ?? 1));
+  const treeCadenceMs = restockCadenceMs(baseCadenceMs, stockPressure, activityScore, 1, communityRegenMultiplier);
 
   return {
     updatedAt: Date.now(),
-    formulaVersion: 'prompt23-f4-v1',
+    formulaVersion: 'prompt31-community-v1',
     tokensInCirculation: Math.max(0, Math.round(tokensInCirculation)),
     depletedTrees,
     depletedRocks,
     recentExtraction,
     stockPressure,
     activityScore,
+    communitySignal,
+    communityRegenMultiplier,
     treeCadenceMs,
-    rockCadenceMs: restockCadenceMs(baseCadenceMs, stockPressure, activityScore, 1.35),
+    rockCadenceMs: restockCadenceMs(baseCadenceMs, stockPressure, activityScore, 1.35, communityRegenMultiplier),
   };
 }
 
@@ -178,6 +220,7 @@ export function fingerprintNature(world: WorldState): string {
     world.parcelClaims.length,
     world.inventory.coin,
     world.enemiesKilled,
+    Math.round((world.ecosystem?.communityActivity?.communitySignal ?? 0) * 100),
   ].join(':');
 }
 

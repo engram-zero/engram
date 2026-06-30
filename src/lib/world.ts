@@ -16,9 +16,10 @@
 
 import { useSyncExternalStore } from 'react';
 import { biomeAt } from '@/lib/biome';
-import { BLOCK_SCALE_MAX, BLOCK_SCALE_MIN, BLOCK_UNIT, type AiItem, type AiItemListing, type AiItemStat, type AiItemType, type AldricStandardItemId, type AldricStandardMarketItem, type BiomeId, type DeathPenaltyState, type DemonSiegeEvent, type EcosystemState, type OreType, type ParcelClaim, type ParcelRentEvent, type RaidEvent, type RepairEvent, type ResourceType, type StoredResourceType, type TreeGrowthStage, type TreeGrowthState, type WalletRelation, type WorldState, type Building, type BuildingType } from '@/lib/types';
+import { computeCommunityActivity } from '@/lib/ecosystem';
+import { BLOCK_SCALE_MAX, BLOCK_SCALE_MIN, BLOCK_UNIT, type AiItem, type AiItemListing, type AiItemStat, type AiItemType, type AldricStandardItemId, type AldricStandardMarketItem, type BiomeId, type CommunityActivityState, type DeathPenaltyState, type DemonSiegeEvent, type EcosystemState, type OreType, type ParcelClaim, type ParcelRentEvent, type RaidEvent, type RepairEvent, type ResourceType, type StoredResourceType, type TreeGrowthStage, type TreeGrowthState, type WalletRelation, type WorldState, type Building, type BuildingType } from '@/lib/types';
 
-export type { AiItem, AiItemListing, AiItemStat, AiItemType, AldricStandardItemId, AldricStandardMarketItem, BiomeId, DeathPenaltyState, DemonSiegeEvent, EcosystemState, OreType, ParcelClaim, ParcelRentEvent, RaidEvent, RepairEvent, ResourceType, StoredResourceType, TreeGrowthStage, TreeGrowthState, WalletRelation, WorldState, Building, BuildingType } from '@/lib/types';
+export type { AiItem, AiItemListing, AiItemStat, AiItemType, AldricStandardItemId, AldricStandardMarketItem, BiomeId, CommunityActivityState, DeathPenaltyState, DemonSiegeEvent, EcosystemState, OreType, ParcelClaim, ParcelRentEvent, RaidEvent, RepairEvent, ResourceType, StoredResourceType, TreeGrowthStage, TreeGrowthState, WalletRelation, WorldState, Building, BuildingType } from '@/lib/types';
 
 /** How much wood the player can carry before they must use/drop some. Raised to
  * support AI-built structures and the pricier builds near the village centre. */
@@ -858,6 +859,24 @@ function normalizeTreasury(raw: unknown, baseUpdatedAt: number): NonNullable<Eco
   };
 }
 
+function normalizeCommunityActivity(raw: unknown, baseUpdatedAt: number): CommunityActivityState | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const p = raw as Record<string, unknown>;
+  const totalPlayMs = Math.max(0, Math.min(1000 * 60 * 60 * 24 * 365, Math.round(Number(p.totalPlayMs ?? 0))));
+  const recentPlayMs = Math.max(0, Math.min(1000 * 60 * 60 * 3, Math.round(Number(p.recentPlayMs ?? 0))));
+  const communitySignal = Math.max(0, Math.min(1, Number(p.communitySignal ?? 0)));
+  return {
+    updatedAt: Math.max(0, Math.round(Number(p.updatedAt ?? baseUpdatedAt))) || baseUpdatedAt,
+    formulaVersion: typeof p.formulaVersion === 'string' ? p.formulaVersion : 'prompt31-community-v1',
+    totalPlayMs,
+    recentPlayMs,
+    sessionCount: Math.max(0, Math.round(Number(p.sessionCount ?? 0))),
+    lastSessionAt: Math.max(0, Math.round(Number(p.lastSessionAt ?? 0))),
+    communitySignal,
+    regenCadenceMultiplier: Math.max(0.75, Math.min(1, Number(p.regenCadenceMultiplier ?? 1 - 0.25 * communitySignal))),
+  };
+}
+
 function normalizeEcosystem(raw: unknown): EcosystemState | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
   const p = raw as Record<string, any>;
@@ -904,15 +923,18 @@ function normalizeEcosystem(raw: unknown): EcosystemState | undefined {
         recentExtraction: Math.max(0, Math.round(Number(activityRaw.recentExtraction ?? 0))),
         stockPressure: Math.max(0, Math.min(1, Number(activityRaw.stockPressure ?? 0))),
         activityScore: Math.max(0, Math.min(1, Number(activityRaw.activityScore ?? 0))),
+        communitySignal: Math.max(0, Math.min(1, Number(activityRaw.communitySignal ?? 0))),
+        communityRegenMultiplier: Math.max(0.75, Math.min(1, Number(activityRaw.communityRegenMultiplier ?? 1))),
         treeCadenceMs: Math.max(1000 * 45, Math.min(1000 * 60 * 12, Math.round(Number(activityRaw.treeCadenceMs ?? 1000 * 60 * 4)))),
         rockCadenceMs: Math.max(1000 * 45, Math.min(1000 * 60 * 12, Math.round(Number(activityRaw.rockCadenceMs ?? 1000 * 60 * 6)))),
       }
     : undefined;
 
   const treasury = normalizeTreasury(p.treasury, baseUpdatedAt);
+  const communityActivity = normalizeCommunityActivity(p.communityActivity, baseUpdatedAt);
 
-  if (!earth && !fauna && !activity && !treasury) return undefined;
-  return { updatedAt: baseUpdatedAt, sourceFingerprint, earth, fauna, activity, treasury };
+  if (!earth && !fauna && !activity && !treasury && !communityActivity) return undefined;
+  return { updatedAt: baseUpdatedAt, sourceFingerprint, earth, fauna, activity, treasury, communityActivity };
 }
 
 function cleanNatureZoneId(raw: unknown): 'north_forest' | 'riverlands' | 'east_hills' | 'south_fields' | 'west_grove' {
@@ -1041,6 +1063,7 @@ export function cloneWorldState(value: WorldState = EMPTY_WORLD): WorldState {
               }
             : undefined,
           activity: value.ecosystem.activity ? { ...value.ecosystem.activity } : undefined,
+          communityActivity: value.ecosystem.communityActivity ? { ...value.ecosystem.communityActivity } : undefined,
           treasury: value.ecosystem.treasury
             ? {
                 ...value.ecosystem.treasury,
@@ -1138,6 +1161,18 @@ export function replaceWorldState(next: WorldState) {
 
 export function setEcosystemState(ecosystem: EcosystemState | undefined) {
   return commit({ ...state, ecosystem });
+}
+
+export function recordCommunityPlaytime(sessionMs: number): CommunityActivityState {
+  const now = Date.now();
+  const communityActivity = computeCommunityActivity(state.ecosystem?.communityActivity, sessionMs, now);
+  const ecosystem: EcosystemState = {
+    ...(state.ecosystem ?? { updatedAt: now }),
+    updatedAt: now,
+    communityActivity,
+  };
+  commit({ ...state, ecosystem });
+  return communityActivity;
 }
 
 export function addResource(type: ResourceType, amount: number) {

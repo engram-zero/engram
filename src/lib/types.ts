@@ -73,7 +73,23 @@ export interface EcosystemState {
   earth?: EarthAgentState;
   fauna?: FaunaAgentState;
   activity?: EcosystemActivityState;
+  communityActivity?: CommunityActivityState;
   treasury?: WorldTreasuryState;
+}
+
+export interface CommunityActivityState {
+  updatedAt: number;
+  formulaVersion: string;
+  /** Aggregate played/connected time observed by this wallet/world bundle. */
+  totalPlayMs: number;
+  /** Decayed recent playtime signal; gives the world a short-term "alive" pulse. */
+  recentPlayMs: number;
+  sessionCount: number;
+  lastSessionAt: number;
+  /** 0..1 normalized playtime signal used by nature-AI cadence. */
+  communitySignal: number;
+  /** Multiplier applied to resource regrowth cadence. 0.75 = 25% faster. */
+  regenCadenceMultiplier: number;
 }
 
 export interface EcosystemActivityState {
@@ -85,6 +101,8 @@ export interface EcosystemActivityState {
   recentExtraction: number;
   stockPressure: number;
   activityScore: number;
+  communitySignal: number;
+  communityRegenMultiplier: number;
   treeCadenceMs: number;
   rockCadenceMs: number;
 }
