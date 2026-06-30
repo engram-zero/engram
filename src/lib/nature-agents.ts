@@ -21,6 +21,8 @@ const GEMINI_MODEL = process.env.ENGRAM_GEMINI_MODEL || 'gemini-1.5-flash';
 
 const anthropicKey = process.env.ANTHROPIC_API_KEY;
 const googleKey = process.env.GOOGLE_API_KEY;
+const FAUNA_SPAWN_INTERVAL_MIN_MS = 1000 * 60 * 2;
+const FAUNA_SPAWN_INTERVAL_MAX_MS = 1000 * 60 * 6;
 
 const anthropic = anthropicKey ? new Anthropic({ apiKey: anthropicKey }) : null;
 const genAI = googleKey ? new GoogleGenerativeAI(googleKey) : null;
@@ -130,7 +132,7 @@ function fallbackFauna(input: FaunaAgentRequest): FaunaAgentResponse {
   return {
     fauna: {
       updatedAt: Date.now(),
-      spawnIntervalMs: clampInt(1000 * 60 * (mood === 'hostile' ? 1.1 : mood === 'wary' ? 1.7 : 2.4), 45000, 1000 * 60 * 4),
+      spawnIntervalMs: clampInt(1000 * 60 * (mood === 'hostile' ? 2.1 : mood === 'wary' ? 2.8 : 3.6), FAUNA_SPAWN_INTERVAL_MIN_MS, FAUNA_SPAWN_INTERVAL_MAX_MS),
       calmDelayMs: mood === 'hostile' ? 12000 : mood === 'wary' ? 18000 : 26000,
       maxEnemies: mood === 'hostile' ? 12 : mood === 'wary' ? 8 : 5,
       speedMultiplier: mood === 'hostile' ? 1.24 : mood === 'wary' ? 1.08 : 0.92,
@@ -182,7 +184,7 @@ function normalizeFauna(raw: any, fallback: FaunaAgentResponse): FaunaAgentRespo
   return {
     fauna: {
       updatedAt: Date.now(),
-      spawnIntervalMs: clampInt(raw?.spawnIntervalMs ?? fallback.fauna.spawnIntervalMs, 45000, 1000 * 60 * 4),
+      spawnIntervalMs: clampInt(raw?.spawnIntervalMs ?? fallback.fauna.spawnIntervalMs, FAUNA_SPAWN_INTERVAL_MIN_MS, FAUNA_SPAWN_INTERVAL_MAX_MS),
       calmDelayMs: clampInt(raw?.calmDelayMs ?? fallback.fauna.calmDelayMs, 10000, 1000 * 60 * 8),
       maxEnemies: clampInt(raw?.maxEnemies ?? fallback.fauna.maxEnemies, 2, 16),
       speedMultiplier: clampFloat(raw?.speedMultiplier ?? fallback.fauna.speedMultiplier, 0.75, 1.6),

@@ -101,11 +101,13 @@ export const REPAIR_KIT_HEAL = 60;
 export const RAID_STONE_COST = 2;
 export const RAID_BASE_DAMAGE = 18;
 export const RAID_COOLDOWN_MS = 1000 * 60 * 10;
-export const DEMON_SIEGE_DAMAGE = 4;
-export const DEMON_SIEGE_COOLDOWN_MS = 1000 * 15;
+export const DEMON_SIEGE_DAMAGE = 2;
+export const DEMON_SIEGE_COOLDOWN_MS = 1000 * 60;
 export const DEMON_SIEGE_WINDOW_MS = 1000 * 60 * 10;
-export const DEMON_SIEGE_WINDOW_DAMAGE_CAP = 24;
+export const DEMON_SIEGE_WINDOW_DAMAGE_CAP = 8;
 export const DEMON_SIEGE_SAFE_PHASE_MS = 1000 * 60 * 2;
+export const DEMON_SIEGE_HP_FLOOR_FRACTION = 0.35;
+export const DEMON_SIEGE_HP_FLOOR_MIN = 24;
 export const PARCEL_SIZE = 18;
 export const PARCEL_MIN_RADIUS = 26;
 export const PARCEL_BUILD_RENT_COIN = 2;
@@ -682,7 +684,7 @@ function normalizeEcosystem(raw: unknown): EcosystemState | undefined {
   const fauna = faunaRaw
     ? {
         updatedAt: Math.max(0, Math.round(Number(faunaRaw.updatedAt ?? baseUpdatedAt))) || baseUpdatedAt,
-        spawnIntervalMs: Math.max(15000, Math.min(1000 * 60 * 8, Math.round(Number(faunaRaw.spawnIntervalMs ?? 1000 * 60 * 2)))),
+        spawnIntervalMs: Math.max(1000 * 60 * 2, Math.min(1000 * 60 * 8, Math.round(Number(faunaRaw.spawnIntervalMs ?? 1000 * 60 * 2)))),
         calmDelayMs: Math.max(0, Math.min(1000 * 60 * 10, Math.round(Number(faunaRaw.calmDelayMs ?? 20000)))),
         maxEnemies: Math.max(1, Math.min(24, Math.round(Number(faunaRaw.maxEnemies ?? 8)))),
         speedMultiplier: Math.max(0.6, Math.min(2.2, Number(faunaRaw.speedMultiplier ?? 1))),
@@ -1361,11 +1363,24 @@ export function latestDemonSiegeAgainst(owner: string, buildingId: string): Demo
     .sort((a, b) => b.at - a.at)[0] ?? null;
 }
 
+export function latestDemonSiegeForOwner(owner: string): DemonSiegeEvent | null {
+  const target = owner.toLowerCase();
+  return state.siegeEvents
+    .filter((event) => event.owner === target)
+    .sort((a, b) => b.at - a.at)[0] ?? null;
+}
+
 export function demonSiegeDamageInWindow(owner: string, windowStartedAt: number): number {
   const target = owner.toLowerCase();
   return state.siegeEvents
     .filter((event) => event.owner === target && event.windowStartedAt === windowStartedAt)
     .reduce((sum, event) => sum + event.damage, 0);
+}
+
+export function demonSiegeHpFloor(maxHp: number): number {
+  const safeMax = Math.max(0, Math.round(maxHp));
+  if (safeMax <= 0) return 0;
+  return Math.min(safeMax, Math.max(DEMON_SIEGE_HP_FLOOR_MIN, Math.ceil(safeMax * DEMON_SIEGE_HP_FLOOR_FRACTION)));
 }
 
 export function recordDemonSiegeHit(
@@ -1384,7 +1399,7 @@ export function recordDemonSiegeHit(
   const status = demonSiegeStatus(now);
   if (!status.open) return { ok: false, reason: 'Village wards are holding for this window.', nextOpenAt: status.nextOpenAt };
 
-  const previous = latestDemonSiegeAgainst(owner, built.id);
+  const previous = latestDemonSiegeForOwner(owner);
   if (previous && now - previous.at < DEMON_SIEGE_COOLDOWN_MS) {
     return { ok: false, reason: 'Demon siege cooldown is still active.' };
   }
@@ -1395,7 +1410,13 @@ export function recordDemonSiegeHit(
     return { ok: false, reason: 'Demon damage cap reached for this window.' };
   }
 
-  const damage = Math.max(1, Math.min(DEMON_SIEGE_DAMAGE, remaining, hp));
+  const hpFloor = demonSiegeHpFloor(maxHp);
+  const damageableHp = Math.max(0, hp - hpFloor);
+  if (damageableHp <= 0) {
+    return { ok: false, reason: 'Demon siege pressure faded before destroying the building.' };
+  }
+
+  const damage = Math.min(DEMON_SIEGE_DAMAGE, remaining, damageableHp);
   const nextBuilding = { ...built, maxHp, hp: Math.max(0, hp - damage) };
   const event: DemonSiegeEvent = {
     id: createId('siege'),

@@ -1568,3 +1568,15 @@ ocultar el HUD, distinto de `?day=1` (debug) y `?shot` (thumbnail). En `client-p
 de recall dice "0G Storage" (el glifo "0G" se leía "oG"). Documenta el guion en `docs/VIDEO_SCRIPT.md`.
 **Qué se hizo:** warehouse gateado por edificio + E + card; modal de storage; `?time=`; banner
 "0G Storage"; `docs/VIDEO_SCRIPT.md` con 3 órdenes + voz en off. `tsc` limpio. **Commit:** _(este commit)_
+
+### 2026-06-30 · Hotfix asedios demoníacos anti-wipe
+**Pedido (humano):** el playtest mostró que dejar la pestaña abierta podía acabar en wipe total:
+los demonios dañaban demasiado rápido, aparecían con mucha frecuencia y una casa perdía HP en
+segundos.
+**Prompt sintetizado:** Ralentizar el daño de asedio sin tocar `Scene3D.tsx`: subir el cooldown,
+bajar el daño/cap por ventana, impedir que demonios destruyan edificios solos con un piso de HP, y
+subir el clamp mínimo de `spawnIntervalMs` para que fauna/demonios no aparezcan cada 45s.
+**Qué se hizo:** `DEMON_SIEGE_DAMAGE=2`, cooldown global por wallet de 60s, cap de 8 HP por ventana
+de 10min y piso seguro `max(24 HP, 35% maxHp)` para que el asedio no pueda borrar estructuras por
+sí solo. `nature-agents.ts` ahora clampa spawns a 2-6min y el normalizador de mundo eleva bundles
+viejos a mínimo 2min. Sin cambios en `Scene3D.tsx`. **Commit:** _(este commit)_
