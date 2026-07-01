@@ -53,6 +53,57 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const unavailableRef = useRef(new Set<string>());
   const mutedRef = useRef(false);
 
+  // Looping ambience plays through the Web Audio API (decoded buffer with loop=true)
+  // instead of <audio loop>, which has an audible gap on each restart. Each loop cue
+  // gets a GainNode we ramp for spatial/mute volume; a shared master gain does mute.
+  const waCtxRef = useRef<AudioContext | null>(null);
+  const masterGainRef = useRef<GainNode | null>(null);
+  const webLoopsRef = useRef(new Map<AudioCueId, { gain: GainNode }>());
+
+  const ensureWaCtx = useCallback((): AudioContext | null => {
+    if (waCtxRef.current) return waCtxRef.current;
+    if (typeof window === 'undefined') return null;
+    const AC = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AC) return null;
+    const ctx = new AC();
+    const master = ctx.createGain();
+    master.gain.value = mutedRef.current ? 0 : 1;
+    master.connect(ctx.destination);
+    waCtxRef.current = ctx;
+    masterGainRef.current = master;
+    return ctx;
+  }, []);
+
+  /** Lazily decode a loop cue into a gapless Web Audio source; returns its GainNode. */
+  const ensureWebLoop = useCallback(async (cueId: AudioCueId): Promise<GainNode | null> => {
+    const existing = webLoopsRef.current.get(cueId);
+    if (existing) return existing.gain;
+    const ctx = ensureWaCtx();
+    if (!ctx || !masterGainRef.current) return null;
+    const cue = AUDIO_CUES[cueId];
+    const src = Array.isArray(cue.src) ? cue.src[0] : cue.src;
+    if (unavailableRef.current.has(src)) return null;
+    const gain = ctx.createGain();
+    gain.gain.value = 0;
+    gain.connect(masterGainRef.current);
+    webLoopsRef.current.set(cueId, { gain }); // reserve so we don't double-create
+    try {
+      const res = await fetch(src);
+      const buf = await res.arrayBuffer();
+      const audioBuffer = await ctx.decodeAudioData(buf);
+      const source = ctx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.loop = true;
+      source.connect(gain);
+      source.start();
+    } catch {
+      unavailableRef.current.add(src);
+      webLoopsRef.current.delete(cueId);
+      return null;
+    }
+    return gain;
+  }, [ensureWaCtx]);
+
   // Always start a fresh page load with sound ON. This is a demo/hackathon build:
   // judges (and us) should hear the world every session and notice the 🔊/🎤 buttons.
   // The mute toggle still works within the session — we just don't carry a previous
@@ -63,14 +114,20 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const unlock = () => setAudioReady(true);
+    // Create + resume the Web Audio context inside the first gesture (some browsers
+    // require it) so gapless loops can start.
+    const unlock = () => {
+      setAudioReady(true);
+      const ctx = ensureWaCtx();
+      if (ctx && ctx.state === 'suspended') void ctx.resume();
+    };
     window.addEventListener('pointerdown', unlock, { once: true });
     window.addEventListener('keydown', unlock, { once: true });
     return () => {
       window.removeEventListener('pointerdown', unlock);
       window.removeEventListener('keydown', unlock);
     };
-  }, []);
+  }, [ensureWaCtx]);
 
   const getCue = useCallback((cueId: AudioCueId): ManagedCue | null => {
     if (typeof window === 'undefined') return null;
@@ -133,57 +190,28 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const setLoopEnabled = useCallback(
     async (cueId: AudioCueId, enabled: boolean, options?: LoopOptions) => {
       const cue = AUDIO_CUES[cueId];
-      if (!cue.loop) return;
-      const managed = getCue(cueId);
-      if (!managed) return;
-
-      for (const element of managed.elements) {
-        if (unavailableRef.current.has(element.currentSrc || element.src)) continue;
-        element.loop = true;
-        element.volume = options?.volume ?? cue.volume;
-        if (!enabled) {
-          element.pause();
-          element.currentTime = 0;
-          continue;
-        }
-        if (!audioReady) continue;
-        if (!element.paused) continue;
-        try {
-          await element.play();
-        } catch {
-          unavailableRef.current.add(element.currentSrc || element.src);
-        }
-      }
+      if (!cue.loop || !audioReady) return;
+      const ctx = ensureWaCtx();
+      if (ctx && ctx.state === 'suspended') void ctx.resume();
+      const gain = await ensureWebLoop(cueId);
+      if (!gain || !ctx) return;
+      gain.gain.setTargetAtTime(enabled ? (options?.volume ?? cue.volume) : 0, ctx.currentTime, 0.05);
     },
-    [audioReady, getCue]
+    [audioReady, ensureWaCtx, ensureWebLoop]
   );
 
   const setLoopVolume = useCallback(
     async (cueId: AudioCueId, volume: number) => {
       const cue = AUDIO_CUES[cueId];
-      if (!cue.loop) return;
-      const managed = getCue(cueId);
-      if (!managed) return;
+      if (!cue.loop || !audioReady) return;
       const v = Math.max(0, Math.min(1, volume));
-
-      for (const element of managed.elements) {
-        if (unavailableRef.current.has(element.currentSrc || element.src)) continue;
-        element.loop = true;
-        if (v <= 0.001) {
-          if (!element.paused) element.pause();
-          continue;
-        }
-        element.volume = v;
-        if (!audioReady) continue;
-        if (!element.paused) continue;
-        try {
-          await element.play();
-        } catch {
-          unavailableRef.current.add(element.currentSrc || element.src);
-        }
-      }
+      const ctx = ensureWaCtx();
+      if (ctx && ctx.state === 'suspended') void ctx.resume();
+      const gain = await ensureWebLoop(cueId);
+      if (!gain || !ctx) return;
+      gain.gain.setTargetAtTime(v, ctx.currentTime, 0.05);
     },
-    [audioReady, getCue]
+    [audioReady, ensureWaCtx, ensureWebLoop]
   );
 
   const setMuted = useCallback((next: boolean) => {
@@ -194,12 +222,14 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     } catch {
       // ignore storage failures (private mode, etc.)
     }
-    // Apply to every element already created. Loops keep running silently so the
-    // per-tick spatial volume logic stays correct; .muted just gates audible output.
+    // One-shots: gate each HTML element. Loops: the shared Web Audio master gain.
     for (const managed of cuesRef.current.values()) {
       for (const element of managed.elements) {
         element.muted = next;
       }
+    }
+    if (masterGainRef.current && waCtxRef.current) {
+      masterGainRef.current.gain.setTargetAtTime(next ? 0 : 1, waCtxRef.current.currentTime, 0.02);
     }
   }, []);
 

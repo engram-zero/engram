@@ -2004,3 +2004,13 @@ suaves a gran altura que van a la deriva lateral lenta (useFrame) y solo aparece
 (`dn.skyVisible`), tintadas con `dn.dirColor` para que capten el color cálido del atardecer. Se
 renderizan junto al `<Sky>` en ambos modos (cinemático y ?day=1). `tsc` limpio; solo Scene3D.tsx.
 **Commit:** _(este commit)_
+
+### 2026-06-30 · Loops de ambiente sin corte (Web Audio API gapless)
+**Pedido (humano):** el loop del agua tiene un corte audible entre fin y principio en producción.
+**Causa/fix:** era la brecha del `<audio loop>` de HTML (no el mp3). Añadí una capa Web Audio en
+`AudioContext.tsx`: cada cue de LOOP se decodifica a un AudioBuffer y se reproduce con un
+`AudioBufferSourceNode(loop=true)` → GainNode → master → destino (sin gap). `setLoopVolume`/
+`setLoopEnabled` ahora rampan el GainNode (volumen espacial), y el mute usa un master gain. El
+contexto se crea/reanuda en el primer gesto. Los one-shots (pasos, golpes) siguen en HTML Audio.
+Afecta a todos los loops (río, desierto, nevada, grillos, día, fogata) → todos sin corte. `tsc`
+limpio; solo AudioContext.tsx. **Commit:** _(este commit)_
