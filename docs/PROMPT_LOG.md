@@ -1996,3 +1996,11 @@ UNA vez → world aplica la pérdida de recursos (`deathPenaltyFor`/`applyDeathP
 el overlay YOU DIED. El respawn usa `playerHpWithEquipment().hp` (el 60% del revive), NO el máximo →
 morir cuesta. Cierra el loop del pilar 2 (perder vida importa → curarse importa). `tsc` limpio; solo
 Scene3D.tsx. **Commit:** _(este commit)_
+
+### 2026-06-30 · Cielo más bonito: nubes suaves a la deriva
+**Pedido (humano):** embellecer el cielo.
+**Qué se hizo:** nuevo `SkyClouds` (drei `<Clouds>/<Cloud>`, batched en un draw call) — 4 nubes
+suaves a gran altura que van a la deriva lateral lenta (useFrame) y solo aparecen de día
+(`dn.skyVisible`), tintadas con `dn.dirColor` para que capten el color cálido del atardecer. Se
+renderizan junto al `<Sky>` en ambos modos (cinemático y ?day=1). `tsc` limpio; solo Scene3D.tsx.
+**Commit:** _(este commit)_

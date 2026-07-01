@@ -8,7 +8,7 @@
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { Stars, Sky, Html, ContactShadows, PointerLockControls, OrthographicCamera, KeyboardControls, useKeyboardControls } from '@react-three/drei';
+import { Stars, Sky, Clouds, Cloud, Html, ContactShadows, PointerLockControls, OrthographicCamera, KeyboardControls, useKeyboardControls } from '@react-three/drei';
 import * as THREE from 'three';
 import { useNetwork, type NetworkType } from '@/app/providers';
 import { NPC_LIST } from '@/lib/npcs';
@@ -1444,6 +1444,27 @@ function moonPhase(now = Date.now()): { illum: number; waxing: boolean } {
 }
 
 // Sun (warm, big glow) or moon (cool, small glow, with the real-calendar phase).
+// Soft drifting clouds high in the sky (daytime only). Tinted warm at golden hour
+// via `tint`. Batched into one draw call by drei's shared Clouds material.
+function SkyClouds({ tint = '#eef3fb', opacity = 0.5 }: { tint?: string; opacity?: number }) {
+  const ref = useRef<THREE.Group>(null);
+  useFrame((state) => {
+    if (!ref.current) return;
+    // Slow lateral drift, wrapping gently so the sky never feels frozen.
+    ref.current.position.x = ((state.clock.elapsedTime * 1.1) % 300) - 150;
+  });
+  return (
+    <group ref={ref}>
+      <Clouds material={THREE.MeshBasicMaterial} limit={400}>
+        <Cloud seed={1} bounds={[26, 3, 26]} segments={24} volume={14} color={tint} opacity={opacity} speed={0.1} position={[40, 54, -70]} />
+        <Cloud seed={7} bounds={[22, 3, 22]} segments={20} volume={11} color={tint} opacity={opacity * 0.9} speed={0.12} position={[-70, 48, -30]} />
+        <Cloud seed={13} bounds={[30, 3, 30]} segments={26} volume={16} color={tint} opacity={opacity * 0.85} speed={0.08} position={[0, 60, 90]} />
+        <Cloud seed={21} bounds={[20, 2.5, 20]} segments={18} volume={10} color={tint} opacity={opacity * 0.8} speed={0.14} position={[100, 50, 40]} />
+      </Clouds>
+    </group>
+  );
+}
+
 function Celestial({ position, sun = false }: { position: [number, number, number]; sun?: boolean }) {
   const halo = useMemo(
     () =>
@@ -5640,10 +5661,16 @@ export default function Scene3D({ memories = null, active = null, talking = fals
               visible (local's old defect was a missing sun) while the scene stays
               luminous. Cinematic mode: the sun follows the local clock (day↔night). */}
           {forceBrightTestLighting ? (
-            <Sky distance={450000} sunPosition={[-58, 15, -68]} turbidity={5} rayleigh={1.3} mieCoefficient={0.02} mieDirectionalG={0.92} />
+            <>
+              <Sky distance={450000} sunPosition={[-58, 15, -68]} turbidity={5} rayleigh={1.3} mieCoefficient={0.02} mieDirectionalG={0.92} />
+              <SkyClouds tint="#f2f6fd" opacity={0.5} />
+            </>
           ) : (
             dn.skyVisible && (
-              <Sky distance={450000} sunPosition={dn.sunPos} turbidity={dn.turbidity} rayleigh={dn.rayleigh} mieCoefficient={0.02} mieDirectionalG={0.86} />
+              <>
+                <Sky distance={450000} sunPosition={dn.sunPos} turbidity={dn.turbidity} rayleigh={dn.rayleigh} mieCoefficient={0.02} mieDirectionalG={0.86} />
+                <SkyClouds tint={dn.dirColor} opacity={0.5} />
+              </>
             )
           )}
 
