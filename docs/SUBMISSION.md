@@ -12,34 +12,17 @@ The first game where NPCs truly remember you — and no one can make them forget
 
 ---
 
-## Full description
+## Full description (markdown)
 
-```
-Engram is a browser RPG where three villagers keep a persistent, player-owned memory of you —
-stored on 0G Storage, where no developer, reset, or patch can make them forget.
+**Engram** is a browser RPG where three villagers keep a **persistent, player-owned memory of you** — stored on **0G Storage**, where no developer, reset, or patch can make them forget.
 
-Connect your wallet and explore the village of Aldenmoor in first person. Talk to Aldric
-(merchant), Maren (guard captain) and Sable (information broker) — with your own voice or by
-typing — and each keeps their own memory of you: trust, debts, mood, history. Your past decisions
-visibly change how they treat you next time. Haggle a price with Aldric and he remembers whether
-you dealt fair or tried to gouge him; Sable knows what the others know about you.
+Connect your wallet and **explore the village of Aldenmoor in first person**. Talk to **Aldric** (merchant), **Maren** (guard captain) and **Sable** (information broker) — **with your own voice or by typing** — and each keeps their own memory of you: trust, debts, mood, history. Your past decisions visibly change how they treat you next time. Haggle a price with Aldric and he remembers whether you dealt fair or tried to gouge him; Sable knows what the others know about you.
 
-It's a living, player-owned world on 0G: gather wood and mine stone, build by hand or with an AI
-that designs voxel structures from a text prompt, and trade in a market with dynamic,
-scarcity-driven prices — across a day/night cycle and distinct biomes. Your whole world —
-buildings, inventory, NPC reputations, even your health — is serialized to your own 0G bundle. Mark
-other wallets allied or hostile and raid a rival's structures; the map itself grows as you claim
-land parcels owned on-chain, each holding a surprise pack of resources.
+It's a **living, player-owned world on 0G**: gather wood and mine stone, build by hand or with an AI that designs voxel structures from a text prompt, and trade in a market with **dynamic, scarcity-driven prices** — across a **day/night cycle** and **distinct biomes**. Your whole world — buildings, inventory, NPC reputations, even your health — is serialized to your own **0G bundle**. Mark other wallets allied or hostile and raid a rival's structures; the map itself grows as you claim **land parcels owned on-chain**, each holding a surprise pack of resources.
 
-Why 0G is the core: every NPC's memory and your world state live on 0G, auditable by root hash and
-unalterable — not even we, the developers, can edit or erase it. Remove 0G and the premise
-collapses.
+**Why 0G is the core:** every NPC's memory and your world state live on 0G, **auditable by root hash** and unalterable — *not even we, the developers, can edit or erase it.* Remove 0G and the premise collapses.
 
-Each save is anchored to 0G with one signature from your wallet — you sign the pointer to your own
-data, so you own it and can audit it by root hash. (Storage fees are sponsored for this testnet
-demo; the design puts that cost on the player.) Live on 0G Galileo Testnet (Chain ID 16602) with
-real on-chain uploads.
-```
+Each save is anchored to 0G with **one signature from your wallet** — you sign the pointer to your own data, so **you own it** and can audit it by root hash. *(Storage fees are sponsored for this testnet demo; the design puts that cost on the player.)* Live on **0G Galileo Testnet** *(Chain ID 16602)* with real on-chain uploads.
 
 ---
 
