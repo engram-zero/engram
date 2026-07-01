@@ -44,7 +44,7 @@ Updated for the Round of 32 — and the demo video has been updated to reflect t
   sky, and spatial ambient audio (flowing river, wildlife, terrain-aware footsteps).
 • Persistence & 0G polish — your player health and full world state now persist on 0G; leaner
   on-chain reads and AI-agent payloads; more resilient saves during 0G outages.
-• New 1:48 demo video — wallet connect, a voice mini-conversation with Sable, resource gathering
+• New 1:50 demo video — wallet connect, a voice mini-conversation with Sable, resource gathering
   saved to 0G, haggling with Aldric, AI building, and claiming land — each beat tied back to 0G.
 
 Note to judges: the demo video was updated (URL unchanged) to reflect the above.
