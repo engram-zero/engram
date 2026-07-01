@@ -2023,3 +2023,14 @@ del video EN INGLÉS.
 Reescribí `docs/VIDEO_SCRIPT.md` completo en inglés (7 mecánicas ancladas a 0G, modos ?time=day|night,
 3 órdenes de grabación, voiceover). Sin cambios de código.
 **Commit:** _(este commit)_
+
+### 2026-06-30 · Luz nocturna: quitar el "espejo" del piso + noche legible (urge para video)
+**Pedido (humano):** de noche el piso parece espejo/vidrio (se pierde la textura) y no se ve nada.
+**Diagnóstico:** el "espejo" era el specular fresnel a ras del suelo de `MeshStandardMaterial`
+(a ángulo rasante la luz se refleja y tapa la textura); los valores de luz nocturnos ya eran altos
+pero el sheen los hacía ver oscuros.
+**Fix:** `getBiomeTerrainMaterial` ahora usa `MeshLambertMaterial` (difuso puro, SIN specular) →
+adiós espejo, se ve la textura del bioma. Además subí el piso nocturno en `computeDayNight`
+(`visible` 0.74→0.82; ambIntensity low 2.1→2.35; hemi 1.9→2.05; dirIntensity low 1.5→1.95) para que
+la noche sea legible sin perder el mood. `tsc` limpio; solo Scene3D.tsx. (KNOWN_ISSUES #1 atendido.)
+**Commit:** _(este commit)_

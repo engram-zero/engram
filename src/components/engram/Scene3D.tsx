@@ -1377,15 +1377,18 @@ const BIOME_TILE = 6.0; // world units per texture repeat
 // One shared biome-blend material for the terrain AND parcel ground, so a parcel's
 // soil blends by world position exactly like the surroundings (no green patch on
 // snow/desert at biome borders). Lazily built once.
-let _biomeMat: THREE.MeshStandardMaterial | null = null;
-function getBiomeTerrainMaterial(): THREE.MeshStandardMaterial {
+let _biomeMat: THREE.MeshLambertMaterial | null = null;
+function getBiomeTerrainMaterial(): THREE.MeshLambertMaterial {
   if (_biomeMat) return _biomeMat;
   const grass = getTexture('terrain_grass', {});
   const sand = getTexture('terrain_sand', {});
   const snow = getTexture('terrain_snow', {});
   const dry = getTexture('terrain_dry', {});
   for (const t of [grass, sand, snow, dry]) if (t) t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  const m = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 1, map: grass ?? undefined });
+  // Lambert (pure diffuse, NO specular) — MeshStandardMaterial's grazing-angle
+  // fresnel specular made the night ground look like a dark mirror/glass. Terrain
+  // wants matte shading anyway.
+  const m = new THREE.MeshLambertMaterial({ color: '#ffffff', map: grass ?? undefined });
   m.onBeforeCompile = (shader) => {
     shader.uniforms.uSand = { value: sand };
     shader.uniforms.uSnow = { value: snow };
@@ -4391,7 +4394,7 @@ export function computeDayNight(hour: number): DayNight {
   // fill" — raised slightly so the ground isn't crushed-black on real hardware.
   // Lighting stays bright & vibrant (the "localhost colours") across the whole arc —
   // only the SKY cycles (the "prod sky"). High floor so even night reads richly lit.
-  const visible = 0.74 + daylight * 0.26;
+  const visible = 0.82 + daylight * 0.18; // raised night floor so the ground stays legible
   const skyVisible = Math.max(0, Math.min(1, (sunY - 0.02) / 0.28));
 
   // Moon rides its own arc across the night (sunset → sunrise).
@@ -4407,18 +4410,18 @@ export function computeDayNight(hour: number): DayNight {
     // lit-floor `visible`, so there's no blue/grey night sky) and back to day blue.
     bg: mixColor('#000000', '#a8caee', daylight),
     fog: mixColor('#000000', '#b8d0e8', daylight),
-    ambIntensity: mix(2.1, 2.55, visible),
-    ambColor: mixColor('#e2e8f5', '#fffaf0', visible), // near-white → true, vibrant colours
+    ambIntensity: mix(2.35, 2.55, visible),
+    ambColor: mixColor('#dfe6f2', '#fffaf0', visible), // cool night fill → warm day
     hemiSky: mixColor('#aebbd6', '#eaf2ff', visible),
     hemiGround: mixColor('#7c8868', '#a9b487', visible),
-    hemiIntensity: mix(1.9, 2.2, visible),
+    hemiIntensity: mix(2.05, 2.2, visible),
     // Key light follows the SUN by day and the MOON by night, so the lit side of the
     // world matches whichever disc is actually in the sky (no more light-from-one-way,
     // moon-the-other). Min height keeps a soft fill when the source is low.
     dirPos: sunY > 0
       ? [sunX * 60, Math.max(18, sunY * 60), -40]
       : [moonX * 60, Math.max(16, moonY * 55), -40],
-    dirIntensity: mix(1.5, 2.6, visible),
+    dirIntensity: mix(1.95, 2.6, visible),
     dirColor: sunY > 0 ? mixColor('#e6ecf8', '#fff3da', visible) : '#cfdcf2', // warm sun ↔ cool moonlight
     turbidity: mix(7.2, 10.8, visible),
     rayleigh: mix(0.8, 1.55, visible),
