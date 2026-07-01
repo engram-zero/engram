@@ -355,11 +355,17 @@ function normalizeBuildings(raw: unknown): Building[] {
 
       base.maxHp = typeof (b as any).maxHp === 'number' && Number.isFinite((b as any).maxHp) ? Math.max(1, Math.min(300, Math.round((b as any).maxHp))) : defaultHp;
       base.hp = typeof (b as any).hp === 'number' && Number.isFinite((b as any).hp) ? Math.max(0, Math.min(base.maxHp, Math.round((b as any).hp))) : base.maxHp;
+      if ((b as any).storage && typeof (b as any).storage === 'object') {
+        base.storage = normalizeStorage((b as any).storage);
+      }
 
       if (b.type === 'block') {
         base.y = typeof b.y === 'number' && Number.isFinite(b.y) ? Math.max(0, Math.min(MAX_BLOCK_Y, b.y)) : 0;
         base.scale = typeof b.scale === 'number' && Number.isFinite(b.scale) ? Math.max(BLOCK_SCALE_MIN, Math.min(BLOCK_SCALE_MAX, b.scale)) : BLOCK_UNIT;
         base.color = typeof b.color === 'string' ? b.color : '#8a6a4a';
+        base.clusterId = cleanId((b as any).clusterId, '');
+        if (!base.clusterId) delete base.clusterId;
+        base.clusterLabel = typeof b.clusterLabel === 'string' ? b.clusterLabel.slice(0, 80) : undefined;
       }
       return base;
     });
@@ -704,11 +710,87 @@ function normalizeParcelResourceIds(raw: unknown): string[] {
 
 function normalizeStorage(raw: unknown): Record<StoredResourceType, number> {
   const p = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
+  const amount = (value: unknown) => {
+    const n = Number(value ?? 0);
+    return Number.isFinite(n) ? Math.max(0, n) : 0;
+  };
   return {
-    wood: Math.max(0, Number(p.wood ?? 0)),
-    stone: Math.max(0, Number(p.stone ?? 0)),
-    silver: Math.max(0, Number(p.silver ?? 0)),
-    gold: Math.max(0, Number(p.gold ?? 0)),
+    wood: amount(p.wood),
+    stone: amount(p.stone),
+    silver: amount(p.silver),
+    gold: amount(p.gold),
+  };
+}
+
+function emptyStorage(): Record<StoredResourceType, number> {
+  return { wood: 0, stone: 0, silver: 0, gold: 0 };
+}
+
+function addStorage(a: Record<StoredResourceType, number>, b: Partial<Record<StoredResourceType, number>> = {}): Record<StoredResourceType, number> {
+  return {
+    wood: a.wood + Math.max(0, Number(b.wood ?? 0)),
+    stone: a.stone + Math.max(0, Number(b.stone ?? 0)),
+    silver: a.silver + Math.max(0, Number(b.silver ?? 0)),
+    gold: a.gold + Math.max(0, Number(b.gold ?? 0)),
+  };
+}
+
+function storageTotal(storage: Partial<Record<StoredResourceType, number>> = {}): number {
+  return STORAGE_RESOURCES.reduce((sum, type) => sum + Math.max(0, Number(storage[type] ?? 0)), 0);
+}
+
+function buildingFootprintArea(building: Building): number {
+  if (building.type === 'house') return 18;
+  if (building.type === 'wall') return 3;
+  const scale = Math.max(BLOCK_SCALE_MIN, Math.min(BLOCK_SCALE_MAX, building.scale ?? BLOCK_UNIT));
+  return Math.max(0.05, scale * scale);
+}
+
+function individualBuildingStorageCapacity(building: Building): number {
+  if (building.type === 'house') return 72;
+  if (building.type === 'wall') return 10;
+  return Math.max(1, Math.round(buildingFootprintArea(building) * 20));
+}
+
+function aggregateBuildingStorage(buildings: Building[]): Record<StoredResourceType, number> {
+  return buildings.reduce((sum, building) => addStorage(sum, building.storage), emptyStorage());
+}
+
+function storedInBuilding(building: Building): number {
+  return storageTotal(building.storage);
+}
+
+function distributeStorageIntoBuildings(buildings: Building[], incoming: Record<StoredResourceType, number>): { buildings: Building[]; overflow: Record<StoredResourceType, number> } {
+  const next = buildings.map((building) => ({ ...building, storage: building.storage ? { ...building.storage } : undefined }));
+  const overflow = { ...incoming };
+  for (let i = 0; i < next.length; i++) {
+    const capacity = individualBuildingStorageCapacity(next[i]);
+    let room = Math.max(0, capacity - storedInBuilding(next[i]));
+    if (room <= 0) continue;
+    const storage = normalizeStorage(next[i].storage);
+    for (const type of STORAGE_RESOURCES) {
+      if (room <= 0) break;
+      const moved = Math.min(room, overflow[type]);
+      if (moved <= 0) continue;
+      storage[type] += moved;
+      overflow[type] -= moved;
+      room -= moved;
+    }
+    next[i].storage = storageTotal(storage) > 0 ? storage : undefined;
+  }
+  return { buildings: next, overflow };
+}
+
+function storageAggregateFor(buildings: Building[], overflow: Record<StoredResourceType, number> = emptyStorage()): Record<StoredResourceType, number> {
+  return addStorage(aggregateBuildingStorage(buildings), overflow);
+}
+
+function storagePositiveDiff(total: Record<StoredResourceType, number>, alreadyStored: Record<StoredResourceType, number>): Record<StoredResourceType, number> {
+  return {
+    wood: Math.max(0, total.wood - alreadyStored.wood),
+    stone: Math.max(0, total.stone - alreadyStored.stone),
+    silver: Math.max(0, total.silver - alreadyStored.silver),
+    gold: Math.max(0, total.gold - alreadyStored.gold),
   };
 }
 
@@ -999,6 +1081,14 @@ export function normalizeWorldState(raw: unknown): WorldState {
   const aiItems = normalizeAiItems(p?.aiItems, owner);
   const playerMaxHp = Math.max(1, Math.min(999, Math.round(Number(p?.playerMaxHp ?? PLAYER_BASE_MAX_HP))));
   const playerHp = Math.max(0, Math.min(playerMaxHp, Math.round(Number(p?.playerHp ?? playerMaxHp))));
+  const legacyStorage = normalizeStorage(p?.storage);
+  const rawBuildings = normalizeBuildings(p?.buildings);
+  const hasBuildingStorage = rawBuildings.some((building) => storageTotal(building.storage) > 0);
+  const migratedStorage = hasBuildingStorage
+    ? distributeStorageIntoBuildings(rawBuildings, storagePositiveDiff(legacyStorage, aggregateBuildingStorage(rawBuildings)))
+    : storageTotal(legacyStorage) === 0
+      ? { buildings: rawBuildings, overflow: emptyStorage() }
+      : distributeStorageIntoBuildings(rawBuildings, legacyStorage);
 
   return {
     inventory: {
@@ -1008,11 +1098,11 @@ export function normalizeWorldState(raw: unknown): WorldState {
       silver: Math.max(0, Number(p?.inventory?.silver ?? 0)),
       gold: Math.max(0, Number(p?.inventory?.gold ?? 0)),
     },
-    storage: normalizeStorage(p?.storage),
+    storage: storageAggregateFor(migratedStorage.buildings, migratedStorage.overflow),
     choppedTrees,
     treeGrowth: normalizeTreeGrowth(p?.treeGrowth),
     minedRocks,
-    buildings: normalizeBuildings(p?.buildings),
+    buildings: migratedStorage.buildings,
     enemiesKilled: Math.max(0, Number(p?.enemiesKilled ?? 0)),
     axeLevel: Math.max(0, Math.round(Number(p?.axeLevel ?? 0))),
     playerHp,
@@ -1043,7 +1133,7 @@ export function cloneWorldState(value: WorldState = EMPTY_WORLD): WorldState {
     choppedTrees: [...value.choppedTrees],
     treeGrowth: Object.fromEntries(Object.entries(value.treeGrowth).map(([index, growth]) => [index, { ...growth }])),
     minedRocks: [...value.minedRocks],
-    buildings: value.buildings.map((b) => ({ ...b })),
+    buildings: value.buildings.map((b) => ({ ...b, storage: b.storage ? { ...b.storage } : undefined })),
     enemiesKilled: value.enemiesKilled,
     axeLevel: value.axeLevel,
     playerHp: value.playerHp,
@@ -1423,19 +1513,148 @@ function carryCapFor(type: StoredResourceType): number {
   return type === 'wood' ? MAX_WOOD : ORE_MAX[type];
 }
 
-export function depositResource(type: StoredResourceType, amount: number): { ok: boolean; moved: number; reason?: string } {
+function buildingIndexesForStorage(index: number, buildings: Building[] = state.buildings): number[] {
+  const building = buildings[index];
+  if (!building) return [];
+  if (!building.clusterId) return [index];
+  const indexes: number[] = [];
+  buildings.forEach((candidate, candidateIndex) => {
+    if (candidate.clusterId === building.clusterId) indexes.push(candidateIndex);
+  });
+  return indexes.length > 0 ? indexes : [index];
+}
+
+export function buildingStorageCapacity(index: number, buildings: Building[] = state.buildings): number {
+  return buildingIndexesForStorage(index, buildings).reduce((sum, buildingIndex) => {
+    const building = buildings[buildingIndex];
+    return building ? sum + individualBuildingStorageCapacity(building) : sum;
+  }, 0);
+}
+
+export function buildingStorageContents(index: number, buildings: Building[] = state.buildings): Record<StoredResourceType, number> {
+  return buildingIndexesForStorage(index, buildings).reduce((sum, buildingIndex) => {
+    const building = buildings[buildingIndex];
+    return building ? addStorage(sum, building.storage) : sum;
+  }, emptyStorage());
+}
+
+export function buildingStorageView(index: number, buildings: Building[] = state.buildings): {
+  ok: boolean;
+  index: number;
+  buildingIds: string[];
+  clusterId?: string;
+  clusterLabel?: string;
+  capacity: number;
+  used: number;
+  available: number;
+  contents: Record<StoredResourceType, number>;
+} {
+  const building = buildings[index];
+  if (!building) {
+    return { ok: false, index, buildingIds: [], capacity: 0, used: 0, available: 0, contents: emptyStorage() };
+  }
+  const indexes = buildingIndexesForStorage(index, buildings);
+  const contents = buildingStorageContents(index, buildings);
+  const capacity = buildingStorageCapacity(index, buildings);
+  const used = storageTotal(contents);
+  return {
+    ok: true,
+    index,
+    buildingIds: indexes.map((buildingIndex) => buildings[buildingIndex]?.id).filter((id): id is string => !!id),
+    clusterId: building.clusterId,
+    clusterLabel: building.clusterLabel,
+    capacity,
+    used,
+    available: Math.max(0, capacity - used),
+    contents,
+  };
+}
+
+function firstBuildingIndexForDeposit(): number {
+  return state.buildings.findIndex((_, index) => buildingStorageView(index).available > 0);
+}
+
+function firstBuildingIndexWithResource(type: StoredResourceType): number {
+  return state.buildings.findIndex((_, index) => buildingStorageContents(index)[type] > 0);
+}
+
+export function depositResourceToBuilding(index: number, type: StoredResourceType, amount: number): { ok: boolean; moved: number; reason?: string } {
   const available = Math.max(0, state.inventory[type]);
-  const moved = Math.max(0, Math.min(available, Math.floor(amount)));
-  if (moved <= 0) return { ok: false, moved: 0, reason: `No ${type} to deposit.` };
+  const requested = Math.max(0, Math.floor(amount));
+  if (available <= 0 || requested <= 0) return { ok: false, moved: 0, reason: `No ${type} to deposit.` };
+  const indexes = buildingIndexesForStorage(index);
+  if (indexes.length === 0) return { ok: false, moved: 0, reason: 'Select one of your buildings first.' };
+  let remaining = Math.min(available, requested);
+  const newBuildings = state.buildings.map((building) => ({ ...building, storage: building.storage ? { ...building.storage } : undefined }));
+
+  for (const buildingIndex of indexes) {
+    if (remaining <= 0) break;
+    const building = newBuildings[buildingIndex];
+    if (!building) continue;
+    const capacity = individualBuildingStorageCapacity(building);
+    const room = Math.max(0, capacity - storedInBuilding(building));
+    const moved = Math.min(room, remaining);
+    if (moved <= 0) continue;
+    const storage = normalizeStorage(building.storage);
+    storage[type] += moved;
+    building.storage = storage;
+    remaining -= moved;
+  }
+
+  const moved = Math.min(available, requested) - remaining;
+  if (moved <= 0) return { ok: false, moved: 0, reason: 'This building is full.' };
   commit({
     ...state,
     inventory: { ...state.inventory, [type]: available - moved },
-    storage: { ...state.storage, [type]: state.storage[type] + moved },
+    buildings: newBuildings,
+    storage: storageAggregateFor(newBuildings),
   });
   return { ok: true, moved };
 }
 
+export function withdrawResourceFromBuilding(index: number, type: StoredResourceType, amount: number): { ok: boolean; moved: number; reason?: string } {
+  const room = Math.max(0, carryCapFor(type) - state.inventory[type]);
+  const requested = Math.max(0, Math.floor(amount));
+  if (room <= 0) return { ok: false, moved: 0, reason: `${type} pocket is full.` };
+  if (requested <= 0) return { ok: false, moved: 0, reason: `No ${type} requested.` };
+  const indexes = buildingIndexesForStorage(index);
+  if (indexes.length === 0) return { ok: false, moved: 0, reason: 'Select one of your buildings first.' };
+  let remaining = Math.min(room, requested);
+  const newBuildings = state.buildings.map((building) => ({ ...building, storage: building.storage ? { ...building.storage } : undefined }));
+
+  for (const buildingIndex of indexes) {
+    if (remaining <= 0) break;
+    const building = newBuildings[buildingIndex];
+    if (!building) continue;
+    const storage = normalizeStorage(building.storage);
+    const moved = Math.min(storage[type], remaining);
+    if (moved <= 0) continue;
+    storage[type] -= moved;
+    building.storage = storageTotal(storage) > 0 ? storage : undefined;
+    remaining -= moved;
+  }
+
+  const moved = Math.min(room, requested) - remaining;
+  if (moved <= 0) return { ok: false, moved: 0, reason: `No stored ${type}.` };
+  commit({
+    ...state,
+    inventory: { ...state.inventory, [type]: state.inventory[type] + moved },
+    buildings: newBuildings,
+    storage: storageAggregateFor(newBuildings),
+  });
+  return { ok: true, moved };
+}
+
+export function depositResource(type: StoredResourceType, amount: number): { ok: boolean; moved: number; reason?: string } {
+  const target = firstBuildingIndexForDeposit();
+  return target >= 0
+    ? depositResourceToBuilding(target, type, amount)
+    : { ok: false, moved: 0, reason: 'Build any structure before depositing resources.' };
+}
+
 export function withdrawResource(type: StoredResourceType, amount: number): { ok: boolean; moved: number; reason?: string } {
+  const target = firstBuildingIndexWithResource(type);
+  if (target >= 0) return withdrawResourceFromBuilding(target, type, amount);
   const stored = Math.max(0, state.storage[type]);
   const room = Math.max(0, carryCapFor(type) - state.inventory[type]);
   const moved = Math.max(0, Math.min(stored, room, Math.floor(amount)));
@@ -2054,7 +2273,14 @@ export function placeBuilding(b: Building, cost: number = BUILD_COST[b.type]): b
   // get a much tougher shell so they survive sieges/raids longer.
   if (isReinforcedLabel(b.clusterLabel)) maxHp = Math.round(maxHp * REINFORCED_HP_MULT);
 
-  const nextBuilding: Building = { ...b, id: b.id ?? createId('build'), woodCost: freeBuild ? 0 : cost, hp: maxHp, maxHp };
+  const nextBuilding: Building = {
+    ...b,
+    id: b.id ?? createId('build'),
+    woodCost: freeBuild ? 0 : cost,
+    hp: maxHp,
+    maxHp,
+    storage: b.storage ? normalizeStorage(b.storage) : undefined,
+  };
   commit({
     ...state,
     inventory: { ...state.inventory, wood: freeBuild ? MAX_WOOD : state.inventory.wood - cost },
@@ -2069,10 +2295,13 @@ export function removeBuilding(index: number) {
   const built = state.buildings[index];
   const refundBase = built.woodCost ?? BUILD_COST[built.type];
   const refund = Math.max(0, Math.floor(refundBase * 0.5));
+  const remainingBuildings = state.buildings.filter((_, i) => i !== index);
+  const redistributed = distributeStorageIntoBuildings(remainingBuildings, normalizeStorage(built.storage));
   commit({
     ...state,
     inventory: { ...state.inventory, wood: Math.min(MAX_WOOD, state.inventory.wood + refund) },
-    buildings: state.buildings.filter((_, i) => i !== index),
+    buildings: redistributed.buildings,
+    storage: storageAggregateFor(redistributed.buildings, redistributed.overflow),
   });
 }
 
@@ -2145,10 +2374,13 @@ export function removeCluster(clusterId: string): { removed: number } {
   if (blocks.length === 0) return { removed: 0 };
   const refundBase = blocks.reduce((sum, b) => sum + (b.woodCost ?? BUILD_COST[b.type]), 0);
   const refund = Math.max(0, Math.floor(refundBase * 0.5));
+  const removedStorage = blocks.reduce((sum, b) => addStorage(sum, b.storage), emptyStorage());
+  const redistributed = distributeStorageIntoBuildings(state.buildings.filter((b) => b.clusterId !== clusterId), removedStorage);
   commit({
     ...state,
     inventory: { ...state.inventory, wood: Math.min(MAX_WOOD, state.inventory.wood + refund) },
-    buildings: state.buildings.filter((b) => b.clusterId !== clusterId),
+    buildings: redistributed.buildings,
+    storage: storageAggregateFor(redistributed.buildings, redistributed.overflow),
   });
   return { removed: blocks.length };
 }

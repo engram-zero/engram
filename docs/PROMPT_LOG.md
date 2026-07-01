@@ -1901,6 +1901,22 @@ usa contención total en ese cuadrado; `worldExtentForClaims` y `cellLabel` part
 `BASE_HALF_EXTENT`. Sanity check: `7,7` no reclamable; `8,0`/`8,8` sí cruzan frontera; `9,0` no toca
 base y no es primer claim. `tsc` limpio. **Commit:** _(este commit)_
 
+### 2026-06-30 · Prompt 36: storage en cualquier edificio
+**Pedido (humano):** reemplazar el warehouse único por almacenamiento en cualquier edificio del
+jugador, con capacidad derivada del tamaño/área de la huella; backend-only en `world.ts`; no tocar
+`Scene3D.tsx` ni `client-page.tsx`.
+**Prompt sintetizado:** Añade storage persistido por edificio (`Building.storage`), calcula capacidad
+por footprint (casa > muro > bloque; clusters suman sus bloques), expón vistas de capacidad/contenido
+por edificio para la UI de Claude, y acciones `deposit/withdraw` por edificio manteniendo caps de
+bolsillo. Conserva `WorldState.storage` solo como agregado/compatibilidad y migra saves viejos al
+primer edificio con capacidad cuando sea posible.
+**Qué se hizo:** `buildingStorageCapacity`, `buildingStorageContents`, `buildingStorageView`,
+`depositResourceToBuilding` y `withdrawResourceFromBuilding` en `world.ts`; `Building.storage`
+normalizado/persistido en el bundle 0G; demolición redistribuye contenido a edificios restantes o
+lo deja como overflow agregado para no perder recursos. Wrappers legacy `depositResource`/
+`withdrawResource` siguen funcionando apuntando al primer edificio viable. `tsc` limpio.
+**Commit:** _(este commit)_
+
 ### 2026-06-30 · GUI de Aldric: vender madera dentro del panel (no separado)
 **Pedido (humano):** la venta de madera está separada del resto (traslape de forma vieja/nueva).
 **Qué se hizo:** quité el botón "Sell wood" de la fila de acciones (junto a Say/Leave) y puse un

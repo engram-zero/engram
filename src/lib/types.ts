@@ -206,6 +206,8 @@ export interface Building {
   clusterId?: string;
   /** Human label for the cluster, shown in the stats card. */
   clusterLabel?: string;
+  /** Resources stored inside this building. Prompt 36: every player building can store. */
+  storage?: Partial<Record<StoredResourceType, number>>;
 }
 
 export interface RaidEvent {
@@ -346,7 +348,7 @@ export interface ParcelRentEvent {
 
 export interface WorldState {
   inventory: Record<ResourceType, number>;
-  /** Resources stored in the player's 0G warehouse, separate from carry caps. */
+  /** Legacy aggregate storage. New saves store resources per-building; kept for migration/UI compatibility. */
   storage: Record<StoredResourceType, number>;
   /** Indices (into map.ts TREES) of trees the player has chopped. */
   choppedTrees: number[];

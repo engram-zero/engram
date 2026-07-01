@@ -1489,6 +1489,13 @@ limpio; `git pull --no-edit` antes de push; co-author Codex; entrada en `docs/PR
 
 ## Prompt 36 — Almacenar en CUALQUIER edificio (capacidad por área)
 
+> **✅ Backend done — 30 jun 2026.** `Building.storage` persiste contenido por edificio en el
+> `WorldState` 0G. `world.ts` expone capacidad/contenido por edificio o cluster
+> (`buildingStorageView`, `buildingStorageCapacity`, `buildingStorageContents`) y acciones
+> `depositResourceToBuilding` / `withdrawResourceFromBuilding`. La capacidad deriva de la huella:
+> casa > muro > bloque; los clusters suman la capacidad de sus bloques. `WorldState.storage` queda
+> como agregado/compatibilidad mientras Claude cambia la UI para abrir storage en cualquier edificio.
+
 **Para:** Codex (backend) + Claude (UI). Reemplaza el "warehouse" único.
 
 Cualquier edificio del jugador puede **almacenar** recursos; su **capacidad** se deriva del
