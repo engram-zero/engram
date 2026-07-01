@@ -2014,3 +2014,12 @@ renderizan junto al `<Sky>` en ambos modos (cinemático y ?day=1). `tsc` limpio;
 contexto se crea/reanuda en el primer gesto. Los one-shots (pasos, golpes) siguen en HTML Audio.
 Afecta a todos los loops (río, desierto, nevada, grillos, día, fogata) → todos sin corte. `tsc`
 limpio; solo AudioContext.tsx. **Commit:** _(este commit)_
+
+### 2026-06-30 · Documentar 3 pendientes de playtest + video script en inglés
+**Pedido (humano):** documentar (sin arreglar) 3 issues (piso nocturno "espejo"/iluminación pésima;
+demonio que se acerca pero no ataca; unión de muros en ángulos aún imperfecta) y rehacer el guion
+del video EN INGLÉS.
+**Qué se hizo:** appended a `docs/KNOWN_ISSUES.md` los 3 issues con hipótesis y punteros de código.
+Reescribí `docs/VIDEO_SCRIPT.md` completo en inglés (7 mecánicas ancladas a 0G, modos ?time=day|night,
+3 órdenes de grabación, voiceover). Sin cambios de código.
+**Commit:** _(este commit)_

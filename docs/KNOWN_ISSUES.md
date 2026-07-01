@@ -58,3 +58,25 @@ symptom can be matched to a known cause instead of re-debugged from scratch.
 - **Voxel per-block HP** (e.g. an AI-built torch): each block has its own HP, so damage rings
   stacked into a cluster of circles (ring now suppressed for blocks). Whole-vs-per-block HP is
   still an open design choice (hybrid: group a structure under one HP).
+
+## 2026-06-30 — Playtest batch (documented, not yet fixed)
+
+- **Night lighting is far too dark + the ground looks like a mirror.** At night the terrain
+  reads almost pure black and the biome floor has a specular "mirror/glass" sheen where the real
+  texture is lost (see playtest screenshots). This is a RECURRING problem we've hit several times.
+  Hypotheses to investigate: (a) the biome `onBeforeCompile` shader multiplies `diffuseColor` by
+  `pow(cBiome, 2.2)` and may interact badly with very low night light + the standard specular/
+  environment term, producing a sheen; (b) night `dirIntensity`/`ambIntensity` in `computeDayNight`
+  are too low so nothing is visible; (c) tone-mapping exposure at night. Candidate fixes: raise the
+  night ambient/hemi floor so the ground is legible; ensure the terrain material has
+  `metalness: 0` and consider `envMapIntensity: 0`/lower the specular so it can't mirror; verify the
+  pow(2.2) decode isn't crushing to black. (Scene3D: `computeDayNight`, `getBiomeTerrainMaterial`.)
+- **A demon approaches the player but deals no damage.** An enemy walks up but never lands a hit
+  (no HP loss). Likely the attack-range/attackTimer gate in the enemy `useFrame` (Scene3D ~line
+  2524, `closestDist < 1.4` + `dyn.attackTimer`) isn't triggering — range too tight vs the new
+  bigger houses/scale, or the enemy is stuck on collision just outside 1.4. Investigate the enemy
+  chase/attack path and the `applyPlayerDamage(1)` wiring.
+- **Wall angle joining still imperfect.** With the 0.9 half-grid + 45° rotation, walls at mixed
+  angles don't seat together naturally (visible gaps/overlaps at corners and diagonals). Proper fix
+  likely needs endpoint-based snapping (snap wall ENDS to a shared node) rather than center-grid +
+  rotation snap. (Scene3D: `BuildController` `snapXZ`/`placeRot`, `WALL_GRID`.)
