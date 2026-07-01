@@ -1962,3 +1962,13 @@ legacy. tsc limpio integrado.
 selección (aérea). El modal muestra `used/capacity` y hace deposit/withdraw **a ese edificio**
 (`depositResourceToBuilding`/`withdrawResourceFromBuilding`). `tsc` limpio; solo Scene3D.tsx.
 **Commit:** _(este commit)_
+
+### 2026-06-30 · Swap a payload compacto para agentes de naturaleza
+**Pedido (humano):** revisar el snapshot compacto de Codex y hacer mi parte (el swap en client-page).
+**Revisión de Codex (0daf3f7):** aprobado — `buildNatureAgentSnapshot(world, ecosystem)` +
+`NatureAgentSnapshot` (v1); las rutas earth/fauna aceptan `agentSnapshot` con fallback a world; los
+prompts/fallbacks internos ya usan contadores/zonas compactos. tsc limpio.
+**Qué hice (client-page):** el `baseBody` ahora manda SOLO `{ walletAddress, agentSnapshot:
+buildNatureAgentSnapshot(world, world.ecosystem) }` en vez del WorldState completo → menos tokens/
+latencia. Quité `computeNatureSnapshot`/`world`/`current` del envío. `tsc` limpio; solo client-page.tsx.
+**Commit:** _(este commit)_

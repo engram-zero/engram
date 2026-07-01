@@ -45,7 +45,8 @@ import {
   buyAiItemListing,
   type AiItemListing,
 } from '@/lib/world';
-import { computeEcosystemActivity, computeNatureSnapshot, fingerprintNature, pickRockToRespawn, pickTreeToRegrow } from '@/lib/ecosystem';
+import { computeEcosystemActivity, fingerprintNature, pickRockToRespawn, pickTreeToRegrow } from '@/lib/ecosystem';
+import { buildNatureAgentSnapshot } from '@/lib/nature-agents';
 import { TREES, ROCKS } from '@/components/engram/map';
 import { createBundleWorldPersistence } from '@/lib/world-0g';
 import { startPublicWorldPolling } from '@/lib/public-world';
@@ -337,15 +338,14 @@ function Game() {
     natureRequestRef.current = natureFingerprint;
 
     let cancelled = false;
-    const snapshot = computeNatureSnapshot(world);
 
     void (async () => {
       try {
+        // Send ONLY the compact agent snapshot (not the whole WorldState) — fewer
+        // tokens/latency; the API keeps a world fallback for debug (see nature-agents).
         const baseBody = {
           walletAddress: address,
-          world,
-          snapshot,
-          current: world.ecosystem,
+          agentSnapshot: buildNatureAgentSnapshot(world, world.ecosystem),
         };
 
         const [earthRes, faunaRes] = await Promise.all([
