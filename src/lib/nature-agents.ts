@@ -3,6 +3,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import {
   clampFloat,
   clampInt,
+  computeNatureSnapshot,
   dominantZoneBy,
   NATURE_ZONES,
 } from '@/lib/ecosystem';
@@ -10,10 +11,13 @@ import type {
   EarthAgentRequest,
   EarthAgentResponse,
   EarthZoneDirective,
+  EcosystemState,
   FaunaAgentRequest,
   FaunaAgentResponse,
   FaunaZoneDirective,
+  NatureAgentSnapshot,
   NatureZoneSnapshot,
+  WorldState,
 } from '@/lib/types';
 
 const MODEL = process.env.ENGRAM_MODEL || 'claude-sonnet-4-6';
@@ -27,8 +31,65 @@ const FAUNA_SPAWN_INTERVAL_MAX_MS = 1000 * 60 * 6;
 const anthropic = anthropicKey ? new Anthropic({ apiKey: anthropicKey }) : null;
 const genAI = googleKey ? new GoogleGenerativeAI(googleKey) : null;
 
-function communityCadenceMultiplier(input: EarthAgentRequest | { world: EarthAgentRequest['world'] }): number {
-  const multiplier = input.world.ecosystem?.communityActivity?.regenCadenceMultiplier;
+/**
+ * Compact nature-agent payload contract.
+ * Includes only fields Earth/Fauna actually use:
+ * - `snapshot`: zone ecological counts for trees, rocks, parcels and builds.
+ * - `counters`: global pressure signals used by prompts/fallbacks.
+ * - `ecosystem`: persisted nature memory/activity/treasury needed for cadence.
+ * It intentionally omits full inventories, buildings, parcel lists, events, items,
+ * memories, and other growing WorldState arrays that do not affect these agents.
+ */
+export function buildNatureAgentSnapshot(world: WorldState, ecosystem: EcosystemState | undefined = world.ecosystem): NatureAgentSnapshot {
+  return {
+    version: 'nature-agent-compact-v1',
+    snapshot: computeNatureSnapshot(world),
+    counters: {
+      choppedTrees: world.choppedTrees.length,
+      minedRocks: world.minedRocks.length,
+      playerBuilds: world.buildings.length,
+      parcelClaims: world.parcelClaims.length,
+      playerCoin: Math.max(0, Math.round(world.inventory.coin)),
+      enemiesKilled: Math.max(0, Math.round(world.enemiesKilled)),
+    },
+    ecosystem,
+  };
+}
+
+function resolveNatureAgentSnapshot(input: EarthAgentRequest | FaunaAgentRequest): NatureAgentSnapshot {
+  if (input.agentSnapshot?.version === 'nature-agent-compact-v1' && Array.isArray(input.agentSnapshot.snapshot)) {
+    return input.agentSnapshot;
+  }
+  if (input.world) {
+    return buildNatureAgentSnapshot(input.world, input.current ?? input.world.ecosystem);
+  }
+  const fallbackSnapshot = Array.isArray(input.snapshot) ? input.snapshot : NATURE_ZONES.map((zone) => ({
+    id: zone.id,
+    label: zone.label,
+    standingTrees: 0,
+    choppedTrees: 0,
+    intactRocks: 0,
+    minedRocks: 0,
+    parcelClaims: 0,
+    playerBuilds: 0,
+  }));
+  return {
+    version: 'nature-agent-compact-v1',
+    snapshot: fallbackSnapshot,
+    counters: {
+      choppedTrees: fallbackSnapshot.reduce((sum, zone) => sum + zone.choppedTrees, 0),
+      minedRocks: fallbackSnapshot.reduce((sum, zone) => sum + zone.minedRocks, 0),
+      playerBuilds: fallbackSnapshot.reduce((sum, zone) => sum + zone.playerBuilds, 0),
+      parcelClaims: fallbackSnapshot.reduce((sum, zone) => sum + zone.parcelClaims, 0),
+      playerCoin: 0,
+      enemiesKilled: 0,
+    },
+    ecosystem: input.current,
+  };
+}
+
+function communityCadenceMultiplier(input: NatureAgentSnapshot): number {
+  const multiplier = input.ecosystem?.communityActivity?.regenCadenceMultiplier;
   return clampFloat(typeof multiplier === 'number' ? multiplier : 1, 0.75, 1);
 }
 
@@ -79,9 +140,9 @@ async function runAI(system: string, userContent: string): Promise<any | null> {
   return null;
 }
 
-function fallbackEarth(input: EarthAgentRequest): EarthAgentResponse {
-  const pressure = input.world.choppedTrees.length + input.world.buildings.length * 0.7 + input.world.parcelClaims.length * 1.4;
-  const zones: EarthZoneDirective[] = input.snapshot.map((zone) => {
+function fallbackEarth(compact: NatureAgentSnapshot): EarthAgentResponse {
+  const pressure = compact.counters.choppedTrees + compact.counters.playerBuilds * 0.7 + compact.counters.parcelClaims * 1.4;
+  const zones: EarthZoneDirective[] = compact.snapshot.map((zone) => {
     const totalTrees = zone.standingTrees + zone.choppedTrees;
     const depletion = totalTrees > 0 ? zone.choppedTrees / totalTrees : 0;
     const quarryWeight = zone.minedRocks * 0.12;
@@ -100,7 +161,7 @@ function fallbackEarth(input: EarthAgentRequest): EarthAgentResponse {
     };
   });
   const dominantZone = dominantZoneBy(zones, (zone) => zone.fertility);
-  const cadenceMs = clampInt(1000 * 60 * (6 - Math.min(3.2, pressure / 35)) * communityCadenceMultiplier(input), 1000 * 60 * 2, 1000 * 60 * 8);
+  const cadenceMs = clampInt(1000 * 60 * (6 - Math.min(3.2, pressure / 35)) * communityCadenceMultiplier(compact), 1000 * 60 * 2, 1000 * 60 * 8);
   return {
     earth: {
       updatedAt: Date.now(),
@@ -116,10 +177,10 @@ function fallbackEarth(input: EarthAgentRequest): EarthAgentResponse {
   };
 }
 
-function fallbackFauna(input: FaunaAgentRequest): FaunaAgentResponse {
-  const harvestPressure = input.world.choppedTrees.length + input.world.minedRocks.length * 1.4 + input.world.enemiesKilled * 1.8;
+function fallbackFauna(compact: NatureAgentSnapshot): FaunaAgentResponse {
+  const harvestPressure = compact.counters.choppedTrees + compact.counters.minedRocks * 1.4 + compact.counters.enemiesKilled * 1.8;
   const mood = harvestPressure > 65 ? 'hostile' : harvestPressure > 24 ? 'wary' : 'neutral';
-  const zones: FaunaZoneDirective[] = input.snapshot.map((zone) => {
+  const zones: FaunaZoneDirective[] = compact.snapshot.map((zone) => {
     const disturbance = zone.playerBuilds * 0.18 + zone.parcelClaims * 0.15 + zone.minedRocks * 0.12 + zone.choppedTrees * 0.08;
     const canopy = zone.standingTrees * 0.035 + zone.intactRocks * 0.04;
     const spawnWeight = clampFloat(canopy - disturbance + (zone.id === 'east_hills' ? 0.18 : zone.id === 'north_forest' ? 0.14 : 0.04), 0.05, 0.95);
@@ -203,7 +264,8 @@ function normalizeFauna(raw: any, fallback: FaunaAgentResponse): FaunaAgentRespo
 }
 
 export async function runEarthAgent(input: EarthAgentRequest): Promise<EarthAgentResponse> {
-  const fallback = fallbackEarth(input);
+  const compact = resolveNatureAgentSnapshot(input);
+  const fallback = fallbackEarth(compact);
   const system = `You are Agente Tierra, the AI steward of Aldenmoor's ecology.
 Return strict JSON with:
 {
@@ -216,20 +278,21 @@ You are not writing lore for its own sake. You are tuning live simulation parame
 Higher fertility = faster tree recovery. RegrowthShare should be higher where the soil should heal next.
 Stay grounded in the snapshot and keep the world feeling alive, not RTS-generic.`;
   const userContent = `Wallet: ${input.walletAddress}
-World: choppedTrees=${input.world.choppedTrees.length}, minedRocks=${input.world.minedRocks.length}, playerBuilds=${input.world.buildings.length}, parcelClaims=${input.world.parcelClaims.length}, coin=${input.world.inventory.coin}, communitySignal=${input.world.ecosystem?.communityActivity?.communitySignal ?? 0}, regenCadenceMultiplier=${input.world.ecosystem?.communityActivity?.regenCadenceMultiplier ?? 1}
+World: choppedTrees=${compact.counters.choppedTrees}, minedRocks=${compact.counters.minedRocks}, playerBuilds=${compact.counters.playerBuilds}, parcelClaims=${compact.counters.parcelClaims}, coin=${compact.counters.playerCoin}, communitySignal=${compact.ecosystem?.communityActivity?.communitySignal ?? 0}, regenCadenceMultiplier=${compact.ecosystem?.communityActivity?.regenCadenceMultiplier ?? 1}
 Zone snapshot:
-${zoneDigest(input.snapshot)}`;
+${zoneDigest(compact.snapshot)}`;
 
   try {
     const raw = await runAI(system, userContent);
-    return raw ? normalizeEarth(raw, fallback, communityCadenceMultiplier(input)) : fallback;
+    return raw ? normalizeEarth(raw, fallback, communityCadenceMultiplier(compact)) : fallback;
   } catch {
     return fallback;
   }
 }
 
 export async function runFaunaAgent(input: FaunaAgentRequest): Promise<FaunaAgentResponse> {
-  const fallback = fallbackFauna(input);
+  const compact = resolveNatureAgentSnapshot(input);
+  const fallback = fallbackFauna(compact);
   const system = `You are Agente Fauna, the AI steward of Aldenmoor's animal pressure.
 Return strict JSON with:
 {
@@ -244,9 +307,9 @@ Return strict JSON with:
 }
 You are tuning a living simulation, not writing flavor text. Fewer spawns and lower speed feel safer; higher values mean harsher wildlife pressure.`;
   const userContent = `Wallet: ${input.walletAddress}
-World: choppedTrees=${input.world.choppedTrees.length}, minedRocks=${input.world.minedRocks.length}, enemiesKilled=${input.world.enemiesKilled}, playerBuilds=${input.world.buildings.length}
+World: choppedTrees=${compact.counters.choppedTrees}, minedRocks=${compact.counters.minedRocks}, enemiesKilled=${compact.counters.enemiesKilled}, playerBuilds=${compact.counters.playerBuilds}
 Zone snapshot:
-${zoneDigest(input.snapshot)}`;
+${zoneDigest(compact.snapshot)}`;
 
   try {
     const raw = await runAI(system, userContent);

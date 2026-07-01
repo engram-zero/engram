@@ -1917,6 +1917,21 @@ lo deja como overflow agregado para no perder recursos. Wrappers legacy `deposit
 `withdrawResource` siguen funcionando apuntando al primer edificio viable. `tsc` limpio.
 **Commit:** _(este commit)_
 
+### 2026-06-30 · Payload compacto para agentes de naturaleza
+**Pedido (humano):** preparar el punto medio de auditoría: dejar de depender del `WorldState`
+completo para Earth/Fauna porque el payload crecerá con builds, parcelas, eventos y storage. No
+tocar `client-page.tsx` ni `Scene3D.tsx`; exponer helper para que Claude haga el swap.
+**Prompt sintetizado:** Crear `buildNatureAgentSnapshot(world, ecosystem)` con solo los campos que
+los agentes usan: snapshot zonal, contadores globales de presión ecológica, coin/enemies y memoria
+`ecosystem`. Adaptar `/api/earth-agent` y `/api/fauna-agent` para aceptar el payload compacto
+(`agentSnapshot`) sin romper el contrato legacy `world + snapshot`; internamente los agentes deben
+usar siempre el compacto. Documentar qué entra y qué se omite.
+**Qué se hizo:** nuevo tipo `NatureAgentSnapshot`/`NatureAgentWorldCounters`; `nature-agents.ts`
+exporta `buildNatureAgentSnapshot` y normaliza requests legacy/compactos; prompts y fallbacks usan
+contadores compactos en vez de leer el mundo completo. Las APIs aceptan `agentSnapshot` o fallback
+legacy. Comentario de contrato documenta que se omiten inventario completo, edificios/parcelas/eventos,
+items y memorias. `tsc` limpio. **Commit:** _(este commit)_
+
 ### 2026-06-30 · GUI de Aldric: vender madera dentro del panel (no separado)
 **Pedido (humano):** la venta de madera está separada del resto (traslape de forma vieja/nueva).
 **Qué se hizo:** quité el botón "Sell wood" de la fila de acciones (junto a Say/Leave) y puse un

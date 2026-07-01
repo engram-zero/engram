@@ -25,8 +25,10 @@ export async function POST(req: Request) {
   if (!isAddress(body.walletAddress)) {
     return NextResponse.json({ error: 'Invalid wallet address.' }, { status: 400 });
   }
-  if (!body.world || typeof body.world !== 'object' || !Array.isArray(body.snapshot)) {
-    return NextResponse.json({ error: 'Missing world or snapshot.' }, { status: 400 });
+  const hasCompact = body.agentSnapshot?.version === 'nature-agent-compact-v1' && Array.isArray(body.agentSnapshot.snapshot);
+  const hasLegacy = !!body.world && typeof body.world === 'object' && Array.isArray(body.snapshot);
+  if (!hasCompact && !hasLegacy) {
+    return NextResponse.json({ error: 'Missing nature agent snapshot.' }, { status: 400 });
   }
 
   const rl = reserve([`earth:${body.walletAddress.toLowerCase()}`, `ip:${clientIp(req)}`]);

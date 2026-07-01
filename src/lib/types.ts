@@ -566,10 +566,33 @@ export interface ForgeResponse {
   byo?: boolean;
 }
 
+export interface NatureAgentWorldCounters {
+  choppedTrees: number;
+  minedRocks: number;
+  playerBuilds: number;
+  parcelClaims: number;
+  playerCoin: number;
+  enemiesKilled: number;
+}
+
+export interface NatureAgentSnapshot {
+  /** Compact schema for Earth/Fauna APIs. Keep versioned so Claude can safely swap callers. */
+  version: 'nature-agent-compact-v1';
+  /** Zone-level ecological counts: this is what the agents reason over. */
+  snapshot: NatureZoneSnapshot[];
+  /** Small world counters used by fallback math and LLM prompt context. */
+  counters: NatureAgentWorldCounters;
+  /** Ecosystem memory/directives already persisted in 0G, without full WorldState payload. */
+  ecosystem?: EcosystemState;
+}
+
 export interface EarthAgentRequest {
   walletAddress: string;
-  world: WorldState;
-  snapshot: NatureZoneSnapshot[];
+  /** Preferred compact payload. If absent, API falls back to legacy world+snapshot. */
+  agentSnapshot?: NatureAgentSnapshot;
+  /** Legacy debug/back-compat path; client-page still sends this until Claude swaps. */
+  world?: WorldState;
+  snapshot?: NatureZoneSnapshot[];
   current?: EcosystemState;
 }
 
@@ -579,8 +602,9 @@ export interface EarthAgentResponse {
 
 export interface FaunaAgentRequest {
   walletAddress: string;
-  world: WorldState;
-  snapshot: NatureZoneSnapshot[];
+  agentSnapshot?: NatureAgentSnapshot;
+  world?: WorldState;
+  snapshot?: NatureZoneSnapshot[];
   current?: EcosystemState;
 }
 
