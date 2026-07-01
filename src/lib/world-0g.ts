@@ -1,6 +1,7 @@
 'use client';
 
 import type { NetworkType } from '@/app/providers';
+import { debugInfo, debugWarn } from '@/lib/debug-log';
 import { readBundle } from '@/lib/memory';
 import {
   localWorldPersistence,
@@ -34,7 +35,7 @@ export function createBundleWorldPersistence(networkType: NetworkType): WorldPer
         await localWorldPersistence.save(wallet, chosen);
         return chosen;
       } catch (error) {
-        console.warn('[engram] world load from 0G failed:', error);
+        debugWarn('[engram] world load from 0G failed:', error);
         return fallback;
       }
     },
@@ -42,7 +43,7 @@ export function createBundleWorldPersistence(networkType: NetworkType): WorldPer
     async save(wallet, state) {
       const world = normalizeWorldState(state);
       await localWorldPersistence.save(wallet, world);
-      console.info('[engram] world draft saved locally', {
+      debugInfo('[engram] world draft saved locally', {
         wallet,
         buildings: world.buildings.length,
       });

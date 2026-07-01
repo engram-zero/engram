@@ -16,6 +16,7 @@
 
 import { useSyncExternalStore } from 'react';
 import { biomeAt } from '@/lib/biome';
+import { debugWarn } from '@/lib/debug-log';
 import { computeCommunityActivity } from '@/lib/ecosystem';
 import { generateParcelLootPack, normalizeParcelLootPack } from '@/lib/parcel-resources';
 import { BLOCK_SCALE_MAX, BLOCK_SCALE_MIN, BLOCK_UNIT, type AiItem, type AiItemListing, type AiItemStat, type AiItemType, type AldricStandardItemId, type AldricStandardMarketItem, type BiomeId, type CommunityActivityState, type DeathPenaltyState, type DemonSiegeEvent, type EcosystemState, type OreType, type ParcelClaim, type ParcelRentEvent, type ParcelResourceNode, type ParcelResourceRarity, type RaidEvent, type RepairEvent, type ResourceType, type StoredResourceType, type TreeGrowthStage, type TreeGrowthState, type WalletRelation, type WorldState, type Building, type BuildingType } from '@/lib/types';
@@ -1256,7 +1257,7 @@ async function commit(next: WorldState) {
     try {
       await persistence.save(wallet, state);
     } catch (e) {
-      console.warn('[engram] world save failed:', e);
+      debugWarn('[engram] world save failed:', e);
     }
   }
 }

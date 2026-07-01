@@ -2,6 +2,7 @@
 
 import { Contract, JsonRpcProvider, ZeroHash, getAddress, isAddress, isHexString } from 'ethers';
 import { getProvider, getSigner } from '@/lib/0g/fees';
+import { debugWarn } from '@/lib/debug-log';
 import { ENGRAM_REGISTRY_ABI } from './abi';
 
 const ZG_GALILEO_CHAIN_ID = 16602;
@@ -70,7 +71,7 @@ export async function readRootOnchain(wallet: string, l1Rpc: string): Promise<st
     const root = (await contract.rootOf(wallet)) as string;
     return root === ZeroHash ? null : root;
   } catch (error) {
-    console.warn('[engram] registry root read failed:', error);
+    debugWarn('[engram] registry root read failed:', error);
     return null;
   }
 }

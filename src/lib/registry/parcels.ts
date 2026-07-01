@@ -2,6 +2,7 @@
 
 import { Contract, JsonRpcProvider, ZeroAddress, ZeroHash, encodeBytes32String, getAddress, isAddress } from 'ethers';
 import { getProvider, getSigner } from '@/lib/0g/fees';
+import { debugWarn } from '@/lib/debug-log';
 import { PARCEL_REGISTRY_ABI } from './parcel-abi';
 
 const ZG_GALILEO_CHAIN_ID_HEX = '0x40da';
@@ -68,7 +69,7 @@ export async function readParcelOwnerOnchain(parcelId: string, l1Rpc: string): P
     const owner = String(await contract.ownerOf(parcelIdToBytes32(parcelId)));
     return owner === ZeroAddress ? null : getAddress(owner);
   } catch (error) {
-    console.warn('[engram] parcel owner read failed:', error);
+    debugWarn('[engram] parcel owner read failed:', error);
     return null;
   }
 }

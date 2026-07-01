@@ -75,6 +75,12 @@ conversation to 0G. Close the tab, come back — the NPC remembers.
 > Without `ANTHROPIC_API_KEY`, NPCs use a deterministic fallback so the UI is still
 > clickable. Without `ENGRAM_SPONSOR_KEY`, dialogue works but saving to 0G is disabled.
 
+### Debug logs
+
+Production logging is quiet by default. Set `NEXT_PUBLIC_ENGRAM_DEBUG=1` locally
+or in a preview deployment to enable verbose diagnostics from API/lib/0G helpers;
+leave it blank for the public demo.
+
 ## For AI assistants & contributors
 
 **The task backlog lives in [`docs/ENGRAM_PROMPTS.md`](docs/ENGRAM_PROMPTS.md).** It is

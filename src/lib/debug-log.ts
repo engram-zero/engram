@@ -1,5 +1,7 @@
 type LogFn = (...args: unknown[]) => void;
 
+// Production logging is quiet by default. Set NEXT_PUBLIC_ENGRAM_DEBUG=1
+// (or ENGRAM_DEBUG=1 for server-only contexts) to enable diagnostic logs.
 function debugEnabled(): boolean {
   const raw = process.env.NEXT_PUBLIC_ENGRAM_DEBUG ?? process.env.ENGRAM_DEBUG;
   return raw === '1' || raw?.toLowerCase() === 'true';

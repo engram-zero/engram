@@ -1972,3 +1972,16 @@ prompts/fallbacks internos ya usan contadores/zonas compactos. tsc limpio.
 buildNatureAgentSnapshot(world, world.ecosystem) }` en vez del WorldState completo → menos tokens/
 latencia. Quité `computeNatureSnapshot`/`world`/`current` del envío. `tsc` limpio; solo client-page.tsx.
 **Commit:** _(este commit)_
+
+### 2026-07-01 · Higiene de logs en producción
+**Pedido (humano):** implementar el punto "Bajo" de auditoría: silenciar logs diagnósticos de
+lib/API/0G en producción con `debugLog`, sin tocar `Scene3D.tsx` ni `client-page.tsx`.
+**Prompt sintetizado:** Reutilizar el helper `debug-log.ts` (`NEXT_PUBLIC_ENGRAM_DEBUG=1` /
+`ENGRAM_DEBUG=1`) para que los logs de diagnóstico solo salgan en debug. Convertir `console.warn`/
+`console.info` ruidosos de world persistence y lecturas opcionales de registry a `debugWarn`/
+`debugInfo`; conservar `console.error` de fallos reales en API. Documentar la env var en `.env.example`
+y README.
+**Qué se hizo:** `world.ts`, `world-0g.ts`, `registry.ts` y `parcels.ts` ya no emiten warnings/info
+diagnósticos por defecto; `debug-log.ts` documenta el gate; `.env.example` y README explican cómo
+activar `NEXT_PUBLIC_ENGRAM_DEBUG=1`. Búsqueda en `src/lib`/`src/app/api` limpia para
+`console.log/info/warn/debug` fuera del helper. **Commit:** _(este commit)_
