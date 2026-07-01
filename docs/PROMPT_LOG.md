@@ -2045,3 +2045,14 @@ textura a ángulo rasante (mipmaps) y (b) la rampa de niebla al negro. Fixes: `a
 4 texturas de bioma (nitidez rasante); la niebla nocturna funde a azul MUY oscuro (no negro puro) y
 empieza más lejos (near 70→120, far 220→260). Sigo con Lambert (mate). `tsc` limpio; solo Scene3D.tsx.
 **Commit:** _(este commit)_
+
+### 2026-06-30 · Revertir material del piso a Standard + demonios sí atacan
+**Pedido (humano):** el piso sigue espejo/oscuro (TODO el piso, textura perdida); los demonios no
+hacen daño.
+**Piso:** como es TODO el piso (no rasante) + oscuro, probablemente Lambert rompió la inyección del
+shader (textura estirada/lisa). Revertí a `MeshStandardMaterial` (cuya inyección SÍ funcionaba de
+día) con roughness 1, metalness 0, envMapIntensity 0 (mate, sin reflejo); conservo anisotropy 16 +
+niebla suave. **Demonios:** perseguían al objetivo MÁS CERCANO (NPC/edificio/jugador) → con un muro/
+casa cerca atacaban el edificio, no a ti. Añadí override: si el demonio está a <1.8 del jugador, lo
+ataca a ÉL; amplié el rango de golpe de 1.4 a 1.8. `tsc` limpio; solo Scene3D.tsx. (KNOWN_ISSUES #2.)
+**Commit:** _(este commit)_

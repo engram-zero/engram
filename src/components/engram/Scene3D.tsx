@@ -1377,8 +1377,8 @@ const BIOME_TILE = 6.0; // world units per texture repeat
 // One shared biome-blend material for the terrain AND parcel ground, so a parcel's
 // soil blends by world position exactly like the surroundings (no green patch on
 // snow/desert at biome borders). Lazily built once.
-let _biomeMat: THREE.MeshLambertMaterial | null = null;
-function getBiomeTerrainMaterial(): THREE.MeshLambertMaterial {
+let _biomeMat: THREE.MeshStandardMaterial | null = null;
+function getBiomeTerrainMaterial(): THREE.MeshStandardMaterial {
   if (_biomeMat) return _biomeMat;
   const grass = getTexture('terrain_grass', {});
   const sand = getTexture('terrain_sand', {});
@@ -1391,8 +1391,10 @@ function getBiomeTerrainMaterial(): THREE.MeshLambertMaterial {
     t.anisotropy = 16;
     t.needsUpdate = true;
   }
-  // Lambert = pure diffuse, no specular (terrain wants matte shading).
-  const m = new THREE.MeshLambertMaterial({ color: '#ffffff', map: grass ?? undefined });
+  // Standard material (its onBeforeCompile injection is what the daytime biome blend
+  // relied on). roughness 1 + metalness 0 = matte; envMapIntensity 0 so it can't pick
+  // up any scene reflection and look glossy at night.
+  const m = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 1, metalness: 0, envMapIntensity: 0, map: grass ?? undefined });
   m.onBeforeCompile = (shader) => {
     shader.uniforms.uSand = { value: sand };
     shader.uniforms.uSnow = { value: snow };
@@ -2532,6 +2534,13 @@ function Enemy({ id, onSiege }: { id: string; onSiege?: (event: DemonSiegeEvent,
       }
     }
 
+    // A demon right next to the player attacks the PLAYER, even if a building/NPC is
+    // marginally closer — otherwise it looks like it ignores you while you stand there.
+    if (!dynamicPlayerState.dead) {
+      const pDist = Math.hypot(dynamicPlayerState.x - dyn.x, dynamicPlayerState.z - dyn.z);
+      if (pDist < 1.8) { closestId = 'player'; closestDist = pDist; }
+    }
+
     let targetX = 0;
     let targetZ = 0;
     let isMoving = false;
@@ -2541,7 +2550,7 @@ function Enemy({ id, onSiege }: { id: string; onSiege?: (event: DemonSiegeEvent,
       if (closestId === 'player') {
         targetX = dynamicPlayerState.x;
         targetZ = dynamicPlayerState.z;
-        if (closestDist < 1.4) {
+        if (closestDist < 1.8) {
           dyn.attackTimer -= dt;
           if (dyn.attackTimer <= 0) {
             dynamicPlayerState.hp -= 1; // Enemy DPS — low because losing HP now costs you (Prompt 30)
