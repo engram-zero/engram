@@ -21,6 +21,10 @@ precise, and let one strong path carry the video.
 
 ## Recording tools (URL modes)
 
+- `?intro` → **cinematic opening fly-in**: a scripted aerial descent that orbits and pushes in
+  toward the village (Age-of-Mythology style), ~13s, HUD + page chrome hidden, no wallet needed.
+  Open `engram-bay.vercel.app/?intro`, screen-record the first ~13s. Combine with `?time=`
+  (e.g. `?intro&time=day`) to pin the light.
 - `?time=day` → fixed midday (sun high). `?time=night` → fixed night (moon, torches, crickets).
   Both **keep the HUD** (unlike `?shot`, which hides all UI for clean thumbnails).
 - `?day=1` is different (flat debug lighting) — for the video use `?time=`.

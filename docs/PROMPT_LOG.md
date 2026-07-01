@@ -2071,3 +2071,13 @@ crudo listo para grabar + notas de precisión. Sin cambios de código.
 estrofa) + notas de uso (Stability 35–45%, grabar por estrofa, tags = pistas). Se conserva la versión
 plana para v2/Turbo. Sin cambios de código.
 **Commit:** _(este commit)_
+
+### 2026-06-30 · Toma cinematográfica de intro (?intro) — fly-in aéreo a la aldea
+**Pedido (humano):** ¿se puede una toma de introducción, un acercamiento aéreo a la aldea tipo Age
+of Mythology?
+**Qué se hizo:** nuevo componente `CinematicIntro` en Scene3D: cámara en perspectiva con descenso +
+órbita guiados (easeInOutCubic, ~13s) hacia el centro de la aldea (CAMPFIRE). Activado por `?intro`:
+oculta el HUD (via photoMode) y el chrome de la página (client-page photoMode incluye ?intro, saltando
+el gate de conexión → no requiere wallet), fija una luz de mañana suave (o ?time= si se da), y suprime
+los rigs fp/aerial mientras corre. Documentado en `docs/VIDEO_SCRIPT.md` (abrir /?intro, grabar ~13s).
+`tsc` limpio. **Commit:** _(este commit)_

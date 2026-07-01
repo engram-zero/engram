@@ -8,7 +8,7 @@
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { Stars, Sky, Clouds, Cloud, Html, ContactShadows, PointerLockControls, OrthographicCamera, KeyboardControls, useKeyboardControls } from '@react-three/drei';
+import { Stars, Sky, Clouds, Cloud, Html, ContactShadows, PointerLockControls, OrthographicCamera, PerspectiveCamera, KeyboardControls, useKeyboardControls } from '@react-three/drei';
 import * as THREE from 'three';
 import { useNetwork, type NetworkType } from '@/app/providers';
 import { NPC_LIST } from '@/lib/npcs';
@@ -780,6 +780,29 @@ const GoldIcon = () => <NuggetIcon fill="#d8a93a" stroke="#ffe39a" />;
 // ─── Camera rig ───────────────────────────────────────────────────────────────
 // Smoothly eases the camera toward whichever NPC is active; returns to an
 // overview shot when none is selected.
+
+// Cinematic intro (?intro): a scripted aerial fly-in that descends and orbits toward
+// the village (Age-of-Mythology style), for a title/opening shot you screen-record.
+// Takes over with its own perspective camera; the HUD is hidden via photo mode.
+function CinematicIntro({ durationS = 13 }: { durationS?: number }) {
+  const camRef = useRef<THREE.PerspectiveCamera>(null);
+  const startRef = useRef<number | null>(null);
+  useFrame((state) => {
+    const cam = camRef.current;
+    if (!cam) return;
+    if (startRef.current === null) startRef.current = state.clock.elapsedTime;
+    const raw = Math.min(1, (state.clock.elapsedTime - startRef.current) / durationS);
+    // easeInOutCubic — slow start, gentle settle.
+    const t = raw < 0.5 ? 4 * raw * raw * raw : 1 - Math.pow(-2 * raw + 2, 3) / 2;
+    const angle = -0.35 + t * 0.62;   // slow orbit around the village
+    const radius = 132 - t * 94;      // 132 → 38 (push in)
+    const height = 84 - t * 56;       // 84 → 28 (descend)
+    cam.position.set(Math.sin(angle) * radius, height, Math.cos(angle) * radius);
+    cam.lookAt(CAMPFIRE.x, 5, CAMPFIRE.z); // frame the village centre
+    cam.updateProjectionMatrix();
+  });
+  return <PerspectiveCamera ref={camRef} makeDefault fov={40} near={0.5} far={2500} position={[Math.sin(-0.35) * 132, 84, Math.cos(-0.35) * 132]} />;
+}
 
 function CameraRig({ active }: { active: NPCName | null }) {
   const { camera } = useThree();
@@ -4737,7 +4760,11 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     const h = parseFloat(sp.get('shot') || '');
     return { hour: Number.isFinite(h) ? Math.max(0, Math.min(24, h)) : 18.6 };
   }, []);
-  const photoMode = !!photo;
+  // Cinematic intro fly-in (?intro): a scripted aerial descent toward the village for
+  // an opening shot. Hides the HUD (via photo mode) and pins a soft morning light,
+  // unless ?time= overrides it.
+  const introMode = useMemo(() => typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('intro'), []);
+  const photoMode = !!photo || introMode;
   // Demo/recording: pin a fixed time of day (sun or moon held in place) WITHOUT
   // hiding the HUD, so a video can show day and night scenes on demand.
   //   ?time=day   → bright midday (sun high)
@@ -4762,7 +4789,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     if (params.has('shot')) return false;
     return params.get('day') === '1';
   }, []);
-  const dn = useMemo(() => computeDayNight(forceBrightTestLighting ? 12 : photoMode ? photo!.hour : pinnedHour ?? localHour), [forceBrightTestLighting, localHour, photoMode, photo, pinnedHour]);
+  const dn = useMemo(() => computeDayNight(forceBrightTestLighting ? 12 : photo ? photo.hour : pinnedHour ?? (introMode ? 8.5 : localHour)), [forceBrightTestLighting, localHour, photo, pinnedHour, introMode]);
 
   // Distance-based ambience: a light tick reads the live player position and sets
   // each loop's volume from the nearest emitter (see AUDIO_EMITTERS). Runs off a
@@ -5717,10 +5744,13 @@ export default function Scene3D({ memories = null, active = null, talking = fals
 
           {/* Cinematic rig on the title/loading screen; first-person controls
               once Aldenmoor is explorable. */}
-          {!explorable && <CameraRig active={active} />}
+          {!explorable && !introMode && <CameraRig active={active} />}
+          {/* Cinematic opening fly-in (?intro) — takes over the camera; the normal
+              rigs below are suppressed while it runs. */}
+          {introMode && <CinematicIntro />}
           {/* Player stays mounted across dialogues/views (movement gated by
               `enabled`) so switching back resumes where you stood, not at spawn. */}
-          {fpExploring && (
+          {fpExploring && !introMode && (
             <Player
               posRef={posRef}
               enabled={true}
@@ -5736,7 +5766,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
               memories={memories}
             />
           )}
-          {fpExploring && !isTouchDevice && (
+          {fpExploring && !isTouchDevice && !introMode && (
             <PointerLockControls
               pointerSpeed={0.55}
               minPolarAngle={0.22 * Math.PI}
@@ -5745,7 +5775,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
               onUnlock={() => setLocked(false)}
             />
           )}
-          {aerialExploring && (
+          {aerialExploring && !introMode && (
             <>
               <AerialRig
                 enabled={aerialExploring}

@@ -263,10 +263,11 @@ function Game() {
   // a player enters the village (judges/newcomers grok it in ~15s). Set from
   // localStorage in an effect to avoid an SSR hydration mismatch.
   const [showIntro, setShowIntro] = useState(false);
-  // Photo mode (?shot): hide the page chrome too (header/banners) so the scene
-  // can be captured clean for the showcase thumbnail. Scene3D reads the same param.
+  // Photo/cinematic mode: hide the page chrome (header/banners) and skip the connect
+  // gate so the scene captures clean. ?shot = still thumbnail; ?intro = cinematic
+  // fly-in over the village (Scene3D animates the camera). Both read the same flag.
   const photoMode = useMemo(
-    () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('shot'),
+    () => typeof window !== 'undefined' && (new URLSearchParams(window.location.search).has('shot') || new URLSearchParams(window.location.search).has('intro')),
     []
   );
 
