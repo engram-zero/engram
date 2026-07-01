@@ -2034,3 +2034,14 @@ adiós espejo, se ve la textura del bioma. Además subí el piso nocturno en `co
 (`visible` 0.74→0.82; ambIntensity low 2.1→2.35; hemi 1.9→2.05; dirIntensity low 1.5→1.95) para que
 la noche sea legible sin perder el mood. `tsc` limpio; solo Scene3D.tsx. (KNOWN_ISSUES #1 atendido.)
 **Commit:** _(este commit)_
+
+### 2026-06-30 · Espejo del piso (segundo intento) + guion de video en inglés (ajustes de Codex)
+**Pedido (humano):** el piso sigue viéndose espejo de noche; opinión sobre la crítica de Codex al guion.
+**Guion:** reescribí `docs/VIDEO_SCRIPT.md` en inglés incorporando a Codex: Order A "lean" como THE
+script (6 beats), guía de lenguaje (memoria = "stored on 0G", "on-chain" solo para parcelas), cierre
+filoso, abrir+cerrar con la tesis, secundarias como B-roll opcional.
+**Espejo (re-diagnóstico):** como pasaba con Standard Y Lambert, NO es specular. Es (a) blur de
+textura a ángulo rasante (mipmaps) y (b) la rampa de niebla al negro. Fixes: `anisotropy=16` en las
+4 texturas de bioma (nitidez rasante); la niebla nocturna funde a azul MUY oscuro (no negro puro) y
+empieza más lejos (near 70→120, far 220→260). Sigo con Lambert (mate). `tsc` limpio; solo Scene3D.tsx.
+**Commit:** _(este commit)_

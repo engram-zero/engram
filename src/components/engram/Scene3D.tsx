@@ -1384,10 +1384,14 @@ function getBiomeTerrainMaterial(): THREE.MeshLambertMaterial {
   const sand = getTexture('terrain_sand', {});
   const snow = getTexture('terrain_snow', {});
   const dry = getTexture('terrain_dry', {});
-  for (const t of [grass, sand, snow, dry]) if (t) t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  // Lambert (pure diffuse, NO specular) — MeshStandardMaterial's grazing-angle
-  // fresnel specular made the night ground look like a dark mirror/glass. Terrain
-  // wants matte shading anyway.
+  for (const t of [grass, sand, snow, dry]) if (t) {
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    // High anisotropy keeps the ground textured at grazing angles instead of
+    // blurring to a smooth "mirror" sheet as you look across it.
+    t.anisotropy = 16;
+    t.needsUpdate = true;
+  }
+  // Lambert = pure diffuse, no specular (terrain wants matte shading).
   const m = new THREE.MeshLambertMaterial({ color: '#ffffff', map: grass ?? undefined });
   m.onBeforeCompile = (shader) => {
     shader.uniforms.uSand = { value: sand };
@@ -4408,8 +4412,10 @@ export function computeDayNight(hour: number): DayNight {
     sunPos: [sunX * 90, sunY * 80, -55], // drives the <Sky> shader (dark when sunY<0)
     // Sky + horizon fade to PURE BLACK at night (driven by daylight, not the
     // lit-floor `visible`, so there's no blue/grey night sky) and back to day blue.
-    bg: mixColor('#000000', '#a8caee', daylight),
-    fog: mixColor('#000000', '#b8d0e8', daylight),
+    bg: mixColor('#05070c', '#a8caee', daylight),
+    // Night fog fades to a very dark blue (not pure black) so the ground doesn't
+    // read as a glossy black-to-bright ramp ("mirror") as it recedes.
+    fog: mixColor('#0b111c', '#b8d0e8', daylight),
     ambIntensity: mix(2.35, 2.55, visible),
     ambColor: mixColor('#dfe6f2', '#fffaf0', visible), // cool night fill → warm day
     hemiSky: mixColor('#aebbd6', '#eaf2ff', visible),
@@ -5658,7 +5664,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
           onPointerMissed={() => setSelectedBuilding(null)}
         >
           <color attach="background" args={[forceBrightTestLighting ? '#a8caee' : dn.bg]} />
-          {!forceBrightTestLighting && <fog attach="fog" args={[dn.fog, 70, 220]} />}
+          {!forceBrightTestLighting && <fog attach="fog" args={[dn.fog, 120, 260]} />}
 
           {/* Skydome. Bright mode: a fixed, low afternoon sun so the disc is clearly
               visible (local's old defect was a missing sun) while the scene stays
