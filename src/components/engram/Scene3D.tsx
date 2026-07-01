@@ -83,6 +83,9 @@ import {
   recordEnemyKill,
   setWalletRelation,
   withdrawResource,
+  depositResourceToBuilding,
+  withdrawResourceFromBuilding,
+  buildingStorageView,
   STORAGE_RESOURCES,
   BUILD_COST,
   BUILD_RADIUS,
@@ -4879,18 +4882,20 @@ export default function Scene3D({ memories = null, active = null, talking = fals
   // player is at a structure they built and labelled like a warehouse. Proximity
   // is sampled off a timer (works in both views; `dynamicPlayerState` is updated
   // every frame by Player) and E (or clicking the building's card) opens it.
-  const [storageOpen, setStorageOpen] = useState(false);
-  const [nearWarehouse, setNearWarehouse] = useState(false);
+  // Any of your buildings stores resources (capacity from its footprint). The panel
+  // opens for the building you're standing at (E) or the one you select in the card.
+  const [storageBuildingIndex, setStorageBuildingIndex] = useState<number | null>(null);
+  const [nearBuildingIndex, setNearBuildingIndex] = useState<number | null>(null);
   useEffect(() => {
-    if (!exploring) { setNearWarehouse(false); setStorageOpen(false); return; }
+    if (!exploring) { setNearBuildingIndex(null); setStorageBuildingIndex(null); return; }
     const id = window.setInterval(() => {
       const px = dynamicPlayerState.x, pz = dynamicPlayerState.z;
-      let near = false;
-      for (const b of world.buildings) {
-        if (!isWarehouseLabel(b.clusterLabel)) continue;
-        if (Math.hypot(px - b.x, pz - b.z) <= WAREHOUSE_RANGE) { near = true; break; }
-      }
-      setNearWarehouse(near);
+      let best = -1, bestD = WAREHOUSE_RANGE;
+      world.buildings.forEach((b, i) => {
+        const d = Math.hypot(px - b.x, pz - b.z);
+        if (d <= bestD) { bestD = d; best = i; }
+      });
+      setNearBuildingIndex(best >= 0 ? best : null);
     }, 250);
     return () => window.clearInterval(id);
   }, [exploring, world.buildings]);
@@ -4898,15 +4903,15 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     if (!exploring) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.code !== 'KeyE') return;
-      if (storageOpen) { setStorageOpen(false); return; }
-      if (nearWarehouse) setStorageOpen(true);
+      if (storageBuildingIndex !== null) { setStorageBuildingIndex(null); return; }
+      if (nearBuildingIndex !== null) setStorageBuildingIndex(nearBuildingIndex);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [exploring, nearWarehouse, storageOpen]);
+  }, [exploring, nearBuildingIndex, storageBuildingIndex]);
 
-  const moveStorage = useCallback((type: StoredResourceType, direction: 'deposit' | 'withdraw', amount: number) => {
-    const result = direction === 'deposit' ? depositResource(type, amount) : withdrawResource(type, amount);
+  const moveStorage = useCallback((index: number, type: StoredResourceType, direction: 'deposit' | 'withdraw', amount: number) => {
+    const result = direction === 'deposit' ? depositResourceToBuilding(index, type, amount) : withdrawResourceFromBuilding(index, type, amount);
     showToolFeedback({
       text: result.ok
         ? `${direction === 'deposit' ? 'Stored' : 'Withdrew'} ${result.moved} ${RESOURCE_LABEL[type]}.`
@@ -5779,48 +5784,51 @@ export default function Scene3D({ memories = null, active = null, talking = fals
             )}
           </div>
 
-          {/* 0G warehouse, gated behind a player-built warehouse structure. A hint
-              appears when you stand at one; E (or the building's card) opens the
-              panel where you stockpile resources beyond your carry caps onto 0G. */}
-          {nearWarehouse && !storageOpen && (
+          {/* Any of your buildings stores resources (capacity from its footprint). A
+              hint appears when you stand at one; E (or its card) opens the panel where
+              you stockpile beyond your carry caps onto 0G. */}
+          {nearBuildingIndex !== null && storageBuildingIndex === null && (
             <div className="pointer-events-none absolute left-1/2 bottom-28 z-20 -translate-x-1/2 rounded-md border border-[#d6b84a]/70 bg-black/70 px-3 py-1.5 text-sm text-[#f4e8d0] shadow-lg">
-              Press <strong className="text-[#d6b84a]">E</strong> · 0G Warehouse
+              Press <strong className="text-[#d6b84a]">E</strong> · Store in {world.buildings[nearBuildingIndex]?.clusterLabel ?? world.buildings[nearBuildingIndex]?.type ?? 'building'}
             </div>
           )}
-          {storageOpen && (
-            <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/50 p-4" onClick={() => setStorageOpen(false)}>
-              <div className="w-72 rounded-xl border-2 border-[#c79a3a] bg-gradient-to-b from-[#241d12] to-[#15110a] p-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-                <div className="mb-2 flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-[#d6b84a]">
-                    <span className="text-lg">📦</span>
-                    <span className="font-semibold tracking-[0.06em]">0G Warehouse</span>
+          {storageBuildingIndex !== null && (() => {
+            const view = buildingStorageView(storageBuildingIndex);
+            return (
+              <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/50 p-4" onClick={() => setStorageBuildingIndex(null)}>
+                <div className="w-72 rounded-xl border-2 border-[#c79a3a] bg-gradient-to-b from-[#241d12] to-[#15110a] p-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                  <div className="mb-2 flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-[#d6b84a]">
+                      <span className="text-lg">📦</span>
+                      <span className="font-semibold tracking-[0.06em] capitalize">{view.clusterLabel ?? world.buildings[storageBuildingIndex]?.type ?? 'Storage'}</span>
+                    </div>
+                    <button onClick={() => setStorageBuildingIndex(null)} aria-label="Close" className="px-1 text-[#f4e8d0]/60 hover:text-[#f4e8d0]">✕</button>
                   </div>
-                  <button onClick={() => setStorageOpen(false)} aria-label="Close" className="px-1 text-[#f4e8d0]/60 hover:text-[#f4e8d0]">✕</button>
+                  <p className="mb-3 text-[11px] leading-snug text-[#f4e8d0]/60">Stockpile beyond your carry caps · <strong>{Math.round(view.used)}/{view.capacity}</strong> used · persists to 0G on save.</p>
+                  {STORAGE_RESOURCES.map((type) => (
+                    <div key={type} className="mb-1.5 grid grid-cols-[1fr_auto_auto] items-center gap-1.5 text-sm">
+                      <span>{RESOURCE_LABEL[type]}: <strong>{Math.round(view.contents[type] * 10) / 10}</strong></span>
+                      <button
+                        onClick={() => moveStorage(storageBuildingIndex, type, 'deposit', world.inventory[type])}
+                        disabled={world.inventory[type] <= 0 || view.available <= 0}
+                        className="rounded border border-[#6a5832] px-2 py-0.5 text-[#f4e8d0]/85 hover:border-[#d6b84a] disabled:opacity-35"
+                        title={view.available <= 0 ? 'Building full' : `Deposit all ${RESOURCE_LABEL[type]}`}
+                      >
+                        Deposit
+                      </button>
+                      <button
+                        onClick={() => moveStorage(storageBuildingIndex, type, 'withdraw', 10)}
+                        disabled={view.contents[type] <= 0}
+                        className="rounded border border-[#6a5832] px-2 py-0.5 text-[#f4e8d0]/85 hover:border-[#d6b84a] disabled:opacity-35"
+                      >
+                        +10
+                      </button>
+                    </div>
+                  ))}
                 </div>
-                <p className="mb-3 text-[11px] leading-snug text-[#f4e8d0]/60">Stockpile beyond your carry caps. Stored amounts persist to your 0G world bundle on save.</p>
-                {STORAGE_RESOURCES.map((type) => (
-                  <div key={type} className="mb-1.5 grid grid-cols-[1fr_auto_auto] items-center gap-1.5 text-sm">
-                    <span>{RESOURCE_LABEL[type]}: <strong>{Math.round(world.storage[type] * 10) / 10}</strong></span>
-                    <button
-                      onClick={() => moveStorage(type, 'deposit', world.inventory[type])}
-                      disabled={world.inventory[type] <= 0}
-                      className="rounded border border-[#6a5832] px-2 py-0.5 text-[#f4e8d0]/85 hover:border-[#d6b84a] disabled:opacity-35"
-                      title={`Deposit all ${RESOURCE_LABEL[type]}`}
-                    >
-                      Deposit
-                    </button>
-                    <button
-                      onClick={() => moveStorage(type, 'withdraw', 10)}
-                      disabled={world.storage[type] <= 0}
-                      className="rounded border border-[#6a5832] px-2 py-0.5 text-[#f4e8d0]/85 hover:border-[#d6b84a] disabled:opacity-35"
-                    >
-                      +10
-                    </button>
-                  </div>
-                ))}
               </div>
-            </div>
-          )}
+            );
+          })()}
           <button
             onClick={switchView}
             className="absolute top-20 right-4 z-30 rounded-md border border-[#5a4a28] bg-black/50 px-3 py-1.5 text-sm text-[#f4e8d0] hover:border-[#d6b84a]"
@@ -5916,8 +5924,8 @@ export default function Scene3D({ memories = null, active = null, talking = fals
                       </span>
                     </div>
                     <div className="flex flex-col gap-1">
-                      {isOwn && isWarehouseLabel(sel.clusterLabel) && (
-                        <button type="button" onClick={() => { setStorageOpen(true); setSelectedBuilding(null); }} className="rounded border border-[#c79a3a] bg-[#241d12]/80 px-2 py-1.5 text-left hover:border-[#d6b84a]">📦 Open warehouse</button>
+                      {isOwn && sel.scope === 'own' && (
+                        <button type="button" onClick={() => { setStorageBuildingIndex(sel.index); setSelectedBuilding(null); }} className="rounded border border-[#c79a3a] bg-[#241d12]/80 px-2 py-1.5 text-left hover:border-[#d6b84a]">📦 Open storage</button>
                       )}
                       {canRepair && (
                         <button type="button" onClick={() => act(repairSel)} className="rounded border border-[#6a8a4a] bg-[#1a2410]/70 px-2 py-1.5 text-left hover:border-[#8fd06a]">🧰 Repair{isOwn ? ` (${REPAIR_WOOD_COST} wood)` : ' (ally)'}</button>

@@ -1935,3 +1935,15 @@ más grande). Se posicionan en el suelo (getHeightAt por nodo), se cosechan al c
 (✨ Legendary / ★ Rare). La colisión (`parcelLootColliders`) usa los mismos nodos (y se memoiza con
 `depletedParcelResources` en las keys). Quité el `parcelResourceNodes` viejo. `tsc` limpio; solo Scene3D.tsx.
 **Commit:** _(este commit)_
+
+### 2026-06-30 · Cablear almacén por edificio (backend de Codex Prompt 36)
+**Pedido (humano):** ver el trabajo de Codex (almacén en cualquier edificio) y continuar el mío (UI).
+**Revisión de Codex (0fd3b60):** aprobado — `Building.storage`, capacidad por huella, suma por cluster,
+`buildingStorageView/depositResourceToBuilding/withdrawResourceFromBuilding`, migración de storage
+legacy. tsc limpio integrado.
+**Qué hice (UI, Scene3D):** el panel de almacén ya no está gateado por `isWarehouseLabel`; ahora
+**cualquier edificio propio** almacena. La proximidad detecta el **edificio más cercano** (hint
+"Press E · Store in <label>"); E abre su panel; también hay "📦 Open storage" en la tarjeta de
+selección (aérea). El modal muestra `used/capacity` y hace deposit/withdraw **a ese edificio**
+(`depositResourceToBuilding`/`withdrawResourceFromBuilding`). `tsc` limpio; solo Scene3D.tsx.
+**Commit:** _(este commit)_
