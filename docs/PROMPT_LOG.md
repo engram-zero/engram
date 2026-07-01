@@ -2063,3 +2063,11 @@ ataca a ÉL; amplié el rango de golpe de 1.4 a 1.8. `tsc` limpio; solo Scene3D.
 "world state", Aldric, on-chain solo en land, cierre "living world that remembers"). Bloque de texto
 crudo listo para grabar + notas de precisión. Sin cambios de código.
 **Commit:** _(este commit)_
+
+### 2026-06-30 · Guion de video: variante con audio tags de ElevenLabs v3
+**Pedido (humano):** usar ElevenLabs v3; agregar tags de entonación al script.
+**Qué se hizo:** agregué a `docs/VIDEO_SCRIPT.md` una versión del voiceover con audio tags v3
+(`[serious]`, `[whispers]`, `[warm]`, `[proud]`, `[awe]`, `[building intensity]`, etc., un tag por
+estrofa) + notas de uso (Stability 35–45%, grabar por estrofa, tags = pistas). Se conserva la versión
+plana para v2/Turbo. Sin cambios de código.
+**Commit:** _(este commit)_

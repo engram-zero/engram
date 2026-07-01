@@ -97,6 +97,43 @@ It's a living world that remembers — and it lives on 0G.
 > hash, the build, ParcelRegistry, Treasury/Memory). Optional read: "and *the* AI builds it" flows
 > slightly better out loud.
 
+### ElevenLabs v3 version (audio tags)
+
+For **Eleven v3 (alpha)** — the tags in `[]` cue intonation. Use Stability ~35–45%, Style moderate,
+and record stanza by stanza. Tags are *cues*, not commands; if one is ignored, the punctuation
+(— …) and line breaks carry it. Safest tags: `[whispers] [serious] [curious] [excited] [sighs]`.
+
+```
+[serious] Every game world forgets you the moment you leave.
+[whispers] Not this one.
+
+[warm] This is Aldenmoor — and here, your story is yours.
+[confident] It lives on 0G.
+
+[curious] I connect my wallet… and step into a world that remembers.
+
+[warm] I talk to Sable — with my voice — and she remembers me.
+[sincere] Our history, our deals — loaded from 0G Storage.
+
+[determined] I chop, I mine, I gather… and when I save, my world state is written to 0G.
+[proud] It's mine.
+
+[amused] I haggle with Aldric — and he remembers the bargain.
+
+[awe] From above, I describe what I want… and the AI builds it.
+[proud] My creation, saved to 0G.
+
+[confident] I claim new land — and the map itself grows, parcel by parcel, owned on-chain.
+
+[building intensity] Memory. Land. Economy. Creations.
+[emphatic] All of it becomes player-owned state.
+
+[resolute] Engram isn't just an RPG with AI characters.
+[confident] It's a living world that remembers — and it lives on 0G.
+```
+
+> For **v2 / Turbo** use the plain (untagged) block above — those models READ `[tags]` aloud.
+
 ## Alternative orders (if you want a different feel)
 
 - **Order B — "0G first"** (technical judges): open on claim land / on-chain, then memory, build,
