@@ -2056,3 +2056,10 @@ niebla suave. **Demonios:** perseguían al objetivo MÁS CERCANO (NPC/edificio/j
 casa cerca atacaban el edificio, no a ti. Añadí override: si el demonio está a <1.8 del jugador, lo
 ataca a ÉL; amplié el rango de golpe de 1.4 a 1.8. `tsc` limpio; solo Scene3D.tsx. (KNOWN_ISSUES #2.)
 **Commit:** _(este commit)_
+
+### 2026-06-30 · Guion de video: voiceover FINAL (afinación de Codex)
+**Pedido (humano):** opinión sobre la afinación de Codex al voiceover.
+**Qué se hizo:** adopté la versión de Codex como texto FINAL en `docs/VIDEO_SCRIPT.md` (0G Storage,
+"world state", Aldric, on-chain solo en land, cierre "living world that remembers"). Bloque de texto
+crudo listo para grabar + notas de precisión. Sin cambios de código.
+**Commit:** _(este commit)_

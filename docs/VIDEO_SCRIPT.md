@@ -59,24 +59,43 @@ bundle, both derived from 0G. Then the closing thesis line (above).
   **Alliances**, **loot packs** (silver/gold glowing in a claimed parcel). One of these, max, as a
   2-second "there's more" flourish.
 
-## Suggested voiceover (~75s, the lean path)
+## 🎙️ Voiceover — FINAL (raw text, ~75s)
 
-- (0:00) *"In Aldenmoor, your story is yours — and it lives on 0G."* — connect wallet.
-- (0:10) *"I talk to Sable, and she remembers me — her memory is stored on 0G, not scripted."* —
-  voice + recall banner.
-- (0:24) *"I gather wood and stone, and when I save, my whole world persists to 0G."* — gather +
-  Save World (show the save/hash).
-- (0:38) *"From above, I describe a build, the AI shapes it, and my creation is saved to 0G."* —
-  AI build + save.
-- (0:52) *"I claim land — this parcel is owned on-chain; the map itself is decentralized state."* —
-  claim land (ParcelRegistry).
-- (1:04) *"The economy, the memory, the land — it's all state that I own."* — Treasury + Memory
-  panels.
-- (1:12) *"Engram isn't just an RPG with AI characters. It's a world whose memory, land, economy,
-  and creations live on 0G."*
+Read as-is; each stanza = one shot that shows the UI proving the 0G anchor.
 
-> Every beat must **show the UI that proves the 0G anchor** (recall banner, save hash,
-> ParcelRegistry, Treasury). Precision + rhythm over feature count.
+```
+Every game world forgets you the moment you leave.
+Not this one.
+
+This is Aldenmoor — and here, your story is yours.
+It lives on 0G.
+
+I connect my wallet… and step into a world that remembers.
+
+I talk to Sable — with my voice — and she remembers me.
+Our history, our deals — loaded from 0G Storage.
+
+I chop, I mine, I gather… and when I save, my world state is written to 0G.
+It's mine.
+
+I haggle with Aldric — and he remembers the bargain.
+
+From above, I describe what I want… and AI builds it.
+My creation, saved to 0G.
+
+I claim new land — and the map itself grows, parcel by parcel, owned on-chain.
+
+Memory. Land. Economy. Creations.
+All of it becomes player-owned state.
+
+Engram isn't just an RPG with AI characters.
+It's a living world that remembers — and it lives on 0G.
+```
+
+> Precision notes: "on-chain" appears ONLY on land (ParcelRegistry); everything else is "0G
+> Storage / written to 0G / saved to 0G". Every beat must SHOW the proof UI (recall banner, save
+> hash, the build, ParcelRegistry, Treasury/Memory). Optional read: "and *the* AI builds it" flows
+> slightly better out loud.
 
 ## Alternative orders (if you want a different feel)
 
