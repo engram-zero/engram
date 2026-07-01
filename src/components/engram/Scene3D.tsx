@@ -34,6 +34,8 @@ import {
   getWorld,
   setPlayerHp as persistPlayerHp,
   playerHpWithEquipment,
+  applyPlayerDamage,
+  type DeathPenaltyState,
   type ParcelResourceNode as LootNode,
   getWorldWallet,
   cloneWorldState,
@@ -4787,6 +4789,7 @@ export default function Scene3D({ memories = null, active = null, talking = fals
   const [flash, setFlash] = useState(false);
   const [playerHp, setPlayerHp] = useState(100);
   const [playerDead, setPlayerDead] = useState(false);
+  const [deathPenalty, setDeathPenalty] = useState<DeathPenaltyState | null>(null);
   const [respawnCountdown, setRespawnCountdown] = useState(5);
   const [nearbyEnemy, setNearbyEnemy] = useState<string | null>(null);
   
@@ -5505,8 +5508,11 @@ export default function Scene3D({ memories = null, active = null, talking = fals
       if (dynamicPlayerState.hp !== playerHp && !dynamicPlayerState.dead) {
         setPlayerHp(Math.max(0, dynamicPlayerState.hp));
       }
-      // Trigger death state
+      // Trigger death state — apply the 0G death penalty (lose some resources) once,
+      // which also revives world.playerHp to a fraction of max (Prompt 30/2 pillar).
       if (dynamicPlayerState.dead && !playerDead) {
+        const r = applyPlayerDamage(9999, 'death');
+        setDeathPenalty(r.penalty ?? null);
         setPlayerDead(true);
         setRespawnCountdown(5);
       }
@@ -5520,12 +5526,15 @@ export default function Scene3D({ memories = null, active = null, talking = fals
     const tick = setInterval(() => {
       setRespawnCountdown((c) => {
         if (c <= 1) {
-          // Respawn
-          dynamicPlayerState.hp = dynamicPlayerState.maxHp;
+          // Respawn at the post-penalty HP the world gave us (a fraction of max),
+          // not full — dying has a cost.
+          const reviveHp = playerHpWithEquipment().hp;
+          dynamicPlayerState.hp = reviveHp;
           dynamicPlayerState.dead = false;
           posRef.current = { x: SPAWN_XZ[0], z: SPAWN_XZ[1], heading: 0 };
-          setPlayerHp(dynamicPlayerState.maxHp);
+          setPlayerHp(reviveHp);
           setPlayerDead(false);
+          setDeathPenalty(null);
           playerAttackedMaren = false; // Reset Maren aggression on player death
           return 5;
         }
@@ -6256,6 +6265,17 @@ export default function Scene3D({ memories = null, active = null, talking = fals
               >
                 YOU DIED
               </div>
+              {deathPenalty && (() => {
+                const lost = (Object.entries(deathPenalty.resourcesLost) as Array<[string, number]>)
+                  .filter(([, n]) => n > 0)
+                  .map(([k, n]) => `${n} ${k}`);
+                if (lost.length === 0) return null;
+                return (
+                  <div style={{ marginTop: '1rem', color: '#ff9a8a', fontSize: '1.05rem', fontFamily: 'var(--engram-serif, serif)', letterSpacing: '0.04em' }}>
+                    You lost {lost.join(' · ')}
+                  </div>
+                );
+              })()}
               <div
                 style={{
                   marginTop: '1.5rem',

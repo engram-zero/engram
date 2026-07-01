@@ -1985,3 +1985,14 @@ y README.
 diagnósticos por defecto; `debug-log.ts` documenta el gate; `.env.example` y README explican cómo
 activar `NEXT_PUBLIC_ENGRAM_DEBUG=1`. Búsqueda en `src/lib`/`src/app/api` limpia para
 `console.log/info/warn/debug` fuera del helper. **Commit:** _(este commit)_
+
+### 2026-06-30 · Penalización de muerte (cerrar el loop del pilar 2)
+**Pedido (humano):** morir debe costar (restar recursos), disparando el backend de Codex.
+**Revisión de Codex (73e2b58, debugLog):** aprobado — logs de diagnóstico tras `debugLog` +
+NEXT_PUBLIC_ENGRAM_DEBUG, errores reales de API intactos.
+**Qué hice (Scene3D):** al detectar la muerte en combate disparo `applyPlayerDamage(9999,'death')`
+UNA vez → world aplica la pérdida de recursos (`deathPenaltyFor`/`applyDeathPenalty`) y revive
+`playerHp` a una fracción del máximo; guardo el `penalty` y muestro "You lost X wood · Y coin…" en
+el overlay YOU DIED. El respawn usa `playerHpWithEquipment().hp` (el 60% del revive), NO el máximo →
+morir cuesta. Cierra el loop del pilar 2 (perder vida importa → curarse importa). `tsc` limpio; solo
+Scene3D.tsx. **Commit:** _(este commit)_
