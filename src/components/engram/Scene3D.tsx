@@ -317,7 +317,7 @@ function makeRiverEmitters(): AudioEmitter[] {
 
 const AUDIO_EMITTERS: AudioEmitter[] = [
   // Campfire crackle — only audible around the village fire.
-  { cue: 'campfire_crackle', x: CAMPFIRE.x, z: CAMPFIRE.z, radius: 12, volume: 0.5 },
+  { cue: 'campfire_crackle', x: CAMPFIRE.x, z: CAMPFIRE.z, radius: 12, volume: 0.25 },
   // Flowing water along the creek (heard near the banks, day and night).
   ...makeRiverEmitters(),
   // Per-biome ambience, centred on the biome regions (see src/lib/biome.ts). The
